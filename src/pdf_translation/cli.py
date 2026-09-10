@@ -7,6 +7,8 @@ from typing import Annotated
 import typer
 from dotenv import load_dotenv
 
+from .babeldoc_adapter import run_one_page_spike
+from .benchmark import build_samples
 from .config import load_config
 from .analyzer import extract_term_candidates, validate_semantic_evidence
 from .context_models import ContextBundle, GlossaryEntry, Scope, StyleRule, make_invalidation_report
@@ -37,6 +39,52 @@ def inspect(input: Annotated[Path, typer.Option("--input")], output: Annotated[P
     detail = output.with_suffix(".inspection.json")
     detail.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     typer.echo(f"wrote {output} and {detail}")
+
+
+@app.command("select-samples")
+def select_samples(
+    manifest: Annotated[Path, typer.Option("--manifest")],
+    smoke_page: Annotated[list[int], typer.Option("--smoke-page", help="One-based physical PDF page; repeat this option.")],
+    seed: Annotated[int, typer.Option("--seed")] = 20260910,
+    development_count: Annotated[int, typer.Option("--development-count")] = 12,
+    frozen_count: Annotated[int, typer.Option("--frozen-count")] = 24,
+) -> None:
+    """Freeze disjoint smoke, development and frozen-test page sets."""
+    current = load_manifest(manifest)
+    if not smoke_page:
+        raise typer.BadParameter("provide at least one --smoke-page")
+    document = (manifest.parent / current.document_uri).resolve()
+    zero_based = tuple(page - 1 for page in smoke_page)
+    if any(page < 0 for page in zero_based):
+        raise typer.BadParameter("--smoke-page values are one-based and must be positive")
+    samples = build_samples(document, zero_based, development_count=development_count, frozen_count=frozen_count, seed=seed)
+    sampling_note = "sample page_indices are zero-based physical PDF indices"
+    updated = current.model_copy(
+        update={
+            "sampling_seed": seed,
+            "samples": samples,
+            "notes": tuple(note for note in current.notes if note not in {"sample mapping not supplied", sampling_note})
+            + (sampling_note,),
+        }
+    )
+    # Re-validate cross-set overlap and page bounds after model_copy.
+    updated = BenchmarkManifest.model_validate(updated.model_dump(mode="json"))
+    manifest.write_text(updated.model_dump_json(indent=2), encoding="utf-8")
+    typer.echo(updated.model_dump_json(indent=2))
+
+
+@app.command("babeldoc-spike")
+def babeldoc_spike(
+    manifest: Annotated[Path, typer.Option("--manifest")],
+    page: Annotated[int, typer.Option("--page", help="One-based physical PDF page.")],
+    output_dir: Annotated[Path, typer.Option("--output-dir")] = Path("reports/babeldoc-spike"),
+) -> None:
+    """Validate one-page interception and PDF write-back without a paid API."""
+    current = load_manifest(manifest)
+    if page < 1 or page > current.page_count:
+        raise typer.BadParameter(f"--page must be between 1 and {current.page_count}")
+    document = (manifest.parent / current.document_uri).resolve()
+    typer.echo(json.dumps(run_one_page_spike(document, page - 1, output_dir), ensure_ascii=False, indent=2))
 
 
 @app.command()

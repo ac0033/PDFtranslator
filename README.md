@@ -5,6 +5,8 @@
 ## 当前能力
 
 - `inspect`：登记 PDF 的 SHA-256、物理页数和基础页面信息。
+- `select-samples`：以固定随机种子冻结互不重叠的 smoke、development 和 frozen-test 页集，并记录实际版面风险覆盖。
+- `babeldoc-spike`：用本地确定性记录器验证单页文本截获、公式占位与 PDF 回写，不调用收费模型。
 - `estimate`：离线估算待译文本 token 与最高费用；价格必须由用户显式填写。
 - `run`：执行 JSONL Translation Unit；默认 `mock` 提供商，`openai` 提供商需预算和密钥。
 - `resume`：仅继续输入哈希和配置哈希一致的未完成任务。
@@ -27,6 +29,14 @@ uv run pytest
 uv run pdftrans demo --output-dir demo
 uv run pdftrans run --manifest demo/manifest.json --config configs/v0.mock.toml
 uv run pdftrans report --run-id demo-run
+```
+
+登记真实 PDF 后，可先离线冻结测试页；命令中的页码按阅读习惯使用 1 起始，manifest 内统一保存为 0 起始物理页索引：
+
+```powershell
+uv run pdftrans inspect --input pdf/dm.pdf --output benchmark.dm.json
+uv run pdftrans select-samples --manifest benchmark.dm.json --smoke-page 42 --smoke-page 51 --smoke-page 577
+uv run pdftrans babeldoc-spike --manifest benchmark.dm.json --page 42 --output-dir reports/babeldoc-spike-page42
 ```
 
 ## DeepSeek V4.1 Flash
@@ -60,4 +70,4 @@ uv run pdftrans ablate --manifest demo/manifest.json --config configs/v1.mock.to
 
 ## V0 尚待外部输入
 
-仓库目前没有 `dm.pdf`、认可样稿、样稿页码映射和费用上限。因此真实 BabelDOC 一页注入/回写、Astra 质量复现、双语 PDF 与完整 V0 主验收仍是阻塞项；代码不会把这些项目标记为通过。
+仓库本地已有三本测试 PDF，其中 `dm.pdf` 已登记并冻结分层测试页；文件本身被 Git 忽略。BabelDOC 0.6.4 已完成第 42 页的本地合成译文注入/回写实验，但认可样稿及其页码映射仍未提供，真实翻译质量、稳定 TU 坐标、完整双语 PDF 与 V0 主验收尚未完成。

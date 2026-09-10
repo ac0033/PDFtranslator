@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0",
+  "document_uri": "pdf\\optimization.pdf",
+  "document_sha256": "874e643064b827597a7fd872144df91ebc68092fb68121f828b7f71a18799bd4",
+  "page_count": 634,
+  "sample_mapping": null,
+  "units_uri": null,
+  "sampling_seed": null,
+  "samples": [],
+  "notes": [
+    "sample mapping not supplied",
+    "BabelDOC spike not run"
+  ]
+}
