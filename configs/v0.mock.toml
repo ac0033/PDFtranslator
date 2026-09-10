@@ -1,0 +1,15 @@
+schema_version = "1.0"
+run_id = "demo-run"
+provider = "mock"
+model_id = "offline-identity-v1"
+source_lang = "en"
+target_lang = "zh-CN"
+style_revision = "v0-natural-textbook-zh"
+prompt_revision = "v0.1"
+adapter_revision = "v0.1"
+pricing_revision = "unpriced"
+max_output_tokens = 2000
+budget_usd = 0.0
+input_usd_per_million = 0.0
+output_usd_per_million = 0.0
+

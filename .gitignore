@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.pytest-*/
+.uv-cache/
+*.pyc
+runs/
+demo/
+tmp/
+inputs/
+*.pdf
+.env
