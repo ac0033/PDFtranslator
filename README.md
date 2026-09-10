@@ -1,4 +1,4 @@
-# PDF Translation V0
+# PDF Translation V1
 
 这是按 `llm_pdf_translation_pipeline_plan.md` 实现的首个可运行版本。它优先保证可追溯、预算前置、严格契约、精确缓存和断点恢复，不会在缺少预算配置时调用收费模型。
 
@@ -11,6 +11,7 @@
 - `review`：运行保护标记、数字、URL 与空译文检查。
 - `report`：输出状态、用量、缓存与问题汇总。
 - SQLite 保存任务、结果、用量与事件；本地精确缓存避免热重跑再次调用模型。
+- V1 Context Engine：带作用域和审核状态的术语、风格规则、原文证据摘要、邻文选择、精确翻译记忆与依赖失效。
 
 ## 快速开始
 
@@ -44,6 +45,18 @@ uv run pdftrans run --manifest demo/manifest.json --config configs/v0.deepseek.t
 ```
 
 配置默认关闭思考模式，减少纯翻译任务的额外输出费用。请求使用独立的 Responses API 调用和严格 JSON Schema，不串联历史响应。`.env` 已被 Git 忽略；禁止把 Key 写入 TOML、日志或提交记录。
+
+## V1 Context Engine
+
+```powershell
+uv run pdftrans context-init --output data/context-v1.sqlite --document-id demo-doc
+uv run pdftrans terms --manifest demo/manifest.json --output reports/term-candidates.json
+uv run pdftrans context-import --manifest demo/manifest.json --input configs/context.bundle.example.json --context-db data/context-v1.sqlite
+uv run pdftrans context-inspect --manifest demo/manifest.json --config configs/v1.mock.toml
+uv run pdftrans ablate --manifest demo/manifest.json --config configs/v1.mock.toml --output reports/v1-ablation.json
+```
+
+术语候选不会自动升级成 `approved`；语义摘要必须引用当前 manifest 中存在的原文单元。Context Router 始终先放强制项，预算不足时拒绝运行，不能静默裁掉依赖。
 
 ## V0 尚待外部输入
 

@@ -8,5 +8,6 @@ runs/
 demo/
 tmp/
 inputs/
+data/
 *.pdf
 .env

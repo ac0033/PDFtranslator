@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0",
+  "rows": [
+    {
+      "unit_id": "demo-u1",
+      "v0_context_tokens": 42,
+      "v1_context_tokens": 150,
+      "v1_selected_items": 2,
+      "v1_trimmed_items": 0,
+      "quality_comparison": "not_run"
+    }
+  ],
+  "warning": "Token counts are conservative estimates; this report does not claim a quality or cost improvement."
+}

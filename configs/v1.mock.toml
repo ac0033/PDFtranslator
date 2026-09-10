@@ -1,0 +1,18 @@
+schema_version = "1.0"
+run_id = "v1-offline-demo"
+provider = "mock"
+model_id = "offline-identity-v1"
+source_lang = "en"
+target_lang = "zh-CN"
+style_revision = "v1-scoped-style"
+prompt_revision = "v1.0"
+adapter_revision = "v1.0"
+pricing_revision = "unpriced"
+max_output_tokens = 2000
+budget_usd = 0.0
+input_usd_per_million = 0.0
+output_usd_per_million = 0.0
+context_token_budget = 600
+context_engine = "v1"
+context_db = "data/context-v1.sqlite"
+

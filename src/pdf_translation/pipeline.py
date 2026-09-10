@@ -5,6 +5,9 @@ from uuid import uuid4
 
 from .budget import estimate_cost, reserve_budget
 from .config import RunConfig
+from .context_router import build_context_packet, select_exact_tm
+from .context_store import ContextStore
+from .analyzer import validate_semantic_evidence
 from .hashing import stable_hash
 from .providers import DeepSeekProvider, MockProvider, OpenAIProvider
 from .quality import check_quality
@@ -19,10 +22,11 @@ def estimated_input_token_ceiling(request: TranslationRequest) -> int:
     return len(request.unit.source_text.encode("utf-8")) + context_bytes + 512
 
 
-def make_request(unit: TranslationUnit, config: RunConfig) -> TranslationRequest:
-    item = ContextItem(item_id="style:v0", category="style", content="忠实保留否定、量词、条件和概率程度；采用自然教材中文；不扩写。", source_ids=(), revision=config.style_revision, required=True, selection_reason="V0 fixed style")
-    packet_data = {"unit_id": unit.unit_id, "items": (item,)}
-    packet = ContextPacket(unit_id=unit.unit_id, router_revision="v0-fixed", memory_snapshot_id=config.style_revision, items=(item,), token_count=42, token_counter_id="fixed-estimate-v0", token_count_is_estimate=True, token_budget=config.context_token_budget, packet_hash=stable_hash(packet_data))
+def make_request(unit: TranslationUnit, config: RunConfig, packet: ContextPacket | None = None) -> TranslationRequest:
+    if packet is None:
+        item = ContextItem(item_id="style:v0", category="style", content="忠实保留否定、量词、条件和概率程度；采用自然教材中文；不扩写。", source_ids=(), revision=config.style_revision, required=True, selection_reason="V0 fixed style")
+        packet_data = {"unit_id": unit.unit_id, "items": (item,)}
+        packet = ContextPacket(unit_id=unit.unit_id, router_revision="v0-fixed", memory_snapshot_id=config.style_revision, items=(item,), token_count=42, token_counter_id="fixed-estimate-v0", token_count_is_estimate=True, token_budget=config.context_token_budget, packet_hash=stable_hash(packet_data))
     model = ModelSpec(provider=config.provider, model_id=config.model_id, reasoning_effort=config.reasoning_effort, max_output_tokens=config.max_output_tokens, prompt_revision=config.prompt_revision, adapter_revision=config.adapter_revision, pricing_revision=config.pricing_revision)
     cache_key = stable_hash({"unit": unit, "context": packet, "model": model})
     return TranslationRequest(request_id=str(uuid4()), unit=unit, context=packet, model=model, cache_key=cache_key)
@@ -45,8 +49,33 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path) 
         provider = None
     if provider is None:
         raise ValueError(f"unsupported provider: {config.provider}")
+    context_store = None
+    glossary = []
+    styles = []
+    semantics = []
+    glossary_snapshot_id = "glossary-empty"
+    style_snapshot_id = "style-empty"
+    units_by_id = {unit.unit_id: unit for unit in units}
+    if config.context_engine == "v1":
+        if not config.context_db:
+            raise ValueError("V1 context_engine requires context_db")
+        context_store = ContextStore(Path(config.context_db))
+        glossary = context_store.glossary()
+        styles = context_store.styles()
+        semantics = context_store.semantics()
+        validate_semantic_evidence(semantics, set(units_by_id))
+        glossary_snapshot_id = stable_hash([entry for entry in glossary if entry.status == "approved"])
+        style_snapshot_id = stable_hash([rule for rule in styles if rule.status == "approved"])
     for unit in units:
-        request = make_request(unit, config)
+        tm_entry = None
+        if context_store:
+            base_packet, _ = build_context_packet(unit, glossary, styles, semantics, units_by_id, token_budget=config.context_token_budget, glossary_snapshot_id=glossary_snapshot_id, style_snapshot_id=style_snapshot_id)
+            tm_entry = select_exact_tm(unit, context_store.exact_tm(unit.source_hash), base_packet.packet_hash, glossary_snapshot_id, style_snapshot_id)
+            packet, _ = build_context_packet(unit, glossary, styles, semantics, units_by_id, token_budget=config.context_token_budget, glossary_snapshot_id=glossary_snapshot_id, style_snapshot_id=style_snapshot_id, tm_entry=tm_entry)
+            context_store.replace_dependencies(f"unit:{unit.unit_id}", [item.item_id for item in packet.items])
+            request = make_request(unit, config, packet)
+        else:
+            request = make_request(unit, config)
         validate_request(request)
         store.prepare(config.run_id, unit.unit_id, request.cache_key)
         if store.state(config.run_id, unit.unit_id) in {"accepted", "blocked", "needs_review"}:
@@ -55,6 +84,10 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path) 
         if cached:
             result = cached.model_copy(update={"request_id": request.request_id})
             result = result.model_copy(update={"usage": Usage(input_tokens=0, output_tokens=0, cost_usd=0.0, usage_source="estimated")})
+            from_cache = True
+        elif tm_entry:
+            from .schemas import TranslationDraft, TranslationResult
+            result = TranslationResult(request_id=request.request_id, unit_id=unit.unit_id, draft=TranslationDraft(unit_id=unit.unit_id, translated_text=tm_entry.target_text), finish="complete", provider_response_id=None, model=request.model, usage=Usage(input_tokens=0, output_tokens=0, cost_usd=0.0, usage_source="estimated"))
             from_cache = True
         else:
             estimated_input = estimated_input_token_ceiling(request)

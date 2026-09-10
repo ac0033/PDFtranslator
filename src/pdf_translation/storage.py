@@ -46,7 +46,11 @@ class StateStore:
 
     def prepare(self, run_id: str, unit_id: str, cache_key: str) -> None:
         with self.connect() as con:
-            con.execute("INSERT OR IGNORE INTO tasks(run_id,unit_id,cache_key,state) VALUES(?,?,?,'prepared')", (run_id,unit_id,cache_key))
+            row = con.execute("SELECT cache_key FROM tasks WHERE run_id=? AND unit_id=?", (run_id, unit_id)).fetchone()
+            if row is None:
+                con.execute("INSERT INTO tasks(run_id,unit_id,cache_key,state) VALUES(?,?,?,'prepared')", (run_id,unit_id,cache_key))
+            elif row["cache_key"] != cache_key:
+                con.execute("UPDATE tasks SET cache_key=?,state='prepared',result_json=NULL,quality_json=NULL,updated_at=CURRENT_TIMESTAMP WHERE run_id=? AND unit_id=?", (cache_key,run_id,unit_id))
 
     def state(self, run_id: str, unit_id: str) -> str | None:
         with self.connect() as con:
@@ -57,6 +61,16 @@ class StateStore:
         with self.connect() as con:
             row = con.execute("SELECT result_json FROM cache WHERE cache_key=?", (cache_key,)).fetchone()
             return TranslationResult.model_validate_json(row["result_json"]) if row else None
+
+    def result(self, run_id: str, unit_id: str) -> TranslationResult | None:
+        with self.connect() as con:
+            row = con.execute("SELECT result_json FROM tasks WHERE run_id=? AND unit_id=?", (run_id, unit_id)).fetchone()
+            return TranslationResult.model_validate_json(row["result_json"]) if row and row["result_json"] else None
+
+    def task_cache_key(self, run_id: str, unit_id: str) -> str | None:
+        with self.connect() as con:
+            row = con.execute("SELECT cache_key FROM tasks WHERE run_id=? AND unit_id=?", (run_id, unit_id)).fetchone()
+            return row["cache_key"] if row else None
 
     def commit(self, run_id: str, result: TranslationResult, report: QualityReport, cache_key: str, cached: bool = False) -> None:
         state = "accepted" if report.status == "pass" else report.status

@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "glossary": [
+    {
+      "term_id": "demo-value",
+      "source_term": "value",
+      "target_term": "值",
+      "sense": "numeric value in the demo fixture",
+      "scope": {"kind": "document", "value": "demo-doc"},
+      "source_ids": ["demo-u1"],
+      "version": "glossary-demo-v1",
+      "status": "candidate",
+      "exceptions": []
+    }
+  ],
+  "styles": [],
+  "semantics": [],
+  "translation_memory": []
+}

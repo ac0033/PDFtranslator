@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tomllib
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field
 
@@ -28,6 +29,8 @@ class RunConfig(StrictModel):
     api_key_env: str | None = None
     base_url: str | None = None
     reasoning_effort: str | None = None
+    context_engine: Literal["v0-fixed", "v1"] = "v0-fixed"
+    context_db: str | None = None
 
     @property
     def config_hash(self) -> str:
