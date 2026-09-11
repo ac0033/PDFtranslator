@@ -1,6 +1,8 @@
-# PDF Translation V1
+# PDF Translation Runtime
 
 这是按 `llm_pdf_translation_pipeline_plan.md` 实现的首个可运行版本。它优先保证可追溯、预算前置、严格契约、精确缓存和断点恢复，不会在缺少预算配置时调用收费模型。
+
+当前软件版本为 `0.3.0`。路线图中的 V0/V1/V2/V3 表示开发阶段，不等于 SemVer 主版本号；在真实 PDF 翻译闭环和公开接口稳定前，软件保持 `0.x`。版本规则见 `docs/versioning.md`。
 
 ## 当前能力
 

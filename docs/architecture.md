@@ -1,4 +1,4 @@
-# V0 architecture
+# PDF translation runtime architecture
 
 The implemented vertical path is:
 
@@ -7,7 +7,7 @@ The implemented vertical path is:
 ## Boundaries
 
 - PDF inspection is local and read-only. PyMuPDF records hash, page count, dimensions, rotation and extractable character count.
-- BabelDOC owns future parsing and write-back. V0 currently guards `render` as unavailable instead of claiming compatibility before the one-page spike.
+- BabelDOC 0.6.4 owns parsing and write-back. A one-page synthetic injection spike has passed conditionally; the general `render` command remains guarded until real run results can be mapped back into BabelDOC output.
 - The translator receives only one explicit unit plus its explicit context. The OpenAI adapter does not use a conversation or previous response ID and sets `store=false`.
 - Runtime-generated request IDs, usage and provider response IDs are not accepted from model output.
 - Local cache identity includes the complete unit, context packet and model specification.
@@ -16,9 +16,9 @@ The implemented vertical path is:
 
 Each run freezes an input hash and configuration hash. Reusing a run ID with changed inputs or configuration is rejected. Accepted, blocked and review-required units are not resubmitted on resume. SQLite uses WAL mode and commits result, quality decision and ledger entry in one transaction.
 
-## Known V0 boundary
+## Known document boundary
 
-The repository did not receive the real source PDF, accepted sample or budget. Therefore the BabelDOC adapter, real translation and bilingual rendering remain unverified external gates.
+Three real source PDFs are registered locally and `dm.pdf` has frozen sample sets. Page 42 passed a synthetic mono/dual write-back check. Real translated-text injection, exact source bounding boxes, accepted-sample mapping, broader layout review and complete bilingual rendering remain open gates.
 
 ## V1 context path
 
