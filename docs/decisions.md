@@ -11,5 +11,6 @@
 | Benchmark input and page sets | implemented | three local PDFs registered; `dm.pdf` smoke/development/frozen-test sets are disjoint and reproducible |
 | BabelDOC multi-page capture/injection | candidate pass | two-pass exact-content matching completed pages 42, 51 and 577; 78 stable units were injected without depending on callback order |
 | Formula/code protection | implemented | 39 placeholder-only units bypassed the model and were restored byte-for-byte at the runtime boundary |
-| Bilingual PDF rendering | offline candidate | three-page mono/dual PDFs are readable; real Chinese translation, 42 low-confidence region matches and TOC migration remain open |
-| Captured-workload budget gate | implemented | 39 billable units estimate to USD 0.1024467 at the configured peak rates; dry-run reports zero API calls and paid execution requires `--execute-paid` plus a non-zero config budget |
+| Boundary-marker repair | implemented | four model outputs omitted a leading footnote marker; only exact source-boundary omissions are restored deterministically, while interior/unknown marker changes remain blocked |
+| Bilingual PDF rendering | accepted for three-page smoke | real DeepSeek mono/dual PDFs are readable; 42 low-confidence region matches, TOC migration and mixed-script spacing remain open |
+| Captured-workload budget gate | implemented and exercised | 39 billable units estimated to USD 0.1024467; actual token-based estimate was USD 0.0064098, within the user-approved CNY 0.80 ceiling |

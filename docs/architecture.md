@@ -18,7 +18,7 @@ Each run freezes an input hash and configuration hash. Reusing a run ID with cha
 
 ## Known document boundary
 
-Three real source PDFs are registered locally and `dm.pdf` has frozen sample sets. Physical pages 42, 51 and 577 now pass the offline capture/runtime/injection path and merge into three-page mono/dual artifacts. Formula-only and code-placeholder units bypass the model exactly. Exact region-level source bounding boxes remain incomplete for 42 of 78 units, BabelDOC TOC migration still warns, and real Chinese translation/layout acceptance remains gated on a new run-specific budget.
+Three real source PDFs are registered locally and `dm.pdf` has frozen sample sets. Physical pages 42, 51 and 577 pass the real DeepSeek capture/runtime/injection path and merge into three-page mono/dual artifacts. Formula-only and code-placeholder units bypass the model exactly. Exact region-level source bounding boxes remain incomplete for 42 of 78 units, BabelDOC TOC migration still warns, and formula-internal English plus mixed-script spacing remain layout limitations.
 
 ## V1 context path
 

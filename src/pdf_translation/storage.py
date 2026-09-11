@@ -80,7 +80,7 @@ class StateStore:
         ledger_output = 0 if cached else result.usage.output_tokens
         with self.connect() as con:
             con.execute("UPDATE tasks SET state=?,result_json=?,quality_json=?,updated_at=CURRENT_TIMESTAMP WHERE run_id=? AND unit_id=?", (state,result_json,report.model_dump_json(),run_id,result.unit_id))
-            if not cached and result.finish == "complete":
+            if not cached and result.finish == "complete" and report.status == "pass":
                 con.execute("INSERT OR REPLACE INTO cache(cache_key,result_json) VALUES(?,?)", (cache_key,result_json))
             ledger_source = source or ("local_cache" if cached else result.usage.usage_source)
             con.execute("INSERT INTO ledger(run_id,unit_id,cost_usd,input_tokens,output_tokens,source) VALUES(?,?,?,?,?,?)", (run_id,result.unit_id,ledger_cost,ledger_input,ledger_output,ledger_source))

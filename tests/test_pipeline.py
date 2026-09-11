@@ -7,7 +7,7 @@ from pdf_translation.config import RunConfig
 from pdf_translation.hashing import stable_hash
 from pdf_translation.pipeline import estimate_units, run_units
 from pdf_translation.providers import DeepSeekProvider
-from pdf_translation.quality import check_quality
+from pdf_translation.quality import check_quality, repair_boundary_markers
 from pdf_translation.schemas import ModelSpec, TranslationDraft, TranslationResult, TranslationUnit, Usage
 from pdf_translation.storage import StateStore
 
@@ -106,3 +106,14 @@ def test_estimate_units_excludes_protected_passthrough():
     assert estimate["reserved_output_tokens"] == 100
     assert estimate["estimated_max_cost_usd"] == 0.0
     assert estimate["api_calls"] == 0
+
+
+def test_only_missing_boundary_markers_are_repaired():
+    source = "⟦P:lead⟧Translate ⟦P:middle⟧ this"
+    repaired, changed = repair_boundary_markers(source, "翻译 ⟦P:middle⟧ 此内容")
+    assert changed is True
+    assert repaired == "⟦P:lead⟧翻译 ⟦P:middle⟧ 此内容"
+
+    unchanged, changed = repair_boundary_markers(source, "⟦P:lead⟧翻译此内容")
+    assert changed is False
+    assert unchanged == "⟦P:lead⟧翻译此内容"

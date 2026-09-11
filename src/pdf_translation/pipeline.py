@@ -10,7 +10,7 @@ from .context_store import ContextStore
 from .analyzer import validate_semantic_evidence
 from .hashing import stable_hash
 from .providers import DeepSeekProvider, MockProvider, OpenAIProvider
-from .quality import check_quality
+from .quality import check_quality, repair_boundary_markers
 from .schemas import ContextItem, ContextPacket, ModelSpec, TranslationDraft, TranslationRequest, TranslationResult, TranslationUnit, Usage
 from .storage import StateStore
 from .validation import validate_request, validate_result
@@ -104,7 +104,28 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path) 
             request = make_request(unit, config)
         validate_request(request)
         store.prepare(config.run_id, unit.unit_id, request.cache_key)
-        if store.state(config.run_id, unit.unit_id) in {"accepted", "blocked", "needs_review"}:
+        state = store.state(config.run_id, unit.unit_id)
+        if state == "accepted":
+            continue
+        if state in {"blocked", "needs_review"}:
+            previous = store.result(config.run_id, unit.unit_id)
+            if previous is not None and previous.draft is not None:
+                repaired_text, repaired = repair_boundary_markers(unit.source_text, previous.draft.translated_text)
+                if repaired:
+                    repaired_draft = previous.draft.model_copy(update={"translated_text": repaired_text})
+                    repaired_result = previous.model_copy(update={"request_id": request.request_id, "draft": repaired_draft})
+                    validate_result(request, repaired_result)
+                    repaired_report = check_quality(unit, repaired_result)
+                    store.commit(
+                        config.run_id,
+                        repaired_result,
+                        repaired_report,
+                        request.cache_key,
+                        cached=True,
+                        source="deterministic_boundary_repair",
+                    )
+                    if repaired_report.status == "pass":
+                        continue
             continue
         cached = store.cached(request.cache_key)
         if cached:
@@ -136,6 +157,10 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path) 
                 actual = estimate_cost(result.usage.input_tokens or estimated_input, result.usage.output_tokens or 0, config.input_usd_per_million, config.output_usd_per_million)
                 result = result.model_copy(update={"usage": result.usage.model_copy(update={"cost_usd": actual, "usage_source": "estimated" if actual is not None else "unavailable"})})
             from_cache = False
+        if result.draft is not None:
+            repaired_text, repaired = repair_boundary_markers(unit.source_text, result.draft.translated_text)
+            if repaired:
+                result = result.model_copy(update={"draft": result.draft.model_copy(update={"translated_text": repaired_text})})
         validate_result(request, result)
         report = check_quality(unit, result)
         store.commit(config.run_id, result, report, request.cache_key, cached=from_cache, source=ledger_source)

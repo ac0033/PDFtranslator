@@ -1,6 +1,6 @@
 [project]
 name = "pdf-translation"
-version = "0.4.0rc1"
+version = "0.4.0"
 description = "Auditable, budget-gated PDF translation runtime"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
