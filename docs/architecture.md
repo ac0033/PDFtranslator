@@ -14,7 +14,7 @@ The implemented vertical path is:
 
 ## State and recovery
 
-Each run freezes an input hash and configuration hash. Reusing a run ID with changed inputs or configuration is rejected. Accepted, blocked and review-required units are not resubmitted on resume. SQLite uses WAL mode and commits result, quality decision and ledger entry in one transaction.
+Each run freezes an input hash and configuration hash. Reusing a run ID with changed inputs or configuration is rejected. Accepted, blocked and review-required units are not resubmitted on resume. SQLite uses WAL mode. Every external attempt is persisted in `provider_attempts`, `events` and the usage ledger before downstream result/quality validation can fail. Invalid structured output and critical protected/layout-marker failures may retry within `provider_max_attempts`; the persisted count prevents a resume from resetting the limit. Missing API keys fail before an attempt is charged.
 
 ## Known document boundary
 
@@ -26,4 +26,8 @@ Three real source PDFs are registered locally and `dm.pdf` has frozen sample set
 
 Scope precedence is `unit > section > chapter > document > domain`. Conflicting approved terminology at the same scope blocks packet construction. Required style, glossary and semantic dependencies cannot be trimmed to satisfy the context budget. Optional neighbors and exact confirmed TM are trimmed last.
 
+For captured PDFs, spatial reading order builds previous/next links among translatable units. Links may cross only consecutive physical pages, so disjoint benchmark samples cannot leak context. Numbered headings build nested section paths, while page-level fallback scopes preserve traceability when no heading is visible. Neighbor text is capped before budget selection.
+
 Every packet records selection reasons, source IDs, revisions, a memory snapshot hash and a conservative token estimate. Changing selected context changes the translation cache key; the state store returns the unit to `prepared` instead of silently retaining an accepted result from an obsolete context snapshot.
+
+The v0.6 release candidate has structural evidence on smoke and development samples, but no paid translation-quality comparison. Frozen-test pages remain untouched until a candidate is locked and a separate blind-test decision is approved.

@@ -13,6 +13,7 @@ from pathlib import Path
 import pymupdf
 
 from .config import RunConfig
+from .document_context import enrich_pdf_units_with_context
 from .hashing import sha256_bytes, sha256_file, stable_hash
 from .pipeline import estimate_units, run_units
 from .schemas import ArtifactRef, ProtectedSpan, SourceRef, TranslationUnit
@@ -486,6 +487,47 @@ def _merge_pdfs(inputs: list[Path], output: Path) -> None:
     temporary.replace(output)
 
 
+def capture_pdf_sample(
+    source: Path,
+    page_indices: tuple[int, ...],
+    output_dir: Path,
+    capture_root: Path,
+    *,
+    enrich_context: bool = True,
+) -> dict:
+    """Capture a frozen sample into runtime units without model calls or final rendering."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    layout = _load_layout_model()
+    all_units: list[TranslationUnit] = []
+    records_by_page: dict[int, list[dict]] = {}
+    for page_index in page_indices:
+        units, records = extract_page_units(source, page_index, capture_root / f"page-{page_index + 1:04d}", layout=layout)
+        all_units.extend(units)
+        records_by_page[page_index] = records
+    if enrich_context:
+        all_units = enrich_pdf_units_with_context(all_units)
+    units_path = output_dir / "units.jsonl"
+    capture_map_path = output_dir / "capture-map.jsonl"
+    units_path.write_text("".join(unit.model_dump_json() + "\n" for unit in all_units), encoding="utf-8")
+    with capture_map_path.open("w", encoding="utf-8") as stream:
+        for page_index in page_indices:
+            for record in records_by_page[page_index]:
+                stream.write(json.dumps(record, ensure_ascii=False) + "\n")
+    report = {
+        "schema_version": "1.0",
+        "source_file": source.name,
+        "source_sha256": sha256_file(source),
+        "physical_pages": [page + 1 for page in page_indices],
+        "unit_count": len(all_units),
+        "context_linked_units": sum(bool(unit.neighbor_ids) for unit in all_units),
+        "section_scoped_units": sum(bool(unit.section_path) for unit in all_units),
+        "api_calls": 0,
+        "final_pdfs": 0,
+    }
+    (output_dir / "capture.report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    return report
+
+
 def run_smoke_document(
     source: Path,
     page_indices: tuple[int, ...],
@@ -496,8 +538,9 @@ def run_smoke_document(
     *,
     execute_paid: bool = False,
     reuse_capture: bool = False,
+    sample_name: str = "smoke",
 ) -> dict:
-    """Capture, translate, quality-check and inject a frozen smoke set."""
+    """Capture, translate, quality-check and inject a frozen PDF sample."""
     output_dir.mkdir(parents=True, exist_ok=True)
     units_path = output_dir / "units.jsonl"
     capture_map_path = output_dir / "capture-map.jsonl"
@@ -525,6 +568,10 @@ def run_smoke_document(
             units, records = extract_page_units(source, page_index, capture_root / f"page-{page_index + 1:04d}", layout=layout)
             all_units.extend(units)
             records_by_page[page_index] = records
+    if config.context_engine == "v1":
+        all_units = enrich_pdf_units_with_context(all_units)
+
+    if not reuse_capture:
         units_path.write_text("".join(unit.model_dump_json() + "\n" for unit in all_units), encoding="utf-8")
         with capture_map_path.open("w", encoding="utf-8") as stream:
             for page_index in page_indices:
@@ -537,6 +584,7 @@ def run_smoke_document(
         "source_file": source.name,
         "source_sha256": sha256_file(source),
         "physical_pages": [page + 1 for page in page_indices],
+        "sample_name": sample_name,
         "unit_count": len(all_units),
         "billable_unit_count": estimate["billable_unit_count"],
         "protected_passthrough_count": estimate["protected_passthrough_count"],
@@ -551,6 +599,9 @@ def run_smoke_document(
         "provider": config.provider,
         "model_id": config.model_id,
         "capture_reused": reuse_capture,
+        "context_engine": config.context_engine,
+        "context_linked_units": sum(bool(unit.neighbor_ids) for unit in all_units),
+        "section_scoped_units": sum(bool(unit.section_path) for unit in all_units),
     }
     report_path = output_dir / "run.report.json"
     if config.provider != "mock" and not execute_paid:
@@ -599,8 +650,8 @@ def run_smoke_document(
         mono_pages.append(result.mono_pdf_path)
         dual_pages.append(result.dual_pdf_path)
 
-    mono_output = output_dir / f"{source.stem}.smoke.{config.provider}.zh.mono.pdf"
-    dual_output = output_dir / f"{source.stem}.smoke.{config.provider}.zh.dual.pdf"
+    mono_output = output_dir / f"{source.stem}.{sample_name}.{config.provider}.zh.mono.pdf"
+    dual_output = output_dir / f"{source.stem}.{sample_name}.{config.provider}.zh.dual.pdf"
     _merge_pdfs(mono_pages, mono_output)
     _merge_pdfs(dual_pages, dual_output)
     for path in (mono_output, dual_output):

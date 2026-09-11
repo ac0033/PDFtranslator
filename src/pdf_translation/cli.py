@@ -7,13 +7,14 @@ from typing import Annotated
 import typer
 from dotenv import load_dotenv
 
-from .babeldoc_adapter import run_one_page_spike, run_smoke_document
+from .babeldoc_adapter import capture_pdf_sample, run_one_page_spike, run_smoke_document
 from .benchmark import build_samples
 from .config import load_config
 from .analyzer import extract_term_candidates, validate_semantic_evidence
 from .context_models import ContextBundle, GlossaryEntry, Scope, StyleRule, make_invalidation_report
 from .context_router import build_context_packet
 from .context_store import ContextStore
+from .document_context import enrich_pdf_units_with_context
 from .hashing import sha256_bytes, stable_hash
 from .manifest import BenchmarkManifest, load_manifest, load_units
 from .pdf_adapter import inspect_pdf
@@ -23,6 +24,15 @@ from .storage import StateStore
 
 app = typer.Typer(no_args_is_help=True, help="Auditable V1 PDF translation runtime")
 load_dotenv()
+
+
+def _load_captured_units(path: Path, *, enrich_context: bool = False) -> list[TranslationUnit]:
+    units = [
+        TranslationUnit.model_validate_json(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    return enrich_pdf_units_with_context(units) if enrich_context else units
 
 
 @app.command()
@@ -116,6 +126,51 @@ def pdf_smoke(
     typer.echo(json.dumps(report, ensure_ascii=False, indent=2))
 
 
+@app.command("pdf-development")
+def pdf_development(
+    manifest: Annotated[Path, typer.Option("--manifest")],
+    config: Annotated[Path, typer.Option("--config")],
+    output_dir: Annotated[Path, typer.Option("--output-dir")] = Path("output/pdf/v0.6-development"),
+    runs_root: Annotated[Path, typer.Option("--runs-root")] = Path("runs"),
+    capture_root: Annotated[Path, typer.Option("--capture-root")] = Path("tmp/pdfs/v0.6-development-capture"),
+    execute_paid: Annotated[bool, typer.Option("--execute-paid", help="Required for non-mock providers after explicit budget approval.")] = False,
+    reuse_capture: Annotated[bool, typer.Option("--reuse-capture")] = False,
+) -> None:
+    """Run only the frozen development pages; frozen-test pages remain inaccessible."""
+    current = load_manifest(manifest)
+    sample = next((item for item in current.samples if item.name == "development"), None)
+    if sample is None:
+        raise typer.BadParameter("manifest has no frozen development sample")
+    document = (manifest.parent / current.document_uri).resolve()
+    report = run_smoke_document(
+        document,
+        sample.page_indices,
+        load_config(config),
+        output_dir,
+        runs_root,
+        capture_root,
+        execute_paid=execute_paid,
+        reuse_capture=reuse_capture,
+        sample_name="development",
+    )
+    typer.echo(json.dumps(report, ensure_ascii=False, indent=2))
+
+
+@app.command("capture-development")
+def capture_development(
+    manifest: Annotated[Path, typer.Option("--manifest")],
+    output_dir: Annotated[Path, typer.Option("--output-dir")] = Path("output/pdf/v0.6-development-capture"),
+    capture_root: Annotated[Path, typer.Option("--capture-root")] = Path("tmp/pdfs/v0.6-development-capture"),
+) -> None:
+    """Capture development pages for offline context analysis; never opens frozen-test pages."""
+    current = load_manifest(manifest)
+    sample = next((item for item in current.samples if item.name == "development"), None)
+    if sample is None:
+        raise typer.BadParameter("manifest has no frozen development sample")
+    document = (manifest.parent / current.document_uri).resolve()
+    typer.echo(json.dumps(capture_pdf_sample(document, sample.page_indices, output_dir, capture_root), ensure_ascii=False, indent=2))
+
+
 @app.command()
 def estimate(manifest: Annotated[Path, typer.Option("--manifest")], config: Annotated[Path, typer.Option("--config")]) -> None:
     """Estimate tokens and maximum cost without calling a model."""
@@ -135,12 +190,9 @@ def estimate_captured(
     config: Annotated[Path, typer.Option("--config")],
 ) -> None:
     """Estimate a captured PDF workload without calling a model."""
-    captured = [
-        TranslationUnit.model_validate_json(line)
-        for line in units.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
-    typer.echo(json.dumps(estimate_units(captured, load_config(config)), ensure_ascii=False, indent=2))
+    cfg = load_config(config)
+    captured = _load_captured_units(units, enrich_context=cfg.context_engine == "v1")
+    typer.echo(json.dumps(estimate_units(captured, cfg), ensure_ascii=False, indent=2))
 
 
 @app.command()
@@ -204,6 +256,19 @@ def context_init(
     for rule in rules:
         store.put_style(rule)
     typer.echo(json.dumps({"context_db": str(output), "document_id": document_id, "approved_style_rules": len(rules), "glossary_entries": 0, "note": "glossary remains empty until source evidence and human approval are available"}, ensure_ascii=False, indent=2))
+
+
+@app.command("context-init-captured")
+def context_init_captured(
+    units: Annotated[Path, typer.Option("--units")],
+    output: Annotated[Path, typer.Option("--output")] = Path("data/context-v0.6.sqlite"),
+) -> None:
+    """Initialize reviewed document-level style rules from captured PDF identity."""
+    captured = _load_captured_units(units)
+    document_ids = {unit.document_id for unit in captured}
+    if len(document_ids) != 1:
+        raise typer.BadParameter("captured units must belong to exactly one document")
+    context_init(output=output, document_id=next(iter(document_ids)))
 
 
 @app.command("terms")
@@ -295,6 +360,64 @@ def ablate(
         typer.echo(f"wrote {output}")
     else:
         typer.echo(rendered)
+
+
+@app.command("ablate-captured")
+def ablate_captured(
+    units: Annotated[Path, typer.Option("--units")],
+    config: Annotated[Path, typer.Option("--config")],
+    output: Annotated[Path, typer.Option("--output")] = Path("reports/v0.6-context-ablation.json"),
+) -> None:
+    """Compare fixed and routed context for captured PDF units without model calls."""
+    captured = _load_captured_units(units, enrich_context=True)
+    cfg = load_config(config)
+    if cfg.context_engine != "v1" or not cfg.context_db:
+        raise typer.BadParameter("config must enable context_engine='v1' and set context_db")
+    store = ContextStore(Path(cfg.context_db))
+    glossary, styles, semantics = store.glossary(), store.styles(), store.semantics()
+    validate_semantic_evidence(semantics, {unit.unit_id for unit in captured})
+    units_by_id = {unit.unit_id: unit for unit in captured}
+    glossary_snapshot = stable_hash([entry for entry in glossary if entry.status == "approved"])
+    style_snapshot = stable_hash([rule for rule in styles if rule.status == "approved"])
+    rows = []
+    for unit in captured:
+        base = make_request(unit, cfg.model_copy(update={"context_engine": "v0-fixed", "context_db": None}))
+        packet, build = build_context_packet(
+            unit,
+            glossary,
+            styles,
+            semantics,
+            units_by_id,
+            cfg.context_token_budget,
+            glossary_snapshot,
+            style_snapshot,
+        )
+        rows.append(
+            {
+                "unit_id": unit.unit_id,
+                "section_path": list(unit.section_path),
+                "neighbor_ids": list(unit.neighbor_ids),
+                "v0_context_tokens": base.context.token_count,
+                "v1_context_tokens": packet.token_count,
+                "selected_item_ids": [item.item_id for item in packet.items],
+                "trimmed_item_ids": [trace.item_id for trace in build.traces if not trace.selected],
+                "quality_comparison": "not_run",
+            }
+        )
+    report = {
+        "schema_version": "1.0",
+        "source": str(units),
+        "unit_count": len(captured),
+        "context_linked_units": sum(bool(unit.neighbor_ids) for unit in captured),
+        "section_scoped_units": sum(bool(unit.section_path) for unit in captured),
+        "v0_context_tokens": sum(row["v0_context_tokens"] for row in rows),
+        "v1_context_tokens": sum(row["v1_context_tokens"] for row in rows),
+        "rows": rows,
+        "warning": "Offline structural ablation only; it does not claim a translation-quality improvement.",
+    }
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    typer.echo(f"wrote {output}")
 
 
 @app.command()

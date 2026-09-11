@@ -4,12 +4,46 @@ import json
 import os
 from typing import Protocol
 
+from pydantic import ValidationError
+
 from .schemas import TranslationDraft, TranslationRequest, TranslationResult, Usage
 from .semantic_layout import rebalance_layout_markers
 
 
 class Provider(Protocol):
     def translate(self, request: TranslationRequest) -> TranslationResult: ...
+
+
+class ProviderCallError(RuntimeError):
+    """A provider returned a billable response that could not become a result."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        category: str,
+        usage: Usage,
+        provider_response_id: str | None,
+        retryable: bool = True,
+    ) -> None:
+        super().__init__(message)
+        self.category = category
+        self.usage = usage
+        self.provider_response_id = provider_response_id
+        self.retryable = retryable
+
+
+def _response_usage(response) -> Usage:
+    usage_obj = response.usage
+    details = getattr(usage_obj, "output_tokens_details", None)
+    return Usage(
+        input_tokens=getattr(usage_obj, "input_tokens", None),
+        cached_input_tokens=getattr(getattr(usage_obj, "input_tokens_details", None), "cached_tokens", None),
+        output_tokens=getattr(usage_obj, "output_tokens", None),
+        reasoning_tokens=getattr(details, "reasoning_tokens", None),
+        cost_usd=None,
+        usage_source="provider",
+    )
 
 
 class MockProvider:
@@ -63,10 +97,16 @@ class OpenAIProvider:
         if request.model.reasoning_effort:
             arguments["reasoning"] = {"effort": request.model.reasoning_effort}
         response = client.responses.create(**arguments)
-        draft = TranslationDraft.model_validate(json.loads(response.output_text))
-        usage_obj = response.usage
-        details = getattr(usage_obj, "output_tokens_details", None)
-        usage = Usage(input_tokens=getattr(usage_obj, "input_tokens", None), cached_input_tokens=getattr(getattr(usage_obj, "input_tokens_details", None), "cached_tokens", None), output_tokens=getattr(usage_obj, "output_tokens", None), reasoning_tokens=getattr(details, "reasoning_tokens", None), cost_usd=None, usage_source="provider")
+        usage = _response_usage(response)
+        try:
+            draft = TranslationDraft.model_validate(json.loads(response.output_text))
+        except (json.JSONDecodeError, ValidationError) as exc:
+            raise ProviderCallError(
+                "provider response did not match TranslationDraft",
+                category="invalid_structured_output",
+                usage=usage,
+                provider_response_id=getattr(response, "id", None),
+            ) from exc
         return TranslationResult(request_id=request.request_id, unit_id=request.unit.unit_id, draft=draft, finish="complete", provider_response_id=response.id, model=request.model, usage=usage)
 
 

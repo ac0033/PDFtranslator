@@ -7,6 +7,7 @@ from .hashing import stable_hash
 from .schemas import ContextItem, ContextPacket, TranslationUnit
 
 CATEGORY_ORDER = {"style": 0, "glossary": 1, "definition": 2, "local": 3, "summary": 4, "tm": 5}
+LOCAL_CONTEXT_CHARACTER_LIMIT = 320
 
 
 def estimate_tokens(text: str) -> int:
@@ -85,7 +86,10 @@ def build_context_packet(
     for neighbor_id in unit.neighbor_ids:
         neighbor = units_by_id.get(neighbor_id)
         if neighbor:
-            item = ContextItem(item_id=f"local:{neighbor_id}", category="local", content=neighbor.source_text, source_ids=(neighbor_id,), revision=neighbor.ir_revision, required=False, selection_reason="explicit neighboring unit")
+            content = neighbor.source_text
+            if len(content) > LOCAL_CONTEXT_CHARACTER_LIMIT:
+                content = content[:LOCAL_CONTEXT_CHARACTER_LIMIT].rstrip() + " …"
+            item = ContextItem(item_id=f"local:{neighbor_id}", category="local", content=content, source_ids=(neighbor_id,), revision=neighbor.ir_revision, required=False, selection_reason="explicit neighboring unit excerpt")
             candidates.append((item, 0))
     if tm_entry:
         item = ContextItem(item_id=f"tm:{tm_entry.tm_id}", category="tm", content=tm_entry.target_text, source_ids=(tm_entry.tm_id,), revision=tm_entry.glossary_snapshot_id + ":" + tm_entry.style_snapshot_id, required=False, selection_reason="exact confirmed TM")
@@ -111,4 +115,3 @@ def build_context_packet(
     if packet.missing_dependencies:
         raise ValueError(f"missing semantic dependencies: {packet.missing_dependencies}")
     return packet, ContextBuildResult(packet_hash=packet.packet_hash, traces=tuple(traces))
-

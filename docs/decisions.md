@@ -21,3 +21,8 @@
 | DeepSeek structured-output recovery | implemented | the prompt requests a JSON object instance rather than the schema definition; invalid schema echoes fail strict validation before storage |
 | Cross-slot marker safety | accepted for v0.5 smoke | deterministic repair preserves the full BabelDOC marker order, keeps footnote markers in their original write-back slot, and ignores decimals and spaced ellipses as sentence boundaries |
 | v0.5 real translation | accepted for three-page smoke | 74/74 units accepted; 35 DeepSeek translations used 11,586 input and 2,717 output tokens in the recorded ledger; six rendered pages passed visual review |
+| Complete provider-attempt accounting | v0.6 release candidate | billable responses are ledgered before schema/result/quality validation; tests inject invalid schema and critical marker failures and verify both attempts and cost |
+| Bounded selective retry | v0.6 release candidate | invalid structured output and critical protected/layout-marker failures retry at most `provider_max_attempts`; persisted counts survive resume |
+| Real-PDF context graph | v0.6 release candidate | headings create nested scope paths; adjacent translatable units provide capped local context; nonconsecutive sample pages cannot link |
+| Development structural ablation | accepted offline | 12 frozen development pages yielded 121 units; all 117 translatable units selected local context; no cross-sample links; no quality claim |
+| v0.6 paid quality A/B | not run | conservative ceiling USD 0.321915 is above the prior CNY 1.5 allowance and no new spend was authorized |

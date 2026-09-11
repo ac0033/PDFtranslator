@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from uuid import uuid4
 
@@ -9,12 +10,33 @@ from .context_router import build_context_packet, select_exact_tm
 from .context_store import ContextStore
 from .analyzer import validate_semantic_evidence
 from .hashing import stable_hash
-from .providers import DeepSeekProvider, MockProvider, OpenAIProvider
+from .providers import DeepSeekProvider, MockProvider, OpenAIProvider, ProviderCallError
 from .quality import check_quality, repair_boundary_markers
 from .semantic_layout import restore_and_rebalance_layout_markers
 from .schemas import ContextItem, ContextPacket, ModelSpec, TranslationDraft, TranslationRequest, TranslationResult, TranslationUnit, Usage
 from .storage import StateStore
 from .validation import validate_request, validate_result
+
+
+class ProviderAttemptsExhausted(RuntimeError):
+    pass
+
+
+def _priced_usage(usage: Usage, config: RunConfig, estimated_input: int, estimated_output: int = 0) -> Usage:
+    if usage.cost_usd is not None:
+        return usage
+    actual = estimate_cost(
+        usage.input_tokens if usage.input_tokens is not None else estimated_input,
+        usage.output_tokens if usage.output_tokens is not None else estimated_output,
+        config.input_usd_per_million,
+        config.output_usd_per_million,
+    )
+    return usage.model_copy(
+        update={
+            "cost_usd": actual,
+            "usage_source": "estimated" if actual is not None else "unavailable",
+        }
+    )
 
 
 def estimated_input_token_ceiling(request: TranslationRequest) -> int:
@@ -26,7 +48,32 @@ def estimated_input_token_ceiling(request: TranslationRequest) -> int:
 def estimate_units(units: list[TranslationUnit], config: RunConfig) -> dict:
     """Return a conservative, zero-call estimate for translatable units."""
     billable_units = [unit for unit in units if unit.unit_type not in {"code", "protected"}]
-    requests = [make_request(unit, config) for unit in billable_units]
+    if config.context_engine == "v1":
+        if not config.context_db:
+            raise ValueError("V1 context_engine requires context_db")
+        context_store = ContextStore(Path(config.context_db))
+        glossary = context_store.glossary()
+        styles = context_store.styles()
+        semantics = context_store.semantics()
+        units_by_id = {unit.unit_id: unit for unit in units}
+        validate_semantic_evidence(semantics, set(units_by_id))
+        glossary_snapshot_id = stable_hash([entry for entry in glossary if entry.status == "approved"])
+        style_snapshot_id = stable_hash([rule for rule in styles if rule.status == "approved"])
+        requests = []
+        for unit in billable_units:
+            packet, _ = build_context_packet(
+                unit,
+                glossary,
+                styles,
+                semantics,
+                units_by_id,
+                token_budget=config.context_token_budget,
+                glossary_snapshot_id=glossary_snapshot_id,
+                style_snapshot_id=style_snapshot_id,
+            )
+            requests.append(make_request(unit, config, packet))
+    else:
+        requests = [make_request(unit, config) for unit in billable_units]
     input_tokens = sum(estimated_input_token_ceiling(request) for request in requests)
     output_tokens = len(requests) * config.max_output_tokens
     return {
@@ -75,6 +122,9 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path) 
         provider = None
     if provider is None:
         raise ValueError(f"unsupported provider: {config.provider}")
+    api_key_env = getattr(provider, "api_key_env", None)
+    if config.provider != "mock" and api_key_env and not os.environ.get(api_key_env):
+        raise RuntimeError(f"missing API key environment variable: {api_key_env}")
     context_store = None
     glossary = []
     styles = []
@@ -94,6 +144,7 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path) 
         style_snapshot_id = stable_hash([rule for rule in styles if rule.status == "approved"])
     for unit in units:
         ledger_source = None
+        provider_usage_recorded = False
         tm_entry = None
         if context_store:
             base_packet, _ = build_context_packet(unit, glossary, styles, semantics, units_by_id, token_budget=config.context_token_budget, glossary_snapshot_id=glossary_snapshot_id, style_snapshot_id=style_snapshot_id)
@@ -175,12 +226,100 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path) 
         else:
             estimated_input = estimated_input_token_ceiling(request)
             estimate = estimate_cost(estimated_input, config.max_output_tokens, config.input_usd_per_million, config.output_usd_per_million)
-            if config.provider != "mock":
-                reserve_budget(store.spent(config.run_id), 0.0, estimate, config.budget_usd)
-            result = provider.translate(request)
-            if result.usage.cost_usd is None:
-                actual = estimate_cost(result.usage.input_tokens or estimated_input, result.usage.output_tokens or 0, config.input_usd_per_million, config.output_usd_per_million)
-                result = result.model_copy(update={"usage": result.usage.model_copy(update={"cost_usd": actual, "usage_source": "estimated" if actual is not None else "unavailable"})})
+            if config.provider == "mock":
+                result = provider.translate(request)
+            else:
+                prior_attempts = store.provider_attempt_count(config.run_id, unit.unit_id)
+                if prior_attempts >= config.provider_max_attempts:
+                    raise ProviderAttemptsExhausted(
+                        f"provider attempt limit already reached for {unit.unit_id}: {prior_attempts}/{config.provider_max_attempts}"
+                    )
+                result = None
+                for attempt_no in range(prior_attempts + 1, config.provider_max_attempts + 1):
+                    reserve_budget(store.spent(config.run_id), 0.0, estimate, config.budget_usd)
+                    try:
+                        candidate = provider.translate(request)
+                    except ProviderCallError as exc:
+                        failed_usage = _priced_usage(exc.usage, config, estimated_input)
+                        store.record_provider_attempt(
+                            config.run_id,
+                            unit.unit_id,
+                            request.request_id,
+                            attempt_no,
+                            "invalid_response",
+                            failed_usage,
+                            error_category=exc.category,
+                            provider_response_id=exc.provider_response_id,
+                        )
+                        if not exc.retryable or attempt_no >= config.provider_max_attempts:
+                            raise ProviderAttemptsExhausted(
+                                f"provider attempts exhausted for {unit.unit_id}: {exc.category}"
+                            ) from exc
+                        continue
+                    except Exception as exc:
+                        # The provider may have accepted a request without returning
+                        # usage. Charge the reserved ceiling so retries remain bounded.
+                        failed_usage = Usage(
+                            input_tokens=estimated_input,
+                            output_tokens=config.max_output_tokens,
+                            cost_usd=estimate,
+                            usage_source="estimated" if estimate is not None else "unavailable",
+                        )
+                        store.record_provider_attempt(
+                            config.run_id,
+                            unit.unit_id,
+                            request.request_id,
+                            attempt_no,
+                            "error",
+                            failed_usage,
+                            error_category=type(exc).__name__,
+                        )
+                        raise ProviderAttemptsExhausted(
+                            f"non-retryable provider error for {unit.unit_id}: {type(exc).__name__}"
+                        ) from exc
+                    candidate = candidate.model_copy(update={"usage": _priced_usage(candidate.usage, config, estimated_input)})
+                    if candidate.draft is not None:
+                        repaired_text, _ = repair_boundary_markers(unit.source_text, candidate.draft.translated_text)
+                        repaired_text, _ = restore_and_rebalance_layout_markers(unit.source_text, repaired_text)
+                        candidate = candidate.model_copy(update={"draft": candidate.draft.model_copy(update={"translated_text": repaired_text})})
+                    try:
+                        validate_result(request, candidate)
+                        candidate_report = check_quality(unit, candidate)
+                    except ValueError as exc:
+                        error_category = "result_validation"
+                    else:
+                        critical_categories = sorted(issue.category for issue in candidate_report.issues if issue.severity == "critical")
+                        error_category = "quality:" + ",".join(critical_categories) if critical_categories else None
+                    if error_category:
+                        store.record_provider_attempt(
+                            config.run_id,
+                            unit.unit_id,
+                            request.request_id,
+                            attempt_no,
+                            "invalid_response",
+                            candidate.usage,
+                            error_category=error_category,
+                            provider_response_id=candidate.provider_response_id,
+                        )
+                        if attempt_no >= config.provider_max_attempts:
+                            raise ProviderAttemptsExhausted(
+                                f"provider attempts exhausted for {unit.unit_id}: {error_category}"
+                            )
+                        continue
+                    store.record_provider_attempt(
+                        config.run_id,
+                        unit.unit_id,
+                        request.request_id,
+                        attempt_no,
+                        "success",
+                        candidate.usage,
+                        provider_response_id=candidate.provider_response_id,
+                    )
+                    result = candidate
+                    provider_usage_recorded = True
+                    break
+                if result is None:
+                    raise ProviderAttemptsExhausted(f"provider attempts exhausted for {unit.unit_id}")
             from_cache = False
         if result.draft is not None:
             repaired_text, repaired = repair_boundary_markers(unit.source_text, result.draft.translated_text)
@@ -191,5 +330,13 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path) 
                 result = result.model_copy(update={"draft": result.draft.model_copy(update={"translated_text": repaired_text})})
         validate_result(request, result)
         report = check_quality(unit, result)
-        store.commit(config.run_id, result, report, request.cache_key, cached=from_cache, source=ledger_source)
+        store.commit(
+            config.run_id,
+            result,
+            report,
+            request.cache_key,
+            cached=from_cache,
+            source=ledger_source,
+            record_usage=not provider_usage_recorded,
+        )
     return store.summary(config.run_id)

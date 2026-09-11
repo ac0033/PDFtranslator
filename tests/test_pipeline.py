@@ -4,11 +4,11 @@ import pytest
 
 from pdf_translation.budget import BudgetExceeded, reserve_budget
 from pdf_translation.config import RunConfig
-from pdf_translation.hashing import stable_hash
-from pdf_translation.pipeline import estimate_units, run_units
-from pdf_translation.providers import DeepSeekProvider
+from pdf_translation.hashing import sha256_bytes, stable_hash
+from pdf_translation.pipeline import ProviderAttemptsExhausted, estimate_units, run_units
+from pdf_translation.providers import DeepSeekProvider, ProviderCallError
 from pdf_translation.quality import check_quality, repair_boundary_markers
-from pdf_translation.schemas import ModelSpec, TranslationDraft, TranslationResult, TranslationUnit, Usage
+from pdf_translation.schemas import ArtifactRef, ModelSpec, ProtectedSpan, SourceRef, TranslationDraft, TranslationResult, TranslationUnit, Usage
 from pdf_translation.storage import StateStore
 
 
@@ -117,3 +117,137 @@ def test_only_missing_boundary_markers_are_repaired():
     unchanged, changed = repair_boundary_markers(source, "⟦P:lead⟧翻译此内容")
     assert changed is False
     assert unchanged == "⟦P:lead⟧翻译此内容"
+
+
+def test_invalid_billable_response_is_recorded_before_retry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    class RetryProvider:
+        calls = 0
+
+        def translate(self, request):
+            self.calls += 1
+            if self.calls == 1:
+                raise ProviderCallError(
+                    "bad schema",
+                    category="invalid_structured_output",
+                    usage=Usage(input_tokens=100, output_tokens=10, usage_source="provider"),
+                    provider_response_id="failed-response",
+                )
+            return TranslationResult(
+                request_id=request.request_id,
+                unit_id=request.unit.unit_id,
+                draft=TranslationDraft(unit_id=request.unit.unit_id, translated_text=request.unit.source_text),
+                finish="complete",
+                provider_response_id="successful-response",
+                model=request.model,
+                usage=Usage(input_tokens=120, output_tokens=20, usage_source="provider"),
+            )
+
+    provider = RetryProvider()
+    monkeypatch.setattr("pdf_translation.pipeline.DeepSeekProvider", lambda **_: provider)
+    cfg = config("retry-ledger").model_copy(
+        update={
+            "provider": "deepseek",
+            "model_id": "deepseek-flash",
+            "budget_usd": 1.0,
+            "input_usd_per_million": 1.0,
+            "output_usd_per_million": 1.0,
+            "provider_max_attempts": 2,
+        }
+    )
+    summary = run_units([unit()], cfg, tmp_path)
+    assert summary["provider_attempts"] == 2
+    assert summary["failed_provider_attempts"] == 1
+    assert summary["input_tokens"] == 220
+    assert summary["output_tokens"] == 30
+    assert summary["cost_usd"] == pytest.approx(0.00025)
+    attempts = StateStore(tmp_path / cfg.run_id / "state.sqlite").provider_attempts(cfg.run_id)
+    assert [attempt["outcome"] for attempt in attempts] == ["invalid_response", "success"]
+    assert attempts[0]["error_category"] == "invalid_structured_output"
+
+
+def test_provider_attempt_limit_survives_resume(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    class InvalidProvider:
+        calls = 0
+
+        def translate(self, request):
+            self.calls += 1
+            raise ProviderCallError(
+                "bad schema",
+                category="invalid_structured_output",
+                usage=Usage(input_tokens=10, output_tokens=5, usage_source="provider"),
+                provider_response_id=f"failed-{self.calls}",
+            )
+
+    provider = InvalidProvider()
+    monkeypatch.setattr("pdf_translation.pipeline.DeepSeekProvider", lambda **_: provider)
+    cfg = config("bounded-retry").model_copy(
+        update={
+            "provider": "deepseek",
+            "model_id": "deepseek-flash",
+            "budget_usd": 1.0,
+            "input_usd_per_million": 1.0,
+            "output_usd_per_million": 1.0,
+            "provider_max_attempts": 2,
+        }
+    )
+    with pytest.raises(ProviderAttemptsExhausted):
+        run_units([unit()], cfg, tmp_path)
+    with pytest.raises(ProviderAttemptsExhausted, match="already reached"):
+        run_units([unit()], cfg, tmp_path)
+    assert provider.calls == 2
+    summary = StateStore(tmp_path / cfg.run_id / "state.sqlite").summary(cfg.run_id)
+    assert summary["provider_attempts"] == 2
+    assert summary["failed_provider_attempts"] == 2
+
+
+def test_critical_marker_failure_is_recorded_and_retried(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    class MarkerRetryProvider:
+        calls = 0
+
+        def translate(self, request):
+            self.calls += 1
+            translated = "missing marker" if self.calls == 1 else request.unit.source_text
+            return TranslationResult(
+                request_id=request.request_id,
+                unit_id=request.unit.unit_id,
+                draft=TranslationDraft(unit_id=request.unit.unit_id, translated_text=translated),
+                finish="complete",
+                provider_response_id=f"response-{self.calls}",
+                model=request.model,
+                usage=Usage(input_tokens=10, output_tokens=5, usage_source="provider"),
+            )
+
+    provider = MarkerRetryProvider()
+    monkeypatch.setattr("pdf_translation.pipeline.DeepSeekProvider", lambda **_: provider)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-only")
+    text = "Before ⟦P:formula-1⟧ after"
+    marker_start = text.index("⟦P:formula-1⟧")
+    protected = ProtectedSpan(
+        occurrence_id="formula-1",
+        marker="⟦P:formula-1⟧",
+        kind="formula",
+        original=ArtifactRef(uri="fixture/formula.txt", sha256=sha256_bytes(b"formula"), media_type="text/plain"),
+        source_ref=SourceRef(block_id="u1", page_index=0, bbox=(0, 0, 1, 1), char_start=marker_start, char_end=marker_start + len("⟦P:formula-1⟧")),
+    )
+    source = unit(text).model_copy(
+        update={
+            "protected": (protected,),
+            "source_hash": stable_hash(text),
+        }
+    )
+    cfg = config("marker-retry").model_copy(
+        update={
+            "provider": "deepseek",
+            "model_id": "deepseek-flash",
+            "budget_usd": 1.0,
+            "input_usd_per_million": 1.0,
+            "output_usd_per_million": 1.0,
+            "provider_max_attempts": 2,
+        }
+    )
+    summary = run_units([source], cfg, tmp_path)
+    assert summary["states"] == {"accepted": 1}
+    assert summary["provider_attempts"] == 2
+    assert summary["failed_provider_attempts"] == 1
+    attempts = StateStore(tmp_path / cfg.run_id / "state.sqlite").provider_attempts(cfg.run_id)
+    assert attempts[0]["error_category"] == "quality:protected_marker"
