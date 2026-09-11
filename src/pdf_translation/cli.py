@@ -8,6 +8,7 @@ import typer
 from dotenv import load_dotenv
 
 from .babeldoc_adapter import capture_pdf_sample, run_one_page_spike, run_smoke_document
+from .ab_experiment import MAX_COMBINED_AB_BUDGET_USD, approved_execution_configs, build_blind_review, prepare_ab_manifest
 from .benchmark import build_samples
 from .config import load_config
 from .analyzer import extract_term_candidates, validate_semantic_evidence
@@ -18,7 +19,7 @@ from .document_context import enrich_pdf_units_with_context
 from .hashing import sha256_bytes, stable_hash
 from .manifest import BenchmarkManifest, load_manifest, load_units
 from .pdf_adapter import inspect_pdf
-from .pipeline import estimate_units, make_request, run_units
+from .pipeline import DEFAULT_TRANSLATION_STYLE, estimate_units, make_request, run_units
 from .schemas import TranslationUnit
 from .storage import StateStore
 
@@ -271,6 +272,30 @@ def context_init_captured(
     context_init(output=output, document_id=next(iter(document_ids)))
 
 
+@app.command("ab-context-init")
+def ab_context_init(
+    units: Annotated[Path, typer.Option("--units")] = Path("output/pdf/v0.6-development-capture/units.jsonl"),
+    output: Annotated[Path, typer.Option("--output")] = Path("data/context-v0.6-ab.sqlite"),
+) -> None:
+    """Create a clean A/B context store with the exact fixed-arm style text."""
+    if output.exists():
+        raise typer.BadParameter("A/B context store already exists; use a new path to avoid stale context")
+    captured = _load_captured_units(units)
+    document_ids = {unit.document_id for unit in captured}
+    if len(document_ids) != 1:
+        raise typer.BadParameter("captured units must belong to exactly one document")
+    store = ContextStore(output)
+    rule = StyleRule(
+        rule_id="ab-common-style",
+        content=DEFAULT_TRANSLATION_STYLE,
+        scope=Scope(kind="document", value=next(iter(document_ids))),
+        priority=10,
+        version="v0.6-ab-style",
+    )
+    store.put_style(rule)
+    typer.echo(json.dumps({"context_db": str(output), "document_id": rule.scope.value, "approved_style_rules": 1, "glossary_entries": 0, "semantic_entries": 0, "translation_memory_entries": 0}, ensure_ascii=False, indent=2))
+
+
 @app.command("terms")
 def terms_command(
     manifest: Annotated[Path, typer.Option("--manifest")],
@@ -418,6 +443,99 @@ def ablate_captured(
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     typer.echo(f"wrote {output}")
+
+
+@app.command("ab-prepare-development")
+def ab_prepare_development(
+    units: Annotated[Path, typer.Option("--units")] = Path("output/pdf/v0.6-development-capture/units.jsonl"),
+    fixed_config: Annotated[Path, typer.Option("--fixed-config")] = Path("configs/v0.6.ab.fixed.deepseek.toml"),
+    context_config: Annotated[Path, typer.Option("--context-config")] = Path("configs/v0.6.ab.context.deepseek.toml"),
+    output: Annotated[Path, typer.Option("--output")] = Path("reports/v0.6_ab_manifest.json"),
+    cny_per_usd: Annotated[float, typer.Option("--cny-per-usd")] = 7.5,
+    planned_budget_usd_per_arm: Annotated[float, typer.Option("--planned-budget-usd-per-arm")] = 0.10,
+) -> None:
+    """Freeze and price the development A/B experiment without model calls."""
+    captured = _load_captured_units(units, enrich_context=True)
+    report = prepare_ab_manifest(
+        units,
+        captured,
+        load_config(fixed_config),
+        load_config(context_config),
+        cny_per_usd=cny_per_usd,
+        planned_budget_usd_per_arm=planned_budget_usd_per_arm,
+    )
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    typer.echo(json.dumps(report, ensure_ascii=False, indent=2))
+
+
+@app.command("ab-run-development")
+def ab_run_development(
+    units: Annotated[Path, typer.Option("--units")] = Path("output/pdf/v0.6-development-capture/units.jsonl"),
+    fixed_config: Annotated[Path, typer.Option("--fixed-config")] = Path("configs/v0.6.ab.fixed.deepseek.toml"),
+    context_config: Annotated[Path, typer.Option("--context-config")] = Path("configs/v0.6.ab.context.deepseek.toml"),
+    runs_root: Annotated[Path, typer.Option("--runs-root")] = Path("runs"),
+    execute_paid: Annotated[bool, typer.Option("--execute-paid", help="Required after a separate explicit spend approval.")] = False,
+    approved_combined_budget_usd: Annotated[float, typer.Option("--approved-combined-budget-usd")] = 0.0,
+) -> None:
+    """Run the frozen A/B pair under one explicit combined hard budget."""
+    captured = _load_captured_units(units, enrich_context=True)
+    fixed_base = load_config(fixed_config)
+    context_base = load_config(context_config)
+    preparation = prepare_ab_manifest(units, captured, fixed_base, context_base)
+    if not execute_paid:
+        typer.echo(json.dumps({"status": "paid_approval_required", "api_calls": 0, "preparation": preparation}, ensure_ascii=False, indent=2))
+        return
+    try:
+        fixed, context = approved_execution_configs(fixed_base, context_base, approved_combined_budget_usd)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    per_arm = approved_combined_budget_usd / 2
+    fixed_estimate = estimate_units(captured, fixed)
+    context_estimate = estimate_units(captured, context)
+    if fixed_estimate["estimated_max_cost_usd"] > per_arm or context_estimate["estimated_max_cost_usd"] > per_arm:
+        raise typer.BadParameter("one-pass estimate exceeds the equal per-arm budget")
+    fixed_summary = run_units(captured, fixed, runs_root)
+    if fixed_summary.get("states") != {"accepted": len(captured)}:
+        raise RuntimeError("fixed arm did not fully pass; context arm was not started")
+    context_summary = run_units(captured, context, runs_root)
+    combined_cost = fixed_summary["cost_usd"] + context_summary["cost_usd"]
+    if combined_cost > approved_combined_budget_usd:
+        raise RuntimeError("combined A/B cost exceeded the approved hard budget")
+    typer.echo(json.dumps({"status": "completed", "approved_combined_budget_usd": approved_combined_budget_usd, "maximum_supported_budget_usd": MAX_COMBINED_AB_BUDGET_USD, "fixed": fixed_summary, "context": context_summary, "combined_cost_usd": combined_cost}, ensure_ascii=False, indent=2))
+
+
+@app.command("ab-export-blind-review")
+def ab_export_blind_review(
+    units: Annotated[Path, typer.Option("--units")] = Path("output/pdf/v0.6-development-capture/units.jsonl"),
+    fixed_run_id: Annotated[str, typer.Option("--fixed-run-id")] = "v0.6-ab-fixed-deepseek-r1",
+    context_run_id: Annotated[str, typer.Option("--context-run-id")] = "v0.6-ab-context-deepseek-r1",
+    runs_root: Annotated[Path, typer.Option("--runs-root")] = Path("runs"),
+    review_output: Annotated[Path, typer.Option("--review-output")] = Path("reports/v0.6_ab_blind_review.json"),
+    key_output: Annotated[Path, typer.Option("--key-output")] = Path("reports/v0.6_ab_blind_key.json"),
+    seed: Annotated[str, typer.Option("--seed")] = "20260911",
+) -> None:
+    """Export anonymous X/Y translations and a separate reveal key."""
+    captured = _load_captured_units(units, enrich_context=True)
+    fixed_store = StateStore(runs_root / fixed_run_id / "state.sqlite")
+    context_store = StateStore(runs_root / context_run_id / "state.sqlite")
+    fixed_targets = {}
+    context_targets = {}
+    for unit in captured:
+        if unit.unit_type in {"code", "protected"}:
+            continue
+        fixed_result = fixed_store.result(fixed_run_id, unit.unit_id)
+        context_result = context_store.result(context_run_id, unit.unit_id)
+        if fixed_result is None or fixed_result.draft is None or context_result is None or context_result.draft is None:
+            raise typer.BadParameter(f"both accepted translations are required for {unit.unit_id}")
+        fixed_targets[unit.unit_id] = fixed_result.draft.translated_text
+        context_targets[unit.unit_id] = context_result.draft.translated_text
+    review, key = build_blind_review(captured, fixed_targets, context_targets, seed=seed)
+    review_output.parent.mkdir(parents=True, exist_ok=True)
+    key_output.parent.mkdir(parents=True, exist_ok=True)
+    review_output.write_text(json.dumps(review, ensure_ascii=False, indent=2), encoding="utf-8")
+    key_output.write_text(json.dumps(key, ensure_ascii=False, indent=2), encoding="utf-8")
+    typer.echo(json.dumps({"review_output": str(review_output), "key_output": str(key_output), "pair_count": review["pair_count"]}, ensure_ascii=False, indent=2))
 
 
 @app.command()

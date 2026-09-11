@@ -5,7 +5,7 @@ import pytest
 from pdf_translation.budget import BudgetExceeded, reserve_budget
 from pdf_translation.config import RunConfig
 from pdf_translation.hashing import sha256_bytes, stable_hash
-from pdf_translation.pipeline import ProviderAttemptsExhausted, estimate_units, run_units
+from pdf_translation.pipeline import ProviderAttemptsExhausted, estimate_units, make_request, output_token_limit, run_units
 from pdf_translation.providers import DeepSeekProvider, ProviderCallError
 from pdf_translation.quality import check_quality, repair_boundary_markers
 from pdf_translation.schemas import ArtifactRef, ModelSpec, ProtectedSpan, SourceRef, TranslationDraft, TranslationResult, TranslationUnit, Usage
@@ -106,6 +106,15 @@ def test_estimate_units_excludes_protected_passthrough():
     assert estimate["reserved_output_tokens"] == 100
     assert estimate["estimated_max_cost_usd"] == 0.0
     assert estimate["api_calls"] == 0
+
+
+def test_adaptive_output_ceiling_is_per_unit_and_bounded():
+    cfg = config().model_copy(update={"max_output_tokens": 2000, "output_token_policy": "adaptive-v1"})
+    assert output_token_limit(unit("short"), cfg) == 384
+    assert output_token_limit(unit("x" * 960), cfg) == 848
+    assert output_token_limit(unit("x" * 4000), cfg) == 2000
+    estimate = estimate_units([unit("short")], cfg)
+    assert estimate["reserved_output_tokens"] == 384
 
 
 def test_only_missing_boundary_markers_are_repaired():
@@ -251,3 +260,102 @@ def test_critical_marker_failure_is_recorded_and_retried(tmp_path: Path, monkeyp
     assert summary["failed_provider_attempts"] == 1
     attempts = StateStore(tmp_path / cfg.run_id / "state.sqlite").provider_attempts(cfg.run_id)
     assert attempts[0]["error_category"] == "quality:protected_marker"
+
+
+def test_truncation_is_charged_then_retried_with_expanded_ceiling(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    class TruncationProvider:
+        limits = []
+
+        def translate(self, request):
+            self.limits.append(request.model.max_output_tokens)
+            if len(self.limits) == 1:
+                raise ProviderCallError(
+                    "truncated",
+                    category="truncated:max_output_tokens",
+                    usage=Usage(input_tokens=10, output_tokens=request.model.max_output_tokens, usage_source="provider"),
+                    provider_response_id="truncated-response",
+                )
+            return TranslationResult(
+                request_id=request.request_id,
+                unit_id=request.unit.unit_id,
+                draft=TranslationDraft(unit_id=request.unit.unit_id, translated_text=request.unit.source_text),
+                finish="complete",
+                provider_response_id="complete-response",
+                model=request.model,
+                usage=Usage(input_tokens=10, output_tokens=10, usage_source="provider"),
+            )
+
+    provider = TruncationProvider()
+    monkeypatch.setattr("pdf_translation.pipeline.DeepSeekProvider", lambda **_: provider)
+    cfg = config("truncation-retry").model_copy(
+        update={
+            "provider": "deepseek",
+            "model_id": "deepseek-flash",
+            "max_output_tokens": 2000,
+            "output_token_policy": "adaptive-v1",
+            "budget_usd": 1.0,
+            "input_usd_per_million": 1.0,
+            "output_usd_per_million": 1.0,
+            "provider_max_attempts": 2,
+        }
+    )
+    summary = run_units([unit("short")], cfg, tmp_path)
+    assert provider.limits == [384, 768]
+    assert summary["states"] == {"accepted": 1}
+    assert summary["provider_attempts"] == 2
+    attempts = StateStore(tmp_path / cfg.run_id / "state.sqlite").provider_attempts(cfg.run_id)
+    assert [attempt["max_output_tokens"] for attempt in attempts] == [384, 768]
+    assert attempts[0]["error_category"] == "truncated:max_output_tokens"
+
+
+def test_resume_expands_the_last_persisted_truncated_ceiling(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    class CompleteProvider:
+        limits = []
+
+        def translate(self, request):
+            self.limits.append(request.model.max_output_tokens)
+            return TranslationResult(
+                request_id=request.request_id,
+                unit_id=request.unit.unit_id,
+                draft=TranslationDraft(unit_id=request.unit.unit_id, translated_text=request.unit.source_text),
+                finish="complete",
+                provider_response_id="resumed-response",
+                model=request.model,
+                usage=Usage(input_tokens=10, output_tokens=10, usage_source="provider"),
+            )
+
+    provider = CompleteProvider()
+    monkeypatch.setattr("pdf_translation.pipeline.DeepSeekProvider", lambda **_: provider)
+    cfg = config("truncation-resume").model_copy(
+        update={
+            "provider": "deepseek",
+            "model_id": "deepseek-flash",
+            "max_output_tokens": 2000,
+            "output_token_policy": "adaptive-v1",
+            "budget_usd": 1.0,
+            "input_usd_per_million": 1.0,
+            "output_usd_per_million": 1.0,
+            "provider_max_attempts": 2,
+        }
+    )
+    source = unit("short")
+    request = make_request(source, cfg)
+    store = StateStore(tmp_path / cfg.run_id / "state.sqlite")
+    store.begin_run(cfg.run_id, stable_hash([source]), cfg.config_hash)
+    store.prepare(cfg.run_id, source.unit_id, request.cache_key)
+    store.record_provider_attempt(
+        cfg.run_id,
+        source.unit_id,
+        request.request_id,
+        1,
+        "invalid_response",
+        Usage(input_tokens=10, output_tokens=384, cost_usd=0.000394, usage_source="provider"),
+        max_output_tokens=384,
+        error_category="truncated:max_output_tokens",
+        provider_response_id="interrupted-response",
+    )
+    summary = run_units([source], cfg, tmp_path)
+    assert provider.limits == [768]
+    assert summary["states"] == {"accepted": 1}
+    attempts = store.provider_attempts(cfg.run_id)
+    assert [attempt["max_output_tokens"] for attempt in attempts] == [384, 768]

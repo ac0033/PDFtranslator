@@ -2,7 +2,7 @@
 
 这是按 `llm_pdf_translation_pipeline_plan.md` 实现的首个可运行版本。它优先保证可追溯、预算前置、严格契约、精确缓存和断点恢复，不会在缺少预算配置时调用收费模型。
 
-当前候选版本为 `0.6.0rc1`，计划对应 Git 快照 `v0.6.0-rc.1`。路线图中的 V0/V1/V2/V3 表示开发阶段，不等于 SemVer 主版本号；在完整文档接口稳定前，软件保持 `0.x`。版本规则见 `docs/versioning.md`。
+当前候选版本为 `0.6.0rc2`，对应 Git 快照 `v0.6.0-rc.2`。路线图中的 V0/V1/V2/V3 表示开发阶段，不等于 SemVer 主版本号；在完整文档接口稳定前，软件保持 `0.x`。版本规则见 `docs/versioning.md`。
 
 ## 当前能力
 
@@ -14,6 +14,9 @@
 - `capture-development`：只捕获 manifest 中已经冻结的 development 页，生成真实 PDF 单元和上下文图；不会读取 frozen-test、调用模型或生成最终 PDF。
 - `pdf-development`：只对 development 页执行翻译和回写；非 mock 提供商仍要求明确预算和 `--execute-paid`。
 - `estimate-captured`：对已截获的 TranslationUnit JSONL 进行零调用费用估算，并排除代码/公式保护单元。
+- `ab-context-init` / `ab-prepare-development`：建立无历史污染的实验上下文库，冻结受控 A/B 输入、配置哈希和费用上界；全程零模型调用。
+- `ab-run-development`：默认只报告需要付费授权；只有同时给出显式执行开关和不超过 USD 0.20 的总预算才会运行，并保持两组预算相等。
+- `ab-export-blind-review`：把两组已接受译文导出为匿名 X/Y 评审表，并把揭盲键单独保存。
 - `estimate`：离线估算待译文本 token 与最高费用；价格必须由用户显式填写。
 - `run`：执行 JSONL Translation Unit；默认 `mock` 提供商，`openai` 提供商需预算和密钥。
 - `resume`：仅继续输入哈希和配置哈希一致的未完成任务。
@@ -50,6 +53,9 @@ uv run pdftrans estimate-captured --units output/pdf/v0.5-semantic-smoke-mock/un
 uv run pdftrans context-init-captured --units output/pdf/v0.5-semantic-smoke-deepseek/units.jsonl --output data/context-v0.6.sqlite
 uv run pdftrans ablate-captured --units output/pdf/v0.5-semantic-smoke-deepseek/units.jsonl --config configs/v0.6.mock.toml --output reports/v0.6_context_ablation_smoke.json
 uv run pdftrans capture-development --manifest benchmark.dm.json --output-dir output/pdf/v0.6-development-capture
+uv run pdftrans ab-context-init --units output/pdf/v0.6-development-capture/units.jsonl --output data/context-v0.6-ab.sqlite
+uv run pdftrans ab-prepare-development
+uv run pdftrans ab-run-development
 ```
 
 ## DeepSeek V4.1 Flash
@@ -83,4 +89,4 @@ uv run pdftrans ablate --manifest demo/manifest.json --config configs/v1.mock.to
 
 ## 当前 PDF 边界
 
-仓库本地已有三本测试 PDF，其中 `dm.pdf` 已登记并冻结分层测试页；文件本身和运行输出均被 Git 忽略。`v0.5.0` 已用 DeepSeek V4.1 Flash 在三页 smoke 上完成真实验收。`v0.6.0-rc.1` 又在同一 74 单元上完成零费用上下文回归，并捕获 12 个 development 页形成 121 个真实单元：117 个可译单元实际选入局部上下文，跨不连续样本页泄漏为零。development 的 DeepSeek 保守上限为 USD 0.321915；候选版未获本轮付费预算，因此没有运行翻译质量 A/B，也没有读取 frozen-test。当前仍有三个版面边界：41 个 smoke 单元只有低置信度坐标；BabelDOC 的目录迁移会发出上游警告；公式内部英文及部分中英文间距仍需优化。
+仓库本地已有三本测试 PDF，其中 `dm.pdf` 已登记并冻结分层测试页；文件本身和运行输出均被 Git 忽略。`v0.5.0` 已用 DeepSeek V4.1 Flash 在三页 smoke 上完成真实验收。`v0.6.0-rc.1` 又在同一 74 单元上完成零费用上下文回归，并捕获 12 个 development 页形成 121 个真实单元：117 个可译单元实际选入局部上下文，跨不连续样本页泄漏为零。`v0.6.0-rc.2` 把两组受控实验固定为同模型、同提示、同风格和同输出上限，只让上下文组增加相邻原文；自适应上限把两组一次运行的保守合计降到 USD 0.1837797（按 7.5 为 CNY 1.378348），硬上限为 CNY 1.5。候选版尚未取得这次付费 A/B 的单独授权，因此没有调用模型，也没有读取 frozen-test。当前仍有三个版面边界：41 个 smoke 单元只有低置信度坐标；BabelDOC 的目录迁移会发出上游警告；公式内部英文及部分中英文间距仍需优化。

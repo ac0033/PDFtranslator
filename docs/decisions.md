@@ -25,4 +25,5 @@
 | Bounded selective retry | v0.6 release candidate | invalid structured output and critical protected/layout-marker failures retry at most `provider_max_attempts`; persisted counts survive resume |
 | Real-PDF context graph | v0.6 release candidate | headings create nested scope paths; adjacent translatable units provide capped local context; nonconsecutive sample pages cannot link |
 | Development structural ablation | accepted offline | 12 frozen development pages yielded 121 units; all 117 translatable units selected local context; no cross-sample links; no quality claim |
-| v0.6 paid quality A/B | not run | conservative ceiling USD 0.321915 is above the prior CNY 1.5 allowance and no new spend was authorized |
+| Adaptive output ceiling | v0.6 rc.2 accepted offline | each request reserves `min(configured max, max(384, ceil(source chars * 0.75) + 128))`; truncation is ledgered and may retry once with a bounded expanded ceiling |
+| Controlled v0.6 quality A/B | prepared, not run | the two arms share model, prompt, style, adapter and adaptive output cap; only neighboring source context differs. The 117-unit combined one-pass ceiling is USD 0.1837797 / CNY 1.378348 at 7.5, under a separately approved CNY 1.5 hard cap |

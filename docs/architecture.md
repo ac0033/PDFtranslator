@@ -30,4 +30,8 @@ For captured PDFs, spatial reading order builds previous/next links among transl
 
 Every packet records selection reasons, source IDs, revisions, a memory snapshot hash and a conservative token estimate. Changing selected context changes the translation cache key; the state store returns the unit to `prepared` instead of silently retaining an accepted result from an obsolete context snapshot.
 
+The rc.2 A/B path freezes two zero-budget configurations with identical model, prompt, adapter, common style and adaptive per-unit output ceilings. The context arm adds only neighboring source excerpts from a dedicated database. Preparation rejects approved glossary, semantic or confirmed translation-memory content as confounders. Paid execution remains double gated by an explicit CLI flag and an in-memory combined budget; tracked configuration files stay at zero. Results can be exported as deterministic anonymous X/Y pairs with a separate reveal key.
+
+Output ceilings use `min(configured maximum, max(384, ceil(source characters * 0.75) + 128))`. A response explicitly truncated at `max_output_tokens` is charged and recorded before one bounded retry with an expanded ceiling; resume continues from the persisted attempted ceiling rather than starting over.
+
 The v0.6 release candidate has structural evidence on smoke and development samples, but no paid translation-quality comparison. Frozen-test pages remain untouched until a candidate is locked and a separate blind-test decision is approved.

@@ -46,11 +46,15 @@ class StateStore:
                 cost_usd REAL,
                 input_tokens INTEGER,
                 output_tokens INTEGER,
+                max_output_tokens INTEGER,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(run_id, unit_id, request_id, attempt_no)
             );
             CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL, unit_id TEXT, event TEXT NOT NULL, detail TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
             """)
+            columns = {row[1] for row in con.execute("PRAGMA table_info(provider_attempts)")}
+            if "max_output_tokens" not in columns:
+                con.execute("ALTER TABLE provider_attempts ADD COLUMN max_output_tokens INTEGER")
 
     def begin_run(self, run_id: str, input_hash: str, config_hash: str) -> None:
         with self.connect() as con:
@@ -96,6 +100,7 @@ class StateStore:
         outcome: str,
         usage: Usage,
         *,
+        max_output_tokens: int,
         error_category: str | None = None,
         provider_response_id: str | None = None,
     ) -> None:
@@ -103,15 +108,15 @@ class StateStore:
         source = f"provider_{outcome}:{usage.usage_source}"
         with self.connect() as con:
             con.execute(
-                "INSERT INTO provider_attempts(run_id,unit_id,request_id,attempt_no,outcome,error_category,provider_response_id,cost_usd,input_tokens,output_tokens) VALUES(?,?,?,?,?,?,?,?,?,?)",
-                (run_id, unit_id, request_id, attempt_no, outcome, error_category, provider_response_id, usage.cost_usd, usage.input_tokens, usage.output_tokens),
+                "INSERT INTO provider_attempts(run_id,unit_id,request_id,attempt_no,outcome,error_category,provider_response_id,cost_usd,input_tokens,output_tokens,max_output_tokens) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                (run_id, unit_id, request_id, attempt_no, outcome, error_category, provider_response_id, usage.cost_usd, usage.input_tokens, usage.output_tokens, max_output_tokens),
             )
             con.execute(
                 "INSERT INTO ledger(run_id,unit_id,cost_usd,input_tokens,output_tokens,source) VALUES(?,?,?,?,?,?)",
                 (run_id, unit_id, usage.cost_usd, usage.input_tokens, usage.output_tokens, source),
             )
             detail = json.dumps(
-                {"attempt_no": attempt_no, "outcome": outcome, "error_category": error_category, "provider_response_id": provider_response_id},
+                {"attempt_no": attempt_no, "outcome": outcome, "error_category": error_category, "provider_response_id": provider_response_id, "max_output_tokens": max_output_tokens},
                 ensure_ascii=False,
             )
             con.execute(
@@ -126,6 +131,11 @@ class StateStore:
     def provider_attempts(self, run_id: str) -> list[dict]:
         with self.connect() as con:
             return [dict(row) for row in con.execute("SELECT * FROM provider_attempts WHERE run_id=? ORDER BY id", (run_id,))]
+
+    def last_provider_attempt(self, run_id: str, unit_id: str) -> dict | None:
+        with self.connect() as con:
+            row = con.execute("SELECT * FROM provider_attempts WHERE run_id=? AND unit_id=? ORDER BY id DESC LIMIT 1", (run_id, unit_id)).fetchone()
+            return dict(row) if row else None
 
     def commit(self, run_id: str, result: TranslationResult, report: QualityReport, cache_key: str, cached: bool = False, source: str | None = None, record_usage: bool = True) -> None:
         state = "accepted" if report.status == "pass" else report.status

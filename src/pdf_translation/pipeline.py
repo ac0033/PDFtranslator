@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import math
 from pathlib import Path
 from uuid import uuid4
 
@@ -20,6 +21,22 @@ from .validation import validate_request, validate_result
 
 class ProviderAttemptsExhausted(RuntimeError):
     pass
+
+
+DEFAULT_TRANSLATION_STYLE = "忠实保留否定、量词、条件和概率程度；采用自然教材中文；不扩写。"
+
+
+def output_token_limit(unit: TranslationUnit, config: RunConfig) -> int:
+    """Return the frozen per-unit response ceiling for the configured policy."""
+    if config.output_token_policy == "fixed":
+        return config.max_output_tokens
+    adaptive = max(384, math.ceil(len(unit.source_text) * 0.75) + 128)
+    return min(config.max_output_tokens, adaptive)
+
+
+def expanded_output_token_limit(current: int, configured_maximum: int) -> int:
+    """Double a truncated ceiling while respecting the configured hard maximum."""
+    return min(configured_maximum, max(current + 128, current * 2))
 
 
 def _priced_usage(usage: Usage, config: RunConfig, estimated_input: int, estimated_output: int = 0) -> Usage:
@@ -75,7 +92,7 @@ def estimate_units(units: list[TranslationUnit], config: RunConfig) -> dict:
     else:
         requests = [make_request(unit, config) for unit in billable_units]
     input_tokens = sum(estimated_input_token_ceiling(request) for request in requests)
-    output_tokens = len(requests) * config.max_output_tokens
+    output_tokens = sum(request.model.max_output_tokens for request in requests)
     return {
         "unit_count": len(units),
         "billable_unit_count": len(billable_units),
@@ -95,12 +112,15 @@ def estimate_units(units: list[TranslationUnit], config: RunConfig) -> dict:
     }
 
 
-def make_request(unit: TranslationUnit, config: RunConfig, packet: ContextPacket | None = None) -> TranslationRequest:
+def make_request(unit: TranslationUnit, config: RunConfig, packet: ContextPacket | None = None, max_output_tokens_override: int | None = None) -> TranslationRequest:
     if packet is None:
-        item = ContextItem(item_id="style:v0", category="style", content="忠实保留否定、量词、条件和概率程度；采用自然教材中文；不扩写。", source_ids=(), revision=config.style_revision, required=True, selection_reason="V0 fixed style")
+        item = ContextItem(item_id="style:v0", category="style", content=DEFAULT_TRANSLATION_STYLE, source_ids=(), revision=config.style_revision, required=True, selection_reason="V0 fixed style")
         packet_data = {"unit_id": unit.unit_id, "items": (item,)}
         packet = ContextPacket(unit_id=unit.unit_id, router_revision="v0-fixed", memory_snapshot_id=config.style_revision, items=(item,), token_count=42, token_counter_id="fixed-estimate-v0", token_count_is_estimate=True, token_budget=config.context_token_budget, packet_hash=stable_hash(packet_data))
-    model = ModelSpec(provider=config.provider, model_id=config.model_id, reasoning_effort=config.reasoning_effort, max_output_tokens=config.max_output_tokens, prompt_revision=config.prompt_revision, adapter_revision=config.adapter_revision, pricing_revision=config.pricing_revision)
+    max_output_tokens = max_output_tokens_override or output_token_limit(unit, config)
+    if max_output_tokens > config.max_output_tokens:
+        raise ValueError("per-unit max_output_tokens exceeds configured maximum")
+    model = ModelSpec(provider=config.provider, model_id=config.model_id, reasoning_effort=config.reasoning_effort, max_output_tokens=max_output_tokens, prompt_revision=config.prompt_revision, adapter_revision=config.adapter_revision, pricing_revision=config.pricing_revision)
     cache_key = stable_hash({"unit": unit, "context": packet, "model": model})
     return TranslationRequest(request_id=str(uuid4()), unit=unit, context=packet, model=model, cache_key=cache_key)
 
@@ -225,7 +245,7 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path) 
             ledger_source = "protected_passthrough"
         else:
             estimated_input = estimated_input_token_ceiling(request)
-            estimate = estimate_cost(estimated_input, config.max_output_tokens, config.input_usd_per_million, config.output_usd_per_million)
+            estimate = estimate_cost(estimated_input, request.model.max_output_tokens, config.input_usd_per_million, config.output_usd_per_million)
             if config.provider == "mock":
                 result = provider.translate(request)
             else:
@@ -234,6 +254,17 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path) 
                     raise ProviderAttemptsExhausted(
                         f"provider attempt limit already reached for {unit.unit_id}: {prior_attempts}/{config.provider_max_attempts}"
                     )
+                last_attempt = store.last_provider_attempt(config.run_id, unit.unit_id)
+                if last_attempt and str(last_attempt.get("error_category") or "").startswith("truncated:max_output_tokens"):
+                    previous_limit = int(last_attempt.get("max_output_tokens") or request.model.max_output_tokens)
+                    expanded_limit = expanded_output_token_limit(previous_limit, config.max_output_tokens)
+                    if expanded_limit <= previous_limit:
+                        raise ProviderAttemptsExhausted(f"configured output limit exhausted for {unit.unit_id}: {previous_limit}")
+                    request = make_request(unit, config, request.context, max_output_tokens_override=expanded_limit)
+                    validate_request(request)
+                    store.prepare(config.run_id, unit.unit_id, request.cache_key)
+                    estimated_input = estimated_input_token_ceiling(request)
+                    estimate = estimate_cost(estimated_input, request.model.max_output_tokens, config.input_usd_per_million, config.output_usd_per_million)
                 result = None
                 for attempt_no in range(prior_attempts + 1, config.provider_max_attempts + 1):
                     reserve_budget(store.spent(config.run_id), 0.0, estimate, config.budget_usd)
@@ -248,6 +279,7 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path) 
                             attempt_no,
                             "invalid_response",
                             failed_usage,
+                            max_output_tokens=request.model.max_output_tokens,
                             error_category=exc.category,
                             provider_response_id=exc.provider_response_id,
                         )
@@ -255,13 +287,22 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path) 
                             raise ProviderAttemptsExhausted(
                                 f"provider attempts exhausted for {unit.unit_id}: {exc.category}"
                             ) from exc
+                        if exc.category == "truncated:max_output_tokens":
+                            expanded_limit = expanded_output_token_limit(request.model.max_output_tokens, config.max_output_tokens)
+                            if expanded_limit <= request.model.max_output_tokens:
+                                raise ProviderAttemptsExhausted(f"configured output limit exhausted for {unit.unit_id}: {expanded_limit}") from exc
+                            request = make_request(unit, config, request.context, max_output_tokens_override=expanded_limit)
+                            validate_request(request)
+                            store.prepare(config.run_id, unit.unit_id, request.cache_key)
+                            estimated_input = estimated_input_token_ceiling(request)
+                            estimate = estimate_cost(estimated_input, request.model.max_output_tokens, config.input_usd_per_million, config.output_usd_per_million)
                         continue
                     except Exception as exc:
                         # The provider may have accepted a request without returning
                         # usage. Charge the reserved ceiling so retries remain bounded.
                         failed_usage = Usage(
                             input_tokens=estimated_input,
-                            output_tokens=config.max_output_tokens,
+                            output_tokens=request.model.max_output_tokens,
                             cost_usd=estimate,
                             usage_source="estimated" if estimate is not None else "unavailable",
                         )
@@ -272,6 +313,7 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path) 
                             attempt_no,
                             "error",
                             failed_usage,
+                            max_output_tokens=request.model.max_output_tokens,
                             error_category=type(exc).__name__,
                         )
                         raise ProviderAttemptsExhausted(
@@ -298,6 +340,7 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path) 
                             attempt_no,
                             "invalid_response",
                             candidate.usage,
+                            max_output_tokens=request.model.max_output_tokens,
                             error_category=error_category,
                             provider_response_id=candidate.provider_response_id,
                         )
@@ -313,6 +356,7 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path) 
                         attempt_no,
                         "success",
                         candidate.usage,
+                        max_output_tokens=request.model.max_output_tokens,
                         provider_response_id=candidate.provider_response_id,
                     )
                     result = candidate

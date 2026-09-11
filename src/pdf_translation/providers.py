@@ -98,6 +98,16 @@ class OpenAIProvider:
             arguments["reasoning"] = {"effort": request.model.reasoning_effort}
         response = client.responses.create(**arguments)
         usage = _response_usage(response)
+        if getattr(response, "status", None) == "incomplete":
+            details = getattr(response, "incomplete_details", None)
+            reason = getattr(details, "reason", None) or "unknown"
+            raise ProviderCallError(
+                f"provider response was incomplete: {reason}",
+                category=f"truncated:{reason}",
+                usage=usage,
+                provider_response_id=getattr(response, "id", None),
+                retryable=reason == "max_output_tokens",
+            )
         try:
             draft = TranslationDraft.model_validate(json.loads(response.output_text))
         except (json.JSONDecodeError, ValidationError) as exc:

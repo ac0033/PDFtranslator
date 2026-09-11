@@ -30,6 +30,7 @@ class RunConfig(StrictModel):
     base_url: str | None = None
     reasoning_effort: str | None = None
     provider_max_attempts: int = Field(default=2, ge=1, le=3)
+    output_token_policy: Literal["fixed", "adaptive-v1"] = "fixed"
     context_engine: Literal["v0-fixed", "v1"] = "v0-fixed"
     context_db: str | None = None
 
