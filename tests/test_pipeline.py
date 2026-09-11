@@ -5,7 +5,7 @@ import pytest
 from pdf_translation.budget import BudgetExceeded, reserve_budget
 from pdf_translation.config import RunConfig
 from pdf_translation.hashing import stable_hash
-from pdf_translation.pipeline import run_units
+from pdf_translation.pipeline import estimate_units, run_units
 from pdf_translation.providers import DeepSeekProvider
 from pdf_translation.quality import check_quality
 from pdf_translation.schemas import ModelSpec, TranslationDraft, TranslationResult, TranslationUnit, Usage
@@ -82,3 +82,27 @@ def test_cached_commit_never_duplicates_provider_usage(tmp_path: Path):
     assert summary["cost_usd"] == 1.0
     assert summary["input_tokens"] == 100
     assert summary["output_tokens"] == 50
+
+
+def test_protected_unit_bypasses_translation_provider(tmp_path: Path):
+    source = unit("<b1>,").model_copy(update={"unit_type": "protected"})
+    cfg = config("protected-pass")
+    summary = run_units([source], cfg, tmp_path)
+    stored = StateStore(tmp_path / cfg.run_id / "state.sqlite").result(cfg.run_id, source.unit_id)
+    assert summary["states"] == {"accepted": 1}
+    assert summary["cost_usd"] == 0.0
+    assert stored is not None
+    assert stored.draft is not None
+    assert stored.draft.translated_text == source.source_text
+
+
+def test_estimate_units_excludes_protected_passthrough():
+    paragraph = unit()
+    protected = unit("<b1>,").model_copy(update={"unit_id": "u2", "unit_type": "protected", "source_hash": stable_hash("<b1>,")})
+    estimate = estimate_units([paragraph, protected], config())
+    assert estimate["unit_count"] == 2
+    assert estimate["billable_unit_count"] == 1
+    assert estimate["protected_passthrough_count"] == 1
+    assert estimate["reserved_output_tokens"] == 100
+    assert estimate["estimated_max_cost_usd"] == 0.0
+    assert estimate["api_calls"] == 0

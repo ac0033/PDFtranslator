@@ -9,5 +9,7 @@
 | OpenAI Responses API, independent requests, structured output, `store=false` | implemented but not called | no API key, approved budget or benchmark supplied |
 | DeepSeek-V4.1-Flash via `deepseek-flash` | configured and capability-tested | API key is loaded from ignored `.env`; USD 0.20 hard cap; single test result accepted |
 | Benchmark input and page sets | implemented | three local PDFs registered; `dm.pdf` smoke/development/frozen-test sets are disjoint and reproducible |
-| BabelDOC one-page injection/write-back | conditional pass | v0.6.4 intercepted 21 page-42 segments and wrote mono/dual PDFs; formula placeholders survived, but source coordinates and real translation quality remain open |
-| Bilingual PDF rendering | synthetic page only | page 42 is readable in mono/dual form; real Chinese translation and broader layout acceptance remain blocked |
+| BabelDOC multi-page capture/injection | candidate pass | two-pass exact-content matching completed pages 42, 51 and 577; 78 stable units were injected without depending on callback order |
+| Formula/code protection | implemented | 39 placeholder-only units bypassed the model and were restored byte-for-byte at the runtime boundary |
+| Bilingual PDF rendering | offline candidate | three-page mono/dual PDFs are readable; real Chinese translation, 42 low-confidence region matches and TOC migration remain open |
+| Captured-workload budget gate | implemented | 39 billable units estimate to USD 0.1024467 at the configured peak rates; dry-run reports zero API calls and paid execution requires `--execute-paid` plus a non-zero config budget |

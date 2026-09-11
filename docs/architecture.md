@@ -7,7 +7,7 @@ The implemented vertical path is:
 ## Boundaries
 
 - PDF inspection is local and read-only. PyMuPDF records hash, page count, dimensions, rotation and extractable character count.
-- BabelDOC 0.6.4 owns parsing and write-back. A one-page synthetic injection spike has passed conditionally; the general `render` command remains guarded until real run results can be mapped back into BabelDOC output.
+- BabelDOC 0.6.4 owns parsing and write-back. `pdf-smoke` runs it twice per selected page: the capture pass creates stable runtime units, then the injection pass matches by exact captured content instead of callback order and writes accepted results back. The legacy general `render` command remains guarded.
 - The translator receives only one explicit unit plus its explicit context. The OpenAI adapter does not use a conversation or previous response ID and sets `store=false`.
 - Runtime-generated request IDs, usage and provider response IDs are not accepted from model output.
 - Local cache identity includes the complete unit, context packet and model specification.
@@ -18,7 +18,7 @@ Each run freezes an input hash and configuration hash. Reusing a run ID with cha
 
 ## Known document boundary
 
-Three real source PDFs are registered locally and `dm.pdf` has frozen sample sets. Page 42 passed a synthetic mono/dual write-back check. Real translated-text injection, exact source bounding boxes, accepted-sample mapping, broader layout review and complete bilingual rendering remain open gates.
+Three real source PDFs are registered locally and `dm.pdf` has frozen sample sets. Physical pages 42, 51 and 577 now pass the offline capture/runtime/injection path and merge into three-page mono/dual artifacts. Formula-only and code-placeholder units bypass the model exactly. Exact region-level source bounding boxes remain incomplete for 42 of 78 units, BabelDOC TOC migration still warns, and real Chinese translation/layout acceptance remains gated on a new run-specific budget.
 
 ## V1 context path
 

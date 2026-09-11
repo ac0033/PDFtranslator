@@ -72,7 +72,7 @@ class StateStore:
             row = con.execute("SELECT cache_key FROM tasks WHERE run_id=? AND unit_id=?", (run_id, unit_id)).fetchone()
             return row["cache_key"] if row else None
 
-    def commit(self, run_id: str, result: TranslationResult, report: QualityReport, cache_key: str, cached: bool = False) -> None:
+    def commit(self, run_id: str, result: TranslationResult, report: QualityReport, cache_key: str, cached: bool = False, source: str | None = None) -> None:
         state = "accepted" if report.status == "pass" else report.status
         result_json = result.model_dump_json()
         ledger_cost = 0.0 if cached else result.usage.cost_usd
@@ -82,7 +82,8 @@ class StateStore:
             con.execute("UPDATE tasks SET state=?,result_json=?,quality_json=?,updated_at=CURRENT_TIMESTAMP WHERE run_id=? AND unit_id=?", (state,result_json,report.model_dump_json(),run_id,result.unit_id))
             if not cached and result.finish == "complete":
                 con.execute("INSERT OR REPLACE INTO cache(cache_key,result_json) VALUES(?,?)", (cache_key,result_json))
-            con.execute("INSERT INTO ledger(run_id,unit_id,cost_usd,input_tokens,output_tokens,source) VALUES(?,?,?,?,?,?)", (run_id,result.unit_id,ledger_cost,ledger_input,ledger_output,"local_cache" if cached else result.usage.usage_source))
+            ledger_source = source or ("local_cache" if cached else result.usage.usage_source)
+            con.execute("INSERT INTO ledger(run_id,unit_id,cost_usd,input_tokens,output_tokens,source) VALUES(?,?,?,?,?,?)", (run_id,result.unit_id,ledger_cost,ledger_input,ledger_output,ledger_source))
 
     def spent(self, run_id: str) -> float:
         with self.connect() as con:

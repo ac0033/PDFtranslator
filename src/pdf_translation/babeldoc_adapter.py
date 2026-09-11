@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+from collections import defaultdict, deque
+from difflib import SequenceMatcher
 import json
 import re
 import threading
@@ -8,9 +10,107 @@ from pathlib import Path
 
 import pymupdf
 
-from .hashing import sha256_file, stable_hash
+from .config import RunConfig
+from .hashing import sha256_bytes, sha256_file, stable_hash
+from .pipeline import estimate_units, run_units
+from .schemas import ArtifactRef, ProtectedSpan, SourceRef, TranslationUnit
+from .storage import StateStore
 
 PLACEHOLDER = re.compile(r"</?b[^>]+>")
+
+
+def _normalized_text(text: str) -> str:
+    return "".join(character.lower() for character in text if character.isalnum())
+
+
+def locate_source_bbox(source: Path, page_index: int, babeldoc_text: str) -> tuple[tuple[float, float, float, float], float]:
+    """Best-effort match of BabelDOC text to a native PDF text block."""
+    needle = _normalized_text(PLACEHOLDER.sub("", babeldoc_text))
+    if not needle:
+        return (0.0, 0.0, 0.0, 0.0), 0.0
+    document = pymupdf.open(source)
+    try:
+        candidates = document[page_index].get_text("blocks", sort=True)
+    finally:
+        document.close()
+    best_bbox = (0.0, 0.0, 0.0, 0.0)
+    best_score = 0.0
+    for x0, y0, x1, y1, text, *_ in candidates:
+        candidate = _normalized_text(text)
+        if not candidate:
+            continue
+        score = SequenceMatcher(None, needle, candidate, autojunk=False).ratio()
+        if needle in candidate or candidate in needle:
+            score = max(score, min(len(needle), len(candidate)) / max(len(needle), len(candidate)))
+        if score > best_score:
+            best_score = score
+            best_bbox = (float(x0), float(y0), float(x1), float(y1))
+    return best_bbox, round(best_score, 6)
+
+
+def canonicalize_babeldoc_text(
+    text: str,
+    *,
+    page_index: int,
+    sequence: int,
+    bbox: tuple[float, float, float, float],
+) -> tuple[str, tuple[ProtectedSpan, ...], dict[str, str]]:
+    """Replace BabelDOC placeholders with runtime-owned protected markers."""
+    prefix = f"bd-p{page_index + 1:04d}-u{sequence:04d}"
+    block_id = f"{prefix}-block"
+    pieces: list[str] = []
+    protected: list[ProtectedSpan] = []
+    marker_map: dict[str, str] = {}
+    cursor = 0
+    output_length = 0
+    closing_tokens = {match.group(0)[2:-1] for match in PLACEHOLDER.finditer(text) if match.group(0).startswith("</")}
+    for occurrence, match in enumerate(PLACEHOLDER.finditer(text)):
+        before = text[cursor : match.start()]
+        pieces.append(before)
+        output_length += len(before)
+        token = match.group(0)
+        marker = f"⟦P:{prefix}-o{occurrence:03d}⟧"
+        start = output_length
+        pieces.append(marker)
+        output_length += len(marker)
+        marker_map[marker] = token
+        tag_name = token.lstrip("</").rstrip(">")
+        kind = "formula" if not token.startswith("</") and tag_name not in closing_tokens else "other"
+        protected.append(
+            ProtectedSpan(
+                occurrence_id=f"{prefix}-o{occurrence:03d}",
+                marker=marker,
+                kind=kind,
+                original=ArtifactRef(uri=f"babeldoc-placeholder/{prefix}-o{occurrence:03d}.txt", sha256=sha256_bytes(token.encode("utf-8")), media_type="text/plain"),
+                source_ref=SourceRef(block_id=block_id, page_index=page_index, bbox=bbox, char_start=start, char_end=output_length),
+            )
+        )
+        cursor = match.end()
+    pieces.append(text[cursor:])
+    return "".join(pieces), tuple(protected), marker_map
+
+
+def restore_babeldoc_placeholders(text: str, marker_map: dict[str, str]) -> str:
+    for marker, token in marker_map.items():
+        text = text.replace(marker, token)
+    return text
+
+
+class ContentMatcher:
+    """Match repeated captured strings without relying on callback order."""
+
+    def __init__(self, expected: list[dict]) -> None:
+        self._pending: dict[str, deque[dict]] = defaultdict(deque)
+        for record in expected:
+            self._pending[record["babeldoc_text"]].append(record)
+
+    @property
+    def remaining(self) -> int:
+        return sum(len(records) for records in self._pending.values())
+
+    def pop(self, text: str) -> dict | None:
+        matches = self._pending.get(text)
+        return matches.popleft() if matches else None
 
 
 def _recording_translator(records: list[dict]):
@@ -51,6 +151,61 @@ def _recording_translator(records: list[dict]):
     return RecordingTranslator()
 
 
+def _capture_translator(records: list[dict]):
+    from babeldoc.translator.translator import BaseTranslator
+
+    class CaptureTranslator(BaseTranslator):
+        name = "pdftrans-capture"
+        model = "deterministic-capture"
+
+        def __init__(self) -> None:
+            super().__init__(lang_in="en", lang_out="zh", ignore_cache=True)
+
+        def do_translate(self, text, rate_limit_params=None) -> str:
+            records.append({"sequence": len(records), "babeldoc_text": text})
+            return text
+
+        def do_llm_translate(self, text, rate_limit_params=None) -> str:
+            raise NotImplementedError
+
+    return CaptureTranslator()
+
+
+def _injection_translator(expected: list[dict], translated_by_unit: dict[str, str]):
+    from babeldoc.translator.translator import BaseTranslator
+
+    class InjectionTranslator(BaseTranslator):
+        name = "pdftrans-inject"
+        model = "runtime-results"
+
+        def __init__(self) -> None:
+            super().__init__(lang_in="en", lang_out="zh", ignore_cache=True)
+            self.consumed = 0
+            self.errors: list[str] = []
+            self._matcher = ContentMatcher(expected)
+
+        @property
+        def remaining(self) -> int:
+            return self._matcher.remaining
+
+        def do_translate(self, text, rate_limit_params=None) -> str:
+            record = self._matcher.pop(text)
+            if record is None:
+                self.errors.append(f"uncaptured BabelDOC text hash {stable_hash(text)}")
+                return text
+            self.consumed += 1
+            translated = translated_by_unit.get(record["unit_id"])
+            if translated is None:
+                self.errors.append(f"missing accepted translation for {record['unit_id']}")
+                return text
+            return restore_babeldoc_placeholders(translated, record["marker_map"])
+
+        def do_llm_translate(self, text, rate_limit_params=None) -> str:
+            raise NotImplementedError
+
+    return InjectionTranslator()
+
+
 async def _translate(config):
     from babeldoc.format.pdf.high_level import async_translate
 
@@ -62,6 +217,227 @@ async def _translate(config):
         if event["type"] == "error":
             raise RuntimeError(str(event["error"]))
     raise RuntimeError("BabelDOC ended without a finish event")
+
+
+def _run_babeldoc_page(source: Path, page_index: int, output_dir: Path, translator):
+    from babeldoc.docvision.base_doclayout import DocLayoutModel
+    from babeldoc.format.pdf.translation_config import TranslationConfig
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    layout = DocLayoutModel.load_onnx()
+    config = TranslationConfig(
+        translator=translator,
+        input_file=source,
+        lang_in="en",
+        lang_out="zh",
+        doc_layout_model=layout,
+        pages=str(page_index + 1),
+        output_dir=output_dir,
+        debug=False,
+        qps=1,
+        pool_max_workers=1,
+        term_pool_max_workers=1,
+        auto_extract_glossary=False,
+        save_auto_extracted_glossary=False,
+        only_include_translated_page=True,
+        skip_scanned_detection=True,
+        disable_rich_text_translate=True,
+        disable_same_text_fallback=True,
+    )
+    getattr(layout, "init_font_mapper", lambda _config: None)(config)
+    return asyncio.run(_translate(config))
+
+
+def extract_page_units(source: Path, page_index: int, capture_dir: Path) -> tuple[list[TranslationUnit], list[dict]]:
+    """Capture BabelDOC units for one page and map them to runtime contracts."""
+    raw_records: list[dict] = []
+    _run_babeldoc_page(source, page_index, capture_dir, _capture_translator(raw_records))
+    document_sha256 = sha256_file(source)
+    document_id = f"{source.stem}-{document_sha256[:16]}"
+    units: list[TranslationUnit] = []
+    records: list[dict] = []
+    ordered_records = sorted(raw_records, key=lambda item: (stable_hash(item["babeldoc_text"]), item["babeldoc_text"]))
+    duplicate_counts: dict[str, int] = defaultdict(int)
+    for sequence, original_record in enumerate(ordered_records):
+        record = {**original_record, "callback_sequence": original_record["sequence"], "sequence": sequence}
+        duplicate_index = duplicate_counts[record["babeldoc_text"]]
+        duplicate_counts[record["babeldoc_text"]] += 1
+        bbox, bbox_confidence = locate_source_bbox(source, page_index, record["babeldoc_text"])
+        canonical, protected, marker_map = canonicalize_babeldoc_text(
+            record["babeldoc_text"], page_index=page_index, sequence=sequence, bbox=bbox
+        )
+        source_hash = stable_hash(canonical)
+        unit_id = f"bd-{stable_hash({'document_sha256': document_sha256, 'page_index': page_index, 'source_hash': source_hash, 'duplicate_index': duplicate_index})[:16]}"
+        block_id = f"bd-p{page_index + 1:04d}-u{sequence:04d}-block"
+        plain_text = PLACEHOLDER.sub("", record["babeldoc_text"])
+        protected_only = not any(character.isalpha() for character in plain_text)
+        risk_tags = {"babeldoc_plain_hook"}
+        if protected_only:
+            risk_tags.add("protected_only")
+        if bbox_confidence < 0.45:
+            risk_tags.add("bbox_match_low")
+        if any(item.kind == "formula" for item in protected):
+            risk_tags.add("formula")
+        unit = TranslationUnit(
+            unit_id=unit_id,
+            document_id=document_id,
+            ir_revision="babeldoc-0.6.4-plain-hook-v0.4",
+            unit_type="protected" if protected_only else "paragraph",
+            source_lang="en",
+            target_lang="zh-CN",
+            source_text=canonical,
+            source_hash=source_hash,
+            source_refs=(SourceRef(block_id=block_id, page_index=page_index, bbox=bbox, char_start=0, char_end=len(canonical)),),
+            protected=protected,
+            risk_tags=tuple(sorted(risk_tags)),
+        )
+        units.append(unit)
+        records.append(
+            {
+                **record,
+                "unit_id": unit_id,
+                "marker_map": marker_map,
+                "bbox": bbox,
+                "bbox_confidence": bbox_confidence,
+                "duplicate_index": duplicate_index,
+            }
+        )
+    return units, records
+
+
+def _merge_pdfs(inputs: list[Path], output: Path) -> None:
+    temporary = output.with_name(f"{output.stem}.tmp{output.suffix}")
+    temporary.unlink(missing_ok=True)
+    merged = pymupdf.open()
+    try:
+        for path in inputs:
+            source = pymupdf.open(path)
+            try:
+                merged.insert_pdf(source)
+            finally:
+                source.close()
+        merged.save(temporary, garbage=4, deflate=True)
+    finally:
+        merged.close()
+    temporary.replace(output)
+
+
+def run_smoke_document(
+    source: Path,
+    page_indices: tuple[int, ...],
+    config: RunConfig,
+    output_dir: Path,
+    runs_root: Path,
+    capture_root: Path,
+    *,
+    execute_paid: bool = False,
+) -> dict:
+    """Capture, translate, quality-check and inject a frozen smoke set."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    all_units: list[TranslationUnit] = []
+    records_by_page: dict[int, list[dict]] = {}
+    for page_index in page_indices:
+        units, records = extract_page_units(source, page_index, capture_root / f"page-{page_index + 1:04d}")
+        all_units.extend(units)
+        records_by_page[page_index] = records
+    units_path = output_dir / "units.jsonl"
+    units_path.write_text("".join(unit.model_dump_json() + "\n" for unit in all_units), encoding="utf-8")
+    capture_map_path = output_dir / "capture-map.jsonl"
+    with capture_map_path.open("w", encoding="utf-8") as stream:
+        for page_index in page_indices:
+            for record in records_by_page[page_index]:
+                stream.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+    estimate = estimate_units(all_units, config)
+    base_report = {
+        "schema_version": "1.0",
+        "source_file": source.name,
+        "source_sha256": sha256_file(source),
+        "physical_pages": [page + 1 for page in page_indices],
+        "unit_count": len(all_units),
+        "billable_unit_count": estimate["billable_unit_count"],
+        "protected_passthrough_count": estimate["protected_passthrough_count"],
+        "protected_occurrences": sum(len(unit.protected) for unit in all_units),
+        "low_bbox_matches": sum("bbox_match_low" in unit.risk_tags for unit in all_units),
+        "estimated_input_tokens_ceiling": estimate["estimated_input_tokens_ceiling"],
+        "reserved_output_tokens": estimate["reserved_output_tokens"],
+        "estimated_max_cost_usd": estimate["estimated_max_cost_usd"],
+        "provider": config.provider,
+        "model_id": config.model_id,
+    }
+    report_path = output_dir / "run.report.json"
+    if config.provider != "mock" and not execute_paid:
+        report = {**base_report, "status": "budget_approval_required", "api_calls": 0}
+        report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        return report
+
+    summary = run_units(all_units, config, runs_root)
+    if summary.get("states") != {"accepted": len(all_units)}:
+        report = {**base_report, "status": "quality_gate_blocked", "run_summary": summary}
+        report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        return report
+
+    store = StateStore(runs_root / config.run_id / "state.sqlite")
+    translated_by_unit = {}
+    for unit in all_units:
+        result = store.result(config.run_id, unit.unit_id)
+        if result is None or result.draft is None:
+            raise RuntimeError(f"accepted unit has no translation result: {unit.unit_id}")
+        translated_by_unit[unit.unit_id] = result.draft.translated_text
+
+    mono_pages: list[Path] = []
+    dual_pages: list[Path] = []
+    for page_index in page_indices:
+        page_dir = output_dir / f"page-{page_index + 1:04d}"
+        translator = _injection_translator(records_by_page[page_index], translated_by_unit)
+        result = _run_babeldoc_page(source, page_index, page_dir, translator)
+        if translator.errors or translator.remaining:
+            raise RuntimeError(
+                f"BabelDOC injection mismatch on page {page_index + 1}: "
+                f"errors={translator.errors}, remaining={translator.remaining}"
+            )
+        if not result.mono_pdf_path or not result.dual_pdf_path:
+            raise RuntimeError(f"BabelDOC did not render both outputs for page {page_index + 1}")
+        mono_pages.append(result.mono_pdf_path)
+        dual_pages.append(result.dual_pdf_path)
+
+    mono_output = output_dir / f"{source.stem}.smoke.{config.provider}.zh.mono.pdf"
+    dual_output = output_dir / f"{source.stem}.smoke.{config.provider}.zh.dual.pdf"
+    _merge_pdfs(mono_pages, mono_output)
+    _merge_pdfs(dual_pages, dual_output)
+    for path in (mono_output, dual_output):
+        document = pymupdf.open(path)
+        try:
+            if len(document) != len(page_indices):
+                raise RuntimeError(f"merged output {path.name} has {len(document)} pages, expected {len(page_indices)}")
+        finally:
+            document.close()
+    quality_by_unit = {row["unit_id"]: row for row in store.quality_reports(config.run_id)}
+    aligned_path = output_dir / "aligned.jsonl"
+    with aligned_path.open("w", encoding="utf-8") as stream:
+        for unit in all_units:
+            stream.write(
+                json.dumps(
+                    {
+                        "unit": unit.model_dump(mode="json"),
+                        "translated_text": translated_by_unit[unit.unit_id],
+                        "quality": quality_by_unit[unit.unit_id],
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
+    report = {
+        **base_report,
+        "status": "completed_with_location_review" if base_report["low_bbox_matches"] else "completed",
+        "run_summary": summary,
+        "mono_pdf": mono_output.name,
+        "dual_pdf": dual_output.name,
+        "aligned_jsonl": aligned_path.name,
+        "capture_map_jsonl": capture_map_path.name,
+    }
+    report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    return report
 
 
 def run_one_page_spike(source: Path, page_index: int, output_dir: Path) -> dict:

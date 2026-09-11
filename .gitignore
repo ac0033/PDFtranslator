@@ -9,5 +9,6 @@ demo/
 tmp/
 inputs/
 data/
+output/
 *.pdf
 .env

@@ -11,7 +11,7 @@ from .analyzer import validate_semantic_evidence
 from .hashing import stable_hash
 from .providers import DeepSeekProvider, MockProvider, OpenAIProvider
 from .quality import check_quality
-from .schemas import ContextItem, ContextPacket, ModelSpec, TranslationRequest, TranslationUnit, Usage
+from .schemas import ContextItem, ContextPacket, ModelSpec, TranslationDraft, TranslationRequest, TranslationResult, TranslationUnit, Usage
 from .storage import StateStore
 from .validation import validate_request, validate_result
 
@@ -20,6 +20,31 @@ def estimated_input_token_ceiling(request: TranslationRequest) -> int:
     """Conservative byte-based ceiling until the selected model counter is wired."""
     context_bytes = sum(len(item.content.encode("utf-8")) for item in request.context.items)
     return len(request.unit.source_text.encode("utf-8")) + context_bytes + 512
+
+
+def estimate_units(units: list[TranslationUnit], config: RunConfig) -> dict:
+    """Return a conservative, zero-call estimate for translatable units."""
+    billable_units = [unit for unit in units if unit.unit_type not in {"code", "protected"}]
+    requests = [make_request(unit, config) for unit in billable_units]
+    input_tokens = sum(estimated_input_token_ceiling(request) for request in requests)
+    output_tokens = len(requests) * config.max_output_tokens
+    return {
+        "unit_count": len(units),
+        "billable_unit_count": len(billable_units),
+        "protected_passthrough_count": len(units) - len(billable_units),
+        "estimated_input_tokens_ceiling": input_tokens,
+        "reserved_output_tokens": output_tokens,
+        "estimated_max_cost_usd": estimate_cost(
+            input_tokens,
+            output_tokens,
+            config.input_usd_per_million,
+            config.output_usd_per_million,
+        ),
+        "provider": config.provider,
+        "model_id": config.model_id,
+        "is_estimate": True,
+        "api_calls": 0,
+    }
 
 
 def make_request(unit: TranslationUnit, config: RunConfig, packet: ContextPacket | None = None) -> TranslationRequest:
@@ -67,6 +92,7 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path) 
         glossary_snapshot_id = stable_hash([entry for entry in glossary if entry.status == "approved"])
         style_snapshot_id = stable_hash([rule for rule in styles if rule.status == "approved"])
     for unit in units:
+        ledger_source = None
         tm_entry = None
         if context_store:
             base_packet, _ = build_context_packet(unit, glossary, styles, semantics, units_by_id, token_budget=config.context_token_budget, glossary_snapshot_id=glossary_snapshot_id, style_snapshot_id=style_snapshot_id)
@@ -86,9 +112,20 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path) 
             result = result.model_copy(update={"usage": Usage(input_tokens=0, output_tokens=0, cost_usd=0.0, usage_source="estimated")})
             from_cache = True
         elif tm_entry:
-            from .schemas import TranslationDraft, TranslationResult
             result = TranslationResult(request_id=request.request_id, unit_id=unit.unit_id, draft=TranslationDraft(unit_id=unit.unit_id, translated_text=tm_entry.target_text), finish="complete", provider_response_id=None, model=request.model, usage=Usage(input_tokens=0, output_tokens=0, cost_usd=0.0, usage_source="estimated"))
             from_cache = True
+        elif unit.unit_type in {"code", "protected"}:
+            result = TranslationResult(
+                request_id=request.request_id,
+                unit_id=unit.unit_id,
+                draft=TranslationDraft(unit_id=unit.unit_id, translated_text=unit.source_text),
+                finish="complete",
+                provider_response_id=None,
+                model=request.model,
+                usage=Usage(input_tokens=0, output_tokens=0, cost_usd=0.0, usage_source="estimated"),
+            )
+            from_cache = False
+            ledger_source = "protected_passthrough"
         else:
             estimated_input = estimated_input_token_ceiling(request)
             estimate = estimate_cost(estimated_input, config.max_output_tokens, config.input_usd_per_million, config.output_usd_per_million)
@@ -101,5 +138,5 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path) 
             from_cache = False
         validate_result(request, result)
         report = check_quality(unit, result)
-        store.commit(config.run_id, result, report, request.cache_key, cached=from_cache)
+        store.commit(config.run_id, result, report, request.cache_key, cached=from_cache, source=ledger_source)
     return store.summary(config.run_id)

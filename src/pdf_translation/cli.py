@@ -7,7 +7,7 @@ from typing import Annotated
 import typer
 from dotenv import load_dotenv
 
-from .babeldoc_adapter import run_one_page_spike
+from .babeldoc_adapter import run_one_page_spike, run_smoke_document
 from .benchmark import build_samples
 from .config import load_config
 from .analyzer import extract_term_candidates, validate_semantic_evidence
@@ -17,7 +17,7 @@ from .context_store import ContextStore
 from .hashing import sha256_bytes, stable_hash
 from .manifest import BenchmarkManifest, load_manifest, load_units
 from .pdf_adapter import inspect_pdf
-from .pipeline import make_request, run_units
+from .pipeline import estimate_units, make_request, run_units
 from .schemas import TranslationUnit
 from .storage import StateStore
 
@@ -87,6 +87,33 @@ def babeldoc_spike(
     typer.echo(json.dumps(run_one_page_spike(document, page - 1, output_dir), ensure_ascii=False, indent=2))
 
 
+@app.command("pdf-smoke")
+def pdf_smoke(
+    manifest: Annotated[Path, typer.Option("--manifest")],
+    config: Annotated[Path, typer.Option("--config")],
+    output_dir: Annotated[Path, typer.Option("--output-dir")] = Path("output/pdf/v0.4-smoke"),
+    runs_root: Annotated[Path, typer.Option("--runs-root")] = Path("runs"),
+    capture_root: Annotated[Path, typer.Option("--capture-root")] = Path("tmp/pdfs/v0.4-capture"),
+    execute_paid: Annotated[bool, typer.Option("--execute-paid", help="Required for non-mock providers after explicit budget approval.")] = False,
+) -> None:
+    """Run the frozen smoke pages through capture, runtime QA, and PDF write-back."""
+    current = load_manifest(manifest)
+    smoke = next((sample for sample in current.samples if sample.name == "smoke"), None)
+    if smoke is None:
+        raise typer.BadParameter("manifest has no frozen smoke sample")
+    document = (manifest.parent / current.document_uri).resolve()
+    report = run_smoke_document(
+        document,
+        smoke.page_indices,
+        load_config(config),
+        output_dir,
+        runs_root,
+        capture_root,
+        execute_paid=execute_paid,
+    )
+    typer.echo(json.dumps(report, ensure_ascii=False, indent=2))
+
+
 @app.command()
 def estimate(manifest: Annotated[Path, typer.Option("--manifest")], config: Annotated[Path, typer.Option("--config")]) -> None:
     """Estimate tokens and maximum cost without calling a model."""
@@ -98,6 +125,20 @@ def estimate(manifest: Annotated[Path, typer.Option("--manifest")], config: Anno
     output_tokens = len(units) * c.max_output_tokens
     from .budget import estimate_cost
     typer.echo(json.dumps({"units": len(units), "estimated_input_tokens": input_tokens, "reserved_output_tokens": output_tokens, "estimated_max_cost_usd": estimate_cost(input_tokens, output_tokens, c.input_usd_per_million, c.output_usd_per_million), "is_estimate": True}, indent=2))
+
+
+@app.command("estimate-captured")
+def estimate_captured(
+    units: Annotated[Path, typer.Option("--units", help="Captured TranslationUnit JSONL file.")],
+    config: Annotated[Path, typer.Option("--config")],
+) -> None:
+    """Estimate a captured PDF workload without calling a model."""
+    captured = [
+        TranslationUnit.model_validate_json(line)
+        for line in units.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    typer.echo(json.dumps(estimate_units(captured, load_config(config)), ensure_ascii=False, indent=2))
 
 
 @app.command()
