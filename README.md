@@ -2,7 +2,7 @@
 
 这是按 `llm_pdf_translation_pipeline_plan.md` 实现的首个可运行版本。它优先保证可追溯、预算前置、严格契约、精确缓存和断点恢复，不会在缺少预算配置时调用收费模型。
 
-当前版本为 `0.5.0rc1`，对应 Git 快照 `v0.5.0-rc.1`。路线图中的 V0/V1/V2/V3 表示开发阶段，不等于 SemVer 主版本号；在完整文档接口稳定前，软件保持 `0.x`。版本规则见 `docs/versioning.md`。
+当前版本为 `0.5.0`，对应 Git 快照 `v0.5.0`。路线图中的 V0/V1/V2/V3 表示开发阶段，不等于 SemVer 主版本号；在完整文档接口稳定前，软件保持 `0.x`。版本规则见 `docs/versioning.md`。
 
 ## 当前能力
 
@@ -78,4 +78,4 @@ uv run pdftrans ablate --manifest demo/manifest.json --config configs/v1.mock.to
 
 ## 当前 PDF 边界
 
-仓库本地已有三本测试 PDF，其中 `dm.pdf` 已登记并冻结分层测试页；文件本身和运行输出均被 Git 忽略。`v0.5.0-rc.1` 已在三页离线 smoke 上验证语义段落重组：第 2.2 节的 `There are different ways ...` 不再被拆成孤立短语，第 51 页的 `we can write the density function ...` 也按完整文本定位。74 个运行单元全部通过质量门，39 个公式/代码单元原样旁路。当前仍有三个边界：41 个单元只有低置信度版面坐标；BabelDOC 的目录迁移会发出上游警告；公式内部的英文连接词及部分中英文间距仍需后续版面优化。真实 DeepSeek v0.5 输出尚未执行，必须重新取得预算批准。
+仓库本地已有三本测试 PDF，其中 `dm.pdf` 已登记并冻结分层测试页；文件本身和运行输出均被 Git 忽略。`v0.5.0` 已用 DeepSeek V4.1 Flash 在三页 smoke 上完成真实验收：第 2.2 节的 `There are different ways ...` 不再被拆成孤立短语，第 51 页的 `we can write the density function ...` 也按完整文本翻译。74 个运行单元全部通过质量门，39 个公式/代码单元原样旁路，所有保护标记保持完整且顺序一致。当前仍有三个边界：41 个单元只有低置信度版面坐标；BabelDOC 的目录迁移会发出上游警告；公式内部的英文连接词及部分中英文间距仍需后续版面优化。付费配置在运行后恢复为零预算。

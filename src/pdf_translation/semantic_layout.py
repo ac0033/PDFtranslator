@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections import Counter
 
 
 BABELDOC_PLACEHOLDER = re.compile(r"</?b[^>]+>")
@@ -98,9 +99,17 @@ def _sentence_boundaries(segment: str) -> list[int]:
         if protected:
             index = protected.end()
             continue
-        if segment[index] not in SENTENCE_END:
+        character = segment[index]
+        if character not in SENTENCE_END:
             index += 1
             continue
+        if character == ".":
+            window = segment[max(0, index - 4) : index + 5]
+            previous_character = segment[index - 1] if index else ""
+            next_character = segment[index + 1] if index + 1 < len(segment) else ""
+            if window.count(".") > 1 or (previous_character.isdigit() and next_character.isdigit()):
+                index += 1
+                continue
         end = index + 1
         while True:
             whitespace = re.match(r"\s*", segment[end:])
@@ -155,6 +164,91 @@ def rebalance_layout_markers(text: str) -> str:
         output += body_without_layout[cursor:placement] + marker
         cursor = placement
     return output + body_without_layout[cursor:]
+
+
+def restore_and_rebalance_layout_markers(source_text: str, translated_text: str) -> tuple[str, bool]:
+    """Restore layout-only markers and place them at target sentence boundaries.
+
+    Layout markers carry no source semantics. They may therefore be restored
+    deterministically when every non-layout protected marker is still exact.
+    Unknown or duplicated layout markers remain a hard failure.
+    """
+    expected = LAYOUT_MARKER.findall(source_text)
+    if not expected:
+        return translated_text, False
+    actual = LAYOUT_MARKER.findall(translated_text)
+    if Counter(actual) - Counter(expected):
+        return translated_text, False
+
+    source_markers = ANY_PROTECTED_MARKER.findall(source_text)
+    source_non_layout = [marker for marker in source_markers if not LAYOUT_MARKER.fullmatch(marker)]
+    target_non_layout = [marker for marker in ANY_PROTECTED_MARKER.findall(translated_text) if not LAYOUT_MARKER.fullmatch(marker)]
+    if source_non_layout != target_non_layout:
+        return translated_text, False
+
+    source_visible = ANY_PROTECTED_MARKER.sub("", source_text)
+    target_body = LAYOUT_MARKER.sub("", translated_text)
+
+    # Footnote-like markers attached to source sentence punctuation must stay
+    # with their original BabelDOC fragment. Move only this unambiguous class.
+    boundary_markers: list[tuple[str, float]] = []
+    for match in ANY_PROTECTED_MARKER.finditer(source_text):
+        marker = match.group(0)
+        if LAYOUT_MARKER.fullmatch(marker):
+            continue
+        visible_prefix = ANY_PROTECTED_MARKER.sub("", source_text[: match.start()]).rstrip()
+        if visible_prefix and visible_prefix[-1] in SENTENCE_END:
+            boundary_markers.append((marker, len(visible_prefix) / max(len(source_visible), 1)))
+
+    base = target_body
+    for marker, _ in boundary_markers:
+        base = base.replace(marker, "", 1)
+    boundary_positions = _sentence_boundaries(base)
+    footnote_placements: list[tuple[int, int, str]] = []
+    previous = 0
+    for order, (marker, ratio) in enumerate(boundary_markers):
+        approximate = round(ratio * len(base))
+        candidates = [boundary for boundary in boundary_positions if boundary >= previous]
+        placement = min(candidates, key=lambda boundary: (abs(boundary - approximate), boundary), default=len(base))
+        footnote_placements.append((placement, order, marker))
+        previous = placement
+
+    decorated = ""
+    cursor = 0
+    for placement, _, marker in sorted(footnote_placements):
+        decorated += base[cursor:placement] + marker
+        cursor = placement
+    decorated += base[cursor:]
+
+    non_layout_positions = {marker: decorated.find(marker) for marker in source_non_layout}
+    natural_boundaries = [0, *_sentence_boundaries(decorated), len(decorated)]
+    layout_placements: list[tuple[int, int, str]] = []
+    previous = 0
+    for order, marker in enumerate(expected):
+        sequence_index = source_markers.index(marker)
+        preceding = [item for item in source_markers[:sequence_index] if not LAYOUT_MARKER.fullmatch(item)]
+        following = [item for item in source_markers[sequence_index + 1 :] if not LAYOUT_MARKER.fullmatch(item)]
+        lower = max((non_layout_positions[item] + len(item) for item in preceding), default=0)
+        upper = min((non_layout_positions[item] for item in following), default=len(decorated))
+        visible_prefix = ANY_PROTECTED_MARKER.sub("", source_text[: source_text.find(marker)])
+        approximate = round(len(visible_prefix) / max(len(source_visible), 1) * len(decorated))
+        candidates = [boundary for boundary in natural_boundaries if boundary >= max(previous, lower) and boundary <= upper]
+        if not candidates:
+            return translated_text, False
+        placement = min(candidates, key=lambda boundary: (abs(boundary - approximate), boundary))
+        layout_placements.append((placement, order, marker))
+        previous = placement
+
+    rebuilt = ""
+    cursor = 0
+    for placement, _, marker in sorted(layout_placements):
+        rebuilt += decorated[cursor:placement] + marker
+        cursor = placement
+    rebuilt += decorated[cursor:]
+    if ANY_PROTECTED_MARKER.findall(rebuilt) != source_markers:
+        return translated_text, False
+    changed = rebuilt != translated_text
+    return rebuilt, changed
 
 
 def split_layout_translation(text: str, records: list[dict]) -> dict[str, str]:

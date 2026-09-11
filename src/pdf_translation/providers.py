@@ -51,7 +51,9 @@ class OpenAIProvider:
                 "original order, but move them to natural Chinese sentence boundaries when the "
                 "source layout split occurs inside a sentence; never leave a dangling word or "
                 "clause in the preceding slot. Keep all other protected markers at their semantic "
-                "positions. Return only the requested JSON schema."
+                "positions. Return one JSON object instance with exactly this shape: "
+                "{\"unit_id\": \"the exact Unit ID\", \"translated_text\": \"the translation\", "
+                "\"uncertainties\": []}. Do not return or describe the JSON Schema definition."
             ),
             "input": prompt,
             "max_output_tokens": request.model.max_output_tokens,

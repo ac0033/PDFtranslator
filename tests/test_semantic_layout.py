@@ -5,6 +5,7 @@ from pdf_translation.semantic_layout import (
     layout_boundaries_are_natural,
     layout_marker,
     rebalance_layout_markers,
+    restore_and_rebalance_layout_markers,
     should_merge_fragments,
     split_layout_translation,
 )
@@ -86,6 +87,48 @@ def test_layout_boundary_waits_for_sentence_end_in_later_fragment():
     balanced = rebalance_layout_markers(source)
     assert balanced == f"{first_marker}we can write the density function:{second_marker}"
     assert layout_boundaries_are_natural(balanced) is True
+
+
+def test_omitted_layout_markers_are_restored_at_target_sentence_boundaries():
+    first_marker = layout_marker("first")
+    second_marker = layout_marker("continuation")
+    protected = "⟦P:footnote-5⟧"
+    source = f"{first_marker}A distribution assigns probabilities.{protected}There are {second_marker}different forms."
+    translated = f"概率分布为结果分配概率。{protected}概率分布有不同的表示形式。"
+    repaired, changed = restore_and_rebalance_layout_markers(source, translated)
+    assert changed is True
+    assert repaired == f"{first_marker}概率分布为结果分配概率。{protected}{second_marker}概率分布有不同的表示形式。"
+    assert ANY_MARKERS(repaired) == ANY_MARKERS(source)
+    assert layout_boundaries_are_natural(repaired) is True
+
+
+def test_layout_markers_are_not_restored_when_semantic_marker_is_missing():
+    first_marker = layout_marker("first")
+    second_marker = layout_marker("continuation")
+    source = f"{first_marker}First.⟦P:formula-1⟧Then {second_marker}continue."
+    translated = "第一句。然后继续。"
+    repaired, changed = restore_and_rebalance_layout_markers(source, translated)
+    assert changed is False
+    assert repaired == translated
+
+
+def test_layout_boundary_does_not_split_decimal_or_spaced_ellipsis():
+    first_marker = layout_marker("first")
+    second_marker = layout_marker("continuation")
+    source = f"{first_marker}Values 1, . . . , n are used before {second_marker}the next sentence. Figure 2.1 follows."
+    translated = f"取值为 1, . . . , n。图 2.1 如下。"
+    repaired, changed = restore_and_rebalance_layout_markers(source, translated)
+    assert changed is True
+    assert ". . ." in repaired
+    assert ". {second_marker}.".format(second_marker=second_marker) not in repaired
+    assert "2.1" in repaired
+    assert layout_boundaries_are_natural(repaired) is True
+
+
+def ANY_MARKERS(text: str) -> list[str]:
+    import re
+
+    return re.findall(r"⟦P:[^⟧]+⟧", text)
 
 
 def test_dangling_layout_boundary_and_reordered_markers_are_rejected():

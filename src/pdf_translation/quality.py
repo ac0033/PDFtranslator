@@ -78,8 +78,12 @@ def check_quality(unit: TranslationUnit, result: TranslationResult) -> QualityRe
 
     if result.finish != "complete" or not translated.strip():
         add("incomplete", "critical", "translation is absent or provider did not complete")
-    if sorted(MARKERS.findall(unit.source_text)) != sorted(MARKERS.findall(translated)):
+    source_markers = MARKERS.findall(unit.source_text)
+    translated_markers = MARKERS.findall(translated)
+    if sorted(source_markers) != sorted(translated_markers):
         add("protected_marker", "critical", "protected marker multiset changed")
+    elif source_markers != translated_markers:
+        add("protected_marker_order", "critical", "protected marker order changed")
     source_layout_markers = LAYOUT_MARKER.findall(unit.source_text)
     translated_layout_markers = LAYOUT_MARKER.findall(translated)
     if source_layout_markers != translated_layout_markers:
@@ -91,4 +95,4 @@ def check_quality(unit: TranslationUnit, result: TranslationResult) -> QualityRe
     if sorted(url_inventory(unit.source_text)) != sorted(url_inventory(translated)):
         add("url", "major", "URL target inventory changed")
     status = "blocked" if any(i.severity == "critical" for i in issues) else ("needs_review" if issues else "pass")
-    return QualityReport(unit_id=unit.unit_id, result_hash=stable_hash(result), policy_revision="v0.2", status=status, issues=tuple(issues), checks_run=("completion", "protected_marker_multiset", "layout_marker_order", "layout_boundary", "number_inventory", "url_inventory"))
+    return QualityReport(unit_id=unit.unit_id, result_hash=stable_hash(result), policy_revision="v0.3", status=status, issues=tuple(issues), checks_run=("completion", "protected_marker_multiset", "protected_marker_order", "layout_marker_order", "layout_boundary", "number_inventory", "url_inventory"))

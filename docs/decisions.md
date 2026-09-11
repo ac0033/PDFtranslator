@@ -18,3 +18,6 @@
 | Target-language layout resegmentation | v0.5 release candidate | explicit layout markers may move only to natural sentence boundaries, must remain exactly once and in order, and are split back to the original write-back slots |
 | Short-fragment location | v0.5 release candidate | exact page-text lookup precedes fuzzy block matching, preventing `we can` from inheriting an unrelated large block |
 | Reusable capture | implemented | `--reuse-capture` requires existing capture files and an exact frozen page-set match; non-executing budget checks do not load ONNX |
+| DeepSeek structured-output recovery | implemented | the prompt requests a JSON object instance rather than the schema definition; invalid schema echoes fail strict validation before storage |
+| Cross-slot marker safety | accepted for v0.5 smoke | deterministic repair preserves the full BabelDOC marker order, keeps footnote markers in their original write-back slot, and ignores decimals and spaced ellipses as sentence boundaries |
+| v0.5 real translation | accepted for three-page smoke | 74/74 units accepted; 35 DeepSeek translations used 11,586 input and 2,717 output tokens in the recorded ledger; six rendered pages passed visual review |
