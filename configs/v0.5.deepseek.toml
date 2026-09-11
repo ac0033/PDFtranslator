@@ -1,0 +1,19 @@
+# Keep zero until the user approves the v0.5 real-PDF rerun budget.
+schema_version = "1.0"
+run_id = "v0.5-semantic-smoke-deepseek"
+provider = "deepseek"
+model_id = "deepseek-flash"
+source_lang = "en"
+target_lang = "zh-CN"
+style_revision = "v0-natural-textbook-zh"
+prompt_revision = "v0.5-semantic-groups"
+adapter_revision = "babeldoc-semantic-groups-v0.5.0-rc.3"
+pricing_revision = "deepseek-2026-09-10-peak"
+max_output_tokens = 2000
+budget_usd = 0.0
+input_usd_per_million = 0.30
+output_usd_per_million = 1.20
+context_token_budget = 600
+api_key_env = "DEEPSEEK_API_KEY"
+base_url = "https://api.deepseek.com"
+reasoning_effort = "none"

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import ast
 from collections import defaultdict, deque
 from difflib import SequenceMatcher
+import gc
 import json
 import re
 import threading
@@ -14,9 +16,66 @@ from .config import RunConfig
 from .hashing import sha256_bytes, sha256_file, stable_hash
 from .pipeline import estimate_units, run_units
 from .schemas import ArtifactRef, ProtectedSpan, SourceRef, TranslationUnit
+from .semantic_layout import group_semantic_fragments, layout_marker, plain_fragment_text, split_layout_translation
 from .storage import StateStore
 
 PLACEHOLDER = re.compile(r"</?b[^>]+>")
+
+
+def _load_layout_model():
+    """Load BabelDOC's ONNX model with bounded CPU-memory behavior."""
+    import numpy as np
+    import onnx
+    import onnxruntime
+    from babeldoc.docvision.doclayout import OnnxModel, YoloResult, get_doclayout_onnx_model_path
+
+    class LowMemoryOnnxModel(OnnxModel):
+        _FIXED_IMGSZ = 640
+
+        def predict(self, image, geometry=None, **kwargs):
+            if isinstance(image, np.ndarray) and len(image.shape) == 3:
+                image = [image]
+            results = []
+            for source_image in image:
+                original_shape = source_image.shape[:2]
+                pixels = self.resize_and_pad_image(source_image, new_shape=self._FIXED_IMGSZ)
+                pixels = np.transpose(pixels, (2, 0, 1)).astype(np.float32) / 255.0
+                prediction = self.model.run(None, {"images": np.stack([pixels], axis=0)})[0][0]
+                prediction = prediction[prediction[..., 4] > 0.25]
+                if len(prediction) > 0:
+                    prediction[..., :4] = self.scale_boxes(
+                        (self._FIXED_IMGSZ, self._FIXED_IMGSZ),
+                        prediction[..., :4],
+                        original_shape,
+                    )
+                    if geometry is not None:
+                        prediction[..., [0, 2]] = geometry.px_len_to_pt(prediction[..., [0, 2]], "x")
+                        prediction[..., [1, 3]] = geometry.px_len_to_pt(prediction[..., [1, 3]], "y")
+                results.append(YoloResult(boxes_data=prediction, names=self._names))
+            return results
+
+    model_path = str(get_doclayout_onnx_model_path())
+    definition = onnx.load(model_path)
+    metadata = {item.key: item.value for item in definition.metadata_props}
+    layout = LowMemoryOnnxModel.__new__(LowMemoryOnnxModel)
+    layout.model_path = model_path
+    layout._stride = ast.literal_eval(metadata["stride"])
+    layout._names = ast.literal_eval(metadata["names"])
+    del definition
+    gc.collect()
+
+    options = onnxruntime.SessionOptions()
+    options.enable_cpu_mem_arena = False
+    options.enable_mem_pattern = False
+    options.execution_mode = onnxruntime.ExecutionMode.ORT_SEQUENTIAL
+    options.intra_op_num_threads = 1
+    layout.model = onnxruntime.InferenceSession(
+        model_path,
+        sess_options=options,
+        providers=["CPUExecutionProvider"],
+    )
+    layout.lock = threading.Lock()
+    return layout
 
 
 def _normalized_text(text: str) -> str:
@@ -25,12 +84,20 @@ def _normalized_text(text: str) -> str:
 
 def locate_source_bbox(source: Path, page_index: int, babeldoc_text: str) -> tuple[tuple[float, float, float, float], float]:
     """Best-effort match of BabelDOC text to a native PDF text block."""
-    needle = _normalized_text(PLACEHOLDER.sub("", babeldoc_text))
+    visible_text = PLACEHOLDER.sub("", babeldoc_text).strip()
+    needle = _normalized_text(visible_text)
     if not needle:
         return (0.0, 0.0, 0.0, 0.0), 0.0
     document = pymupdf.open(source)
     try:
-        candidates = document[page_index].get_text("blocks", sort=True)
+        page = document[page_index]
+        exact_rects = page.search_for(" ".join(visible_text.split()))
+        if exact_rects:
+            union = exact_rects[0]
+            for rect in exact_rects[1:]:
+                union |= rect
+            return (float(union.x0), float(union.y0), float(union.x1), float(union.y1)), 1.0
+        candidates = page.get_text("blocks", sort=True)
     finally:
         document.close()
     best_bbox = (0.0, 0.0, 0.0, 0.0)
@@ -171,7 +238,7 @@ def _capture_translator(records: list[dict]):
     return CaptureTranslator()
 
 
-def _injection_translator(expected: list[dict], translated_by_unit: dict[str, str]):
+def _injection_translator(expected: list[dict], translated_by_fragment: dict[str, str]):
     from babeldoc.translator.translator import BaseTranslator
 
     class InjectionTranslator(BaseTranslator):
@@ -194,11 +261,11 @@ def _injection_translator(expected: list[dict], translated_by_unit: dict[str, st
                 self.errors.append(f"uncaptured BabelDOC text hash {stable_hash(text)}")
                 return text
             self.consumed += 1
-            translated = translated_by_unit.get(record["unit_id"])
+            translated = translated_by_fragment.get(record["fragment_id"])
             if translated is None:
-                self.errors.append(f"missing accepted translation for {record['unit_id']}")
+                self.errors.append(f"missing accepted translation for {record['fragment_id']}")
                 return text
-            return restore_babeldoc_placeholders(translated, record["marker_map"])
+            return restore_babeldoc_placeholders(translated, record["group_marker_map"])
 
         def do_llm_translate(self, text, rate_limit_params=None) -> str:
             raise NotImplementedError
@@ -219,12 +286,11 @@ async def _translate(config):
     raise RuntimeError("BabelDOC ended without a finish event")
 
 
-def _run_babeldoc_page(source: Path, page_index: int, output_dir: Path, translator):
-    from babeldoc.docvision.base_doclayout import DocLayoutModel
+def _run_babeldoc_page(source: Path, page_index: int, output_dir: Path, translator, layout=None):
     from babeldoc.format.pdf.translation_config import TranslationConfig
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    layout = DocLayoutModel.load_onnx()
+    layout = layout or _load_layout_model()
     config = TranslationConfig(
         translator=translator,
         input_file=source,
@@ -248,13 +314,12 @@ def _run_babeldoc_page(source: Path, page_index: int, output_dir: Path, translat
     return asyncio.run(_translate(config))
 
 
-def extract_page_units(source: Path, page_index: int, capture_dir: Path) -> tuple[list[TranslationUnit], list[dict]]:
-    """Capture BabelDOC units for one page and map them to runtime contracts."""
+def extract_page_units(source: Path, page_index: int, capture_dir: Path, layout=None) -> tuple[list[TranslationUnit], list[dict]]:
+    """Capture layout fragments, then rebuild conservative semantic groups."""
     raw_records: list[dict] = []
-    _run_babeldoc_page(source, page_index, capture_dir, _capture_translator(raw_records))
+    _run_babeldoc_page(source, page_index, capture_dir, _capture_translator(raw_records), layout=layout)
     document_sha256 = sha256_file(source)
     document_id = f"{source.stem}-{document_sha256[:16]}"
-    units: list[TranslationUnit] = []
     records: list[dict] = []
     ordered_records = sorted(raw_records, key=lambda item: (stable_hash(item["babeldoc_text"]), item["babeldoc_text"]))
     duplicate_counts: dict[str, int] = defaultdict(int)
@@ -267,9 +332,9 @@ def extract_page_units(source: Path, page_index: int, capture_dir: Path) -> tupl
             record["babeldoc_text"], page_index=page_index, sequence=sequence, bbox=bbox
         )
         source_hash = stable_hash(canonical)
-        unit_id = f"bd-{stable_hash({'document_sha256': document_sha256, 'page_index': page_index, 'source_hash': source_hash, 'duplicate_index': duplicate_index})[:16]}"
-        block_id = f"bd-p{page_index + 1:04d}-u{sequence:04d}-block"
-        plain_text = PLACEHOLDER.sub("", record["babeldoc_text"])
+        singleton_unit_id = f"bd-{stable_hash({'document_sha256': document_sha256, 'page_index': page_index, 'source_hash': source_hash, 'duplicate_index': duplicate_index})[:16]}"
+        fragment_id = f"p{page_index + 1:04d}-f{stable_hash({'source_hash': source_hash, 'duplicate_index': duplicate_index})[:12]}"
+        plain_text = plain_fragment_text(record["babeldoc_text"])
         protected_only = not any(character.isalpha() for character in plain_text)
         risk_tags = {"babeldoc_plain_hook"}
         if protected_only:
@@ -278,30 +343,129 @@ def extract_page_units(source: Path, page_index: int, capture_dir: Path) -> tupl
             risk_tags.add("bbox_match_low")
         if any(item.kind == "formula" for item in protected):
             risk_tags.add("formula")
-        unit = TranslationUnit(
-            unit_id=unit_id,
-            document_id=document_id,
-            ir_revision="babeldoc-0.6.4-plain-hook-v0.4",
-            unit_type="protected" if protected_only else "paragraph",
-            source_lang="en",
-            target_lang="zh-CN",
-            source_text=canonical,
-            source_hash=source_hash,
-            source_refs=(SourceRef(block_id=block_id, page_index=page_index, bbox=bbox, char_start=0, char_end=len(canonical)),),
-            protected=protected,
-            risk_tags=tuple(sorted(risk_tags)),
-        )
-        units.append(unit)
         records.append(
             {
                 **record,
-                "unit_id": unit_id,
+                "page_index": page_index,
+                "fragment_id": fragment_id,
+                "singleton_unit_id": singleton_unit_id,
+                "canonical_text": canonical,
+                "source_hash": source_hash,
+                "plain_text": plain_text,
+                "protected_only": protected_only,
+                "protected": [item.model_dump(mode="json") for item in protected],
+                "risk_tags": sorted(risk_tags),
                 "marker_map": marker_map,
                 "bbox": bbox,
                 "bbox_confidence": bbox_confidence,
                 "duplicate_index": duplicate_index,
             }
         )
+
+    units: list[TranslationUnit] = []
+    for group in group_semantic_fragments(records):
+        group_marker_map = {
+            marker: token
+            for record in group
+            for marker, token in record["marker_map"].items()
+        }
+        if len(group) == 1:
+            record = group[0]
+            unit_id = record["singleton_unit_id"]
+            source_text = record["canonical_text"]
+            source_refs = (
+                SourceRef(
+                    block_id=f"bd-{record['fragment_id']}-block",
+                    page_index=page_index,
+                    bbox=tuple(record["bbox"]),
+                    char_start=0,
+                    char_end=len(source_text),
+                ),
+            )
+            protected = tuple(ProtectedSpan.model_validate(item) for item in record["protected"])
+            unit_type = "protected" if record["protected_only"] else "paragraph"
+            risk_tags = set(record["risk_tags"])
+            record["layout_marker"] = None
+        else:
+            pieces: list[str] = []
+            source_refs_list: list[SourceRef] = []
+            protected_list: list[ProtectedSpan] = []
+            risk_tags = {tag for record in group for tag in record["risk_tags"]}
+            risk_tags.update({"semantic_group", "layout_resegmentation"})
+            for group_index, record in enumerate(group):
+                if pieces:
+                    pieces.append(" ")
+                marker = layout_marker(record["fragment_id"])
+                marker_start = sum(len(piece) for piece in pieces)
+                pieces.append(marker)
+                marker_end = marker_start + len(marker)
+                record["layout_marker"] = marker
+                protected_list.append(
+                    ProtectedSpan(
+                        occurrence_id=f"layout-{record['fragment_id']}",
+                        marker=marker,
+                        kind="other",
+                        original=ArtifactRef(
+                            uri=f"runtime-layout-boundary/{record['fragment_id']}.txt",
+                            sha256=sha256_bytes(b""),
+                            media_type="text/plain",
+                        ),
+                        source_ref=SourceRef(
+                            block_id=f"bd-{record['fragment_id']}-block",
+                            page_index=page_index,
+                            bbox=tuple(record["bbox"]),
+                            char_start=marker_start,
+                            char_end=marker_end,
+                        ),
+                    )
+                )
+                fragment_start = marker_end
+                pieces.append(record["canonical_text"])
+                fragment_end = fragment_start + len(record["canonical_text"])
+                source_refs_list.append(
+                    SourceRef(
+                        block_id=f"bd-{record['fragment_id']}-block",
+                        page_index=page_index,
+                        bbox=tuple(record["bbox"]),
+                        char_start=fragment_start,
+                        char_end=fragment_end,
+                    )
+                )
+                for item_data in record["protected"]:
+                    item = ProtectedSpan.model_validate(item_data)
+                    shifted_ref = item.source_ref.model_copy(
+                        update={
+                            "char_start": fragment_start + item.source_ref.char_start,
+                            "char_end": fragment_start + item.source_ref.char_end,
+                        }
+                    )
+                    protected_list.append(item.model_copy(update={"source_ref": shifted_ref}))
+                record["group_index"] = group_index
+            source_text = "".join(pieces)
+            source_refs = tuple(source_refs_list)
+            protected = tuple(protected_list)
+            unit_type = "paragraph"
+            unit_id = f"bdg-{stable_hash({'document_sha256': document_sha256, 'page_index': page_index, 'fragments': [record['fragment_id'] for record in group], 'source_text': source_text})[:16]}"
+
+        unit = TranslationUnit(
+            unit_id=unit_id,
+            document_id=document_id,
+            ir_revision="babeldoc-0.6.4-semantic-groups-v0.5",
+            unit_type=unit_type,
+            source_lang="en",
+            target_lang="zh-CN",
+            source_text=source_text,
+            source_hash=stable_hash(source_text),
+            source_refs=source_refs,
+            protected=protected,
+            risk_tags=tuple(sorted(risk_tags)),
+        )
+        units.append(unit)
+        for group_index, record in enumerate(group):
+            record["unit_id"] = unit_id
+            record["group_index"] = group_index
+            record["group_size"] = len(group)
+            record["group_marker_map"] = group_marker_map
     return units, records
 
 
@@ -331,22 +495,41 @@ def run_smoke_document(
     capture_root: Path,
     *,
     execute_paid: bool = False,
+    reuse_capture: bool = False,
 ) -> dict:
     """Capture, translate, quality-check and inject a frozen smoke set."""
     output_dir.mkdir(parents=True, exist_ok=True)
-    all_units: list[TranslationUnit] = []
-    records_by_page: dict[int, list[dict]] = {}
-    for page_index in page_indices:
-        units, records = extract_page_units(source, page_index, capture_root / f"page-{page_index + 1:04d}")
-        all_units.extend(units)
-        records_by_page[page_index] = records
     units_path = output_dir / "units.jsonl"
-    units_path.write_text("".join(unit.model_dump_json() + "\n" for unit in all_units), encoding="utf-8")
     capture_map_path = output_dir / "capture-map.jsonl"
-    with capture_map_path.open("w", encoding="utf-8") as stream:
+    layout = None
+    if reuse_capture:
+        if not units_path.is_file() or not capture_map_path.is_file():
+            raise FileNotFoundError("--reuse-capture requires existing units.jsonl and capture-map.jsonl")
+        all_units = [
+            TranslationUnit.model_validate_json(line)
+            for line in units_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        records_by_page: dict[int, list[dict]] = defaultdict(list)
+        for line in capture_map_path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                record = json.loads(line)
+                records_by_page[record["page_index"]].append(record)
+        if set(records_by_page) != set(page_indices):
+            raise ValueError("captured page set does not match the frozen smoke page set")
+    else:
+        layout = _load_layout_model()
+        all_units = []
+        records_by_page = {}
         for page_index in page_indices:
-            for record in records_by_page[page_index]:
-                stream.write(json.dumps(record, ensure_ascii=False) + "\n")
+            units, records = extract_page_units(source, page_index, capture_root / f"page-{page_index + 1:04d}", layout=layout)
+            all_units.extend(units)
+            records_by_page[page_index] = records
+        units_path.write_text("".join(unit.model_dump_json() + "\n" for unit in all_units), encoding="utf-8")
+        with capture_map_path.open("w", encoding="utf-8") as stream:
+            for page_index in page_indices:
+                for record in records_by_page[page_index]:
+                    stream.write(json.dumps(record, ensure_ascii=False) + "\n")
 
     estimate = estimate_units(all_units, config)
     base_report = {
@@ -357,13 +540,17 @@ def run_smoke_document(
         "unit_count": len(all_units),
         "billable_unit_count": estimate["billable_unit_count"],
         "protected_passthrough_count": estimate["protected_passthrough_count"],
-        "protected_occurrences": sum(len(unit.protected) for unit in all_units),
-        "low_bbox_matches": sum("bbox_match_low" in unit.risk_tags for unit in all_units),
+        "semantic_group_count": sum("semantic_group" in unit.risk_tags for unit in all_units),
+        "grouped_fragment_count": sum(record["group_size"] > 1 for records in records_by_page.values() for record in records),
+        "layout_boundary_markers": sum(record["layout_marker"] is not None for records in records_by_page.values() for record in records),
+        "protected_occurrences": sum(len(record["marker_map"]) for records in records_by_page.values() for record in records),
+        "low_bbox_matches": sum(record["bbox_confidence"] < 0.45 for records in records_by_page.values() for record in records),
         "estimated_input_tokens_ceiling": estimate["estimated_input_tokens_ceiling"],
         "reserved_output_tokens": estimate["reserved_output_tokens"],
         "estimated_max_cost_usd": estimate["estimated_max_cost_usd"],
         "provider": config.provider,
         "model_id": config.model_id,
+        "capture_reused": reuse_capture,
     }
     report_path = output_dir / "run.report.json"
     if config.provider != "mock" and not execute_paid:
@@ -385,12 +572,23 @@ def run_smoke_document(
             raise RuntimeError(f"accepted unit has no translation result: {unit.unit_id}")
         translated_by_unit[unit.unit_id] = result.draft.translated_text
 
+    translated_by_fragment: dict[str, str] = {}
+    for page_index in page_indices:
+        records_by_unit: dict[str, list[dict]] = defaultdict(list)
+        for record in records_by_page[page_index]:
+            records_by_unit[record["unit_id"]].append(record)
+        for unit_id, group_records in records_by_unit.items():
+            ordered_group = sorted(group_records, key=lambda record: record["group_index"])
+            translated_by_fragment.update(split_layout_translation(translated_by_unit[unit_id], ordered_group))
+
     mono_pages: list[Path] = []
     dual_pages: list[Path] = []
+    if layout is None:
+        layout = _load_layout_model()
     for page_index in page_indices:
         page_dir = output_dir / f"page-{page_index + 1:04d}"
-        translator = _injection_translator(records_by_page[page_index], translated_by_unit)
-        result = _run_babeldoc_page(source, page_index, page_dir, translator)
+        translator = _injection_translator(records_by_page[page_index], translated_by_fragment)
+        result = _run_babeldoc_page(source, page_index, page_dir, translator, layout=layout)
         if translator.errors or translator.remaining:
             raise RuntimeError(
                 f"BabelDOC injection mismatch on page {page_index + 1}: "

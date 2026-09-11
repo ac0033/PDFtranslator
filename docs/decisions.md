@@ -14,3 +14,7 @@
 | Boundary-marker repair | implemented | four model outputs omitted a leading footnote marker; only exact source-boundary omissions are restored deterministically, while interior/unknown marker changes remain blocked |
 | Bilingual PDF rendering | accepted for three-page smoke | real DeepSeek mono/dual PDFs are readable; 42 low-confidence region matches, TOC migration and mixed-script spacing remain open |
 | Captured-workload budget gate | implemented and exercised | 39 billable units estimated to USD 0.1024467; actual token-based estimate was USD 0.0064098, within the user-approved CNY 0.80 ceiling |
+| Semantic paragraph reconstruction | v0.5 release candidate | incomplete adjacent fragments are grouped by page geometry and textual continuation; callback order is not treated as reading order |
+| Target-language layout resegmentation | v0.5 release candidate | explicit layout markers may move only to natural sentence boundaries, must remain exactly once and in order, and are split back to the original write-back slots |
+| Short-fragment location | v0.5 release candidate | exact page-text lookup precedes fuzzy block matching, preventing `we can` from inheriting an unrelated large block |
+| Reusable capture | implemented | `--reuse-capture` requires existing capture files and an exact frozen page-set match; non-executing budget checks do not load ONNX |

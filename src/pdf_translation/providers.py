@@ -5,6 +5,7 @@ import os
 from typing import Protocol
 
 from .schemas import TranslationDraft, TranslationRequest, TranslationResult, Usage
+from .semantic_layout import rebalance_layout_markers
 
 
 class Provider(Protocol):
@@ -14,7 +15,8 @@ class Provider(Protocol):
 class MockProvider:
     def translate(self, request: TranslationRequest) -> TranslationResult:
         # Deliberately preserves every source token for deterministic offline contract tests.
-        draft = TranslationDraft(unit_id=request.unit.unit_id, translated_text=f"[离线演示] {request.unit.source_text}")
+        coherent_source = rebalance_layout_markers(request.unit.source_text)
+        draft = TranslationDraft(unit_id=request.unit.unit_id, translated_text=f"[离线演示] {coherent_source}")
         return TranslationResult(request_id=request.request_id, unit_id=request.unit.unit_id, draft=draft, finish="complete", provider_response_id=None, model=request.model, usage=Usage(input_tokens=0, output_tokens=0, cost_usd=0.0, usage_source="estimated"))
 
 
@@ -42,7 +44,15 @@ class OpenAIProvider:
             response_format["strict"] = True
         arguments = {
             "model": request.model.model_id,
-            "instructions": "Translate the source into faithful, natural Simplified Chinese. Preserve every ⟦P:...⟧ marker, number, and URL exactly. Return only the requested JSON schema.",
+            "instructions": (
+                "Translate the complete source into faithful, coherent, natural Simplified Chinese. "
+                "Preserve every ⟦P:...⟧ marker, number, and URL exactly. Markers containing "
+                "'P:layout-' identify original layout slots: keep them exactly once and in their "
+                "original order, but move them to natural Chinese sentence boundaries when the "
+                "source layout split occurs inside a sentence; never leave a dangling word or "
+                "clause in the preceding slot. Keep all other protected markers at their semantic "
+                "positions. Return only the requested JSON schema."
+            ),
             "input": prompt,
             "max_output_tokens": request.model.max_output_tokens,
             "store": False,

@@ -95,6 +95,7 @@ def pdf_smoke(
     runs_root: Annotated[Path, typer.Option("--runs-root")] = Path("runs"),
     capture_root: Annotated[Path, typer.Option("--capture-root")] = Path("tmp/pdfs/v0.4-capture"),
     execute_paid: Annotated[bool, typer.Option("--execute-paid", help="Required for non-mock providers after explicit budget approval.")] = False,
+    reuse_capture: Annotated[bool, typer.Option("--reuse-capture", help="Reuse validated units.jsonl and capture-map.jsonl from output-dir.")] = False,
 ) -> None:
     """Run the frozen smoke pages through capture, runtime QA, and PDF write-back."""
     current = load_manifest(manifest)
@@ -110,6 +111,7 @@ def pdf_smoke(
         runs_root,
         capture_root,
         execute_paid=execute_paid,
+        reuse_capture=reuse_capture,
     )
     typer.echo(json.dumps(report, ensure_ascii=False, indent=2))
 

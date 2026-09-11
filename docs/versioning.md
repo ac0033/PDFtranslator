@@ -14,6 +14,7 @@ Snapshot mapping:
 | `v0.2.0` | Offline V1 Context Engine | `70abf21` |
 | `v0.3.0` | Real-PDF benchmark registration and BabelDOC one-page spike | stable snapshot |
 | `v0.4.0-rc.1` | Three-page two-pass offline PDF smoke candidate | release candidate |
-| `v0.4.0` | Real DeepSeek three-page PDF smoke, deterministic marker repair and visual QA | current snapshot |
+| `v0.4.0` | Real DeepSeek three-page PDF smoke, deterministic marker repair and visual QA | stable snapshot |
+| `v0.5.0-rc.1` | Semantic paragraph reconstruction, target-language resegmentation, exact short-text location and reusable capture | current release candidate |
 
-The `v` prefix is a Git tag convention. Python packaging normalizes candidate suffixes, so tag `v0.4.0-rc.1` is stored as package version `0.4.0rc1`.
+The `v` prefix is a Git tag convention. Python packaging normalizes candidate suffixes, so tag `v0.5.0-rc.1` is stored as package version `0.5.0rc1`.

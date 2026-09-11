@@ -5,6 +5,7 @@ from collections import Counter
 
 from .hashing import stable_hash
 from .schemas import QualityIssue, QualityReport, TranslationResult, TranslationUnit
+from .semantic_layout import LAYOUT_MARKER, layout_boundaries_are_natural
 
 MARKERS = re.compile(r"⟦P:[A-Za-z0-9_.:-]+⟧")
 # Chinese letters are Unicode "word" characters, so \w boundaries incorrectly
@@ -79,9 +80,15 @@ def check_quality(unit: TranslationUnit, result: TranslationResult) -> QualityRe
         add("incomplete", "critical", "translation is absent or provider did not complete")
     if sorted(MARKERS.findall(unit.source_text)) != sorted(MARKERS.findall(translated)):
         add("protected_marker", "critical", "protected marker multiset changed")
+    source_layout_markers = LAYOUT_MARKER.findall(unit.source_text)
+    translated_layout_markers = LAYOUT_MARKER.findall(translated)
+    if source_layout_markers != translated_layout_markers:
+        add("layout_marker_order", "critical", "layout marker order changed")
+    elif source_layout_markers and not layout_boundaries_are_natural(translated):
+        add("layout_boundary", "critical", "translated layout boundary remains inside a sentence")
     if sorted(NUMBERS.findall(unit.source_text)) != sorted(NUMBERS.findall(translated)):
         add("number", "major", "number inventory changed")
     if sorted(url_inventory(unit.source_text)) != sorted(url_inventory(translated)):
         add("url", "major", "URL target inventory changed")
     status = "blocked" if any(i.severity == "critical" for i in issues) else ("needs_review" if issues else "pass")
-    return QualityReport(unit_id=unit.unit_id, result_hash=stable_hash(result), policy_revision="v0.1", status=status, issues=tuple(issues), checks_run=("completion", "protected_marker_multiset", "number_inventory", "url_inventory"))
+    return QualityReport(unit_id=unit.unit_id, result_hash=stable_hash(result), policy_revision="v0.2", status=status, issues=tuple(issues), checks_run=("completion", "protected_marker_multiset", "layout_marker_order", "layout_boundary", "number_inventory", "url_inventory"))

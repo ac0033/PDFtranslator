@@ -1,0 +1,16 @@
+schema_version = "1.0"
+run_id = "v0.5-semantic-smoke-mock-r3"
+provider = "mock"
+model_id = "offline"
+source_lang = "en"
+target_lang = "zh-CN"
+style_revision = "v0-natural-textbook-zh"
+prompt_revision = "v0.5-semantic-groups"
+adapter_revision = "babeldoc-semantic-groups-v0.5.0-rc.3"
+pricing_revision = "none"
+max_output_tokens = 2000
+budget_usd = 0.0
+input_usd_per_million = 0.0
+output_usd_per_million = 0.0
+context_token_budget = 600
+reasoning_effort = "none"
