@@ -1,0 +1,86 @@
+{
+  "schema_version": "1.0",
+  "experiment": "v0.6-context-ab",
+  "status": "prepared_no_api_calls",
+  "units_path": "output\\pdf\\v0.6-development-capture\\units.jsonl",
+  "units_file_sha256": "98391c11a83822cabf3871fcaa1fbeb8a8bd14cc4249620c82e64d1d2369dcfb",
+  "units_payload_hash": "d1d8b9272f6fe0733148baad2947c2fa6a34e6591b6b90eb3c08f9e102fb7d54",
+  "unit_count": 121,
+  "billable_unit_count": 117,
+  "protected_passthrough_count": 4,
+  "controlled_difference": {
+    "fixed": "common style only",
+    "context": "same common style plus neighboring source excerpts"
+  },
+  "common_config": {
+    "schema_version": "1.0",
+    "provider": "deepseek",
+    "model_id": "deepseek-flash",
+    "source_lang": "en",
+    "target_lang": "zh-CN",
+    "style_revision": "v0.6-ab-style",
+    "prompt_revision": "v0.6-ab-source-isolation",
+    "adapter_revision": "babeldoc-context-graph-v0.6.0-rc.5",
+    "pricing_revision": "deepseek-2026-09-10-peak",
+    "max_output_tokens": 2000,
+    "budget_usd": 0.0,
+    "input_usd_per_million": 0.3,
+    "output_usd_per_million": 1.2,
+    "context_token_budget": 1500,
+    "api_key_env": "DEEPSEEK_API_KEY",
+    "base_url": "https://api.deepseek.com",
+    "reasoning_effort": "none",
+    "provider_max_attempts": 2,
+    "output_token_policy": "adaptive-v1"
+  },
+  "fixed_arm": {
+    "run_id": "v0.6-ab-fixed-deepseek-r5",
+    "preparation_config_hash": "4e2f71600444d71b1d85d72722c4d90c99d950e29c6fd9fe9cc48e5f37e14398",
+    "execution_config_hash": "2013783172a43498f050ebba49e1c45e466d26d9e63c5ca0469834fffb85693b",
+    "estimate": {
+      "unit_count": 121,
+      "billable_unit_count": 117,
+      "protected_passthrough_count": 4,
+      "estimated_input_tokens_ceiling": 94906,
+      "reserved_output_tokens": 48414,
+      "estimated_max_cost_usd": 0.0865686,
+      "provider": "deepseek",
+      "model_id": "deepseek-flash",
+      "is_estimate": true,
+      "api_calls": 0
+    }
+  },
+  "context_arm": {
+    "run_id": "v0.6-ab-context-deepseek-r5",
+    "preparation_config_hash": "a36c57675d45ec8768e7a534181a3dcdfd45418b0ae2f13c09d3c08d3c87b7cf",
+    "execution_config_hash": "d196bcfca60c9c12928e2ddf0162e0ec876f5e004e61529b95fa8991bfab08b6",
+    "context_db": "data/context-v0.6-ab.sqlite",
+    "estimate": {
+      "unit_count": 121,
+      "billable_unit_count": 117,
+      "protected_passthrough_count": 4,
+      "estimated_input_tokens_ceiling": 130381,
+      "reserved_output_tokens": 48414,
+      "estimated_max_cost_usd": 0.0972111,
+      "provider": "deepseek",
+      "model_id": "deepseek-flash",
+      "is_estimate": true,
+      "api_calls": 0
+    }
+  },
+  "output_ceiling": {
+    "policy": "adaptive-v1",
+    "reserved_output_tokens": 48414,
+    "minimum_per_unit": 384,
+    "maximum_per_unit": 848
+  },
+  "combined_one_pass_ceiling_usd": 0.1837797,
+  "control_exchange_rate_cny_per_usd": 7.5,
+  "combined_one_pass_ceiling_cny": 1.3783477499999999,
+  "planned_budget_usd_per_arm": 0.1105,
+  "planned_combined_hard_cap_usd": 0.221,
+  "planned_combined_hard_cap_cny": 1.6575,
+  "api_calls": 0,
+  "paid_execution_authorized": false,
+  "frozen_test_accessed": false
+}

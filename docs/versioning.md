@@ -19,5 +19,6 @@ Snapshot mapping:
 | `v0.5.0` | Real DeepSeek three-page semantic translation, deterministic cross-slot marker repair and visual QA | latest stable snapshot |
 | `v0.6.0-rc.1` | Real-PDF context graph, complete provider-attempt accounting, bounded retry and development structural ablation | release candidate |
 | `v0.6.0-rc.2` | Controlled development A/B harness, adaptive output ceilings, truncation recovery and blind-review export | release candidate |
+| `v0.6.0-rc.5` | Paid development A/B complete; source/context isolation and marker-safety fixes; blind review pending | release candidate |
 
-The `v` prefix is a Git tag convention. Python packaging normalizes candidate suffixes, so tag `v0.6.0-rc.2` is stored as package version `0.6.0rc2`.
+Intermediate rc.3 and rc.4 were experimental local run revisions, not Git snapshots. The `v` prefix is a Git tag convention. Python packaging normalizes candidate suffixes, so tag `v0.6.0-rc.5` is stored as package version `0.6.0rc5`.

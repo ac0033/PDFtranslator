@@ -1,4 +1,6 @@
 from pathlib import Path
+import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -6,9 +8,9 @@ from pdf_translation.budget import BudgetExceeded, reserve_budget
 from pdf_translation.config import RunConfig
 from pdf_translation.hashing import sha256_bytes, stable_hash
 from pdf_translation.pipeline import ProviderAttemptsExhausted, estimate_units, make_request, output_token_limit, run_units
-from pdf_translation.providers import DeepSeekProvider, ProviderCallError
+from pdf_translation.providers import DeepSeekProvider, OpenAIProvider, ProviderCallError
 from pdf_translation.quality import check_quality, repair_boundary_markers
-from pdf_translation.schemas import ArtifactRef, ModelSpec, ProtectedSpan, SourceRef, TranslationDraft, TranslationResult, TranslationUnit, Usage
+from pdf_translation.schemas import ArtifactRef, ContextItem, ModelSpec, ProtectedSpan, SourceRef, TranslationDraft, TranslationResult, TranslationUnit, Usage
 from pdf_translation.storage import StateStore
 
 
@@ -49,6 +51,18 @@ def test_chinese_number_boundary_and_url_punctuation_are_equivalent():
     assert check_quality(source, result).status == "pass"
 
 
+def test_formula_reordering_is_reviewable_without_layout_but_blocked_across_layout():
+    model = ModelSpec(provider="mock", model_id="m", max_output_tokens=10, prompt_revision="p", adapter_revision="a", pricing_revision="x")
+    source = unit("Before ⟦P:a⟧ and ⟦P:b⟧ after")
+    result = TranslationResult(request_id="r", unit_id="u1", draft=TranslationDraft(unit_id="u1", translated_text="之后 ⟦P:b⟧ 与之前 ⟦P:a⟧"), finish="complete", model=model, usage=Usage(usage_source="unavailable"))
+    report = check_quality(source, result)
+    assert report.status == "needs_review"
+    assert report.issues[0].category == "protected_marker_order"
+    layout_source = unit("⟦P:layout-first⟧Before ⟦P:a⟧.⟦P:layout-second⟧After ⟦P:b⟧.")
+    layout_result = result.model_copy(update={"draft": TranslationDraft(unit_id="u1", translated_text="⟦P:layout-first⟧之前 ⟦P:b⟧。⟦P:layout-second⟧之后 ⟦P:a⟧。")})
+    assert check_quality(layout_source, layout_result).status == "blocked"
+
+
 def test_paid_request_without_price_is_blocked():
     with pytest.raises(BudgetExceeded, match="price is unavailable"):
         reserve_budget(spent=0, reserved=0, requested=None, limit=10)
@@ -64,6 +78,35 @@ def test_deepseek_provider_uses_env_and_official_endpoint():
     assert provider.api_key_env == "DEEPSEEK_API_KEY"
     assert provider.base_url == "https://api.deepseek.com"
     assert provider.strict_schema is False
+
+
+def test_provider_explicitly_separates_reference_context_from_source(monkeypatch: pytest.MonkeyPatch):
+    captured = {}
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            self.responses = self
+
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(
+                status="completed",
+                usage=SimpleNamespace(input_tokens=10, output_tokens=10, input_tokens_details=None, output_tokens_details=None),
+                output_text=json.dumps({"unit_id": "u1", "translated_text": "仅翻译源文", "uncertainties": []}),
+                id="local-test-response",
+            )
+
+    monkeypatch.setenv("OPENAI_API_KEY", "local-test-only")
+    monkeypatch.setattr("openai.OpenAI", FakeClient)
+    request = make_request(unit("Source sentence"), config())
+    neighbor = ContextItem(item_id="neighbor", category="local", content="Neighbor only", source_ids=(), revision="test", required=False, selection_reason="test")
+    request = request.model_copy(update={"context": request.context.model_copy(update={"items": request.context.items + (neighbor,)})})
+    result = OpenAIProvider().translate(request)
+    assert result.draft.translated_text == "仅翻译源文"
+    assert "<reference-context>" in captured["input"]
+    assert "Neighbor only" in captured["input"]
+    assert "<source-to-translate>\nSource sentence\n</source-to-translate>" in captured["input"]
+    assert "never translate, summarize" in captured["instructions"]
 
 
 def test_cached_commit_never_duplicates_provider_usage(tmp_path: Path):

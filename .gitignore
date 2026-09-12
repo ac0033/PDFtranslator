@@ -12,3 +12,5 @@ data/
 output/
 *.pdf
 .env
+reports/v0.6_ab_blind_review.json
+reports/v0.6_ab_blind_key.json

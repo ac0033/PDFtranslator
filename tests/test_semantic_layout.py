@@ -112,6 +112,21 @@ def test_layout_markers_are_not_restored_when_semantic_marker_is_missing():
     assert repaired == translated
 
 
+def test_boundary_marker_relocation_never_crosses_other_formula_markers():
+    first = layout_marker("first")
+    second = layout_marker("second")
+    formula_a = "⟦P:formula-a⟧"
+    formula_b = "⟦P:formula-b⟧"
+    boundary_formula = "⟦P:boundary-formula⟧"
+    next_formula = "⟦P:next-formula⟧"
+    source = f"{first}First sentence. Use {formula_a}x {formula_b}y here.{boundary_formula}The support {second}of a distribution is nonzero near {next_formula}z."
+    translated = f"{first}第一句。这里使用 {formula_a}x {formula_b}y。{boundary_formula}分布的支撑{second}是在 {next_formula}z 附近非零的集合。"
+    repaired, changed = restore_and_rebalance_layout_markers(source, translated)
+    assert changed is True
+    assert ANY_MARKERS(repaired) == ANY_MARKERS(source)
+    assert layout_boundaries_are_natural(repaired) is True
+
+
 def test_layout_boundary_does_not_split_decimal_or_spaced_ellipsis():
     first_marker = layout_marker("first")
     second_marker = layout_marker("continuation")

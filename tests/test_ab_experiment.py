@@ -88,8 +88,11 @@ def test_paid_execution_budget_is_bounded_and_not_written_to_configs(tmp_path: P
     assert paid_context.budget_usd == 0.10
     assert fixed.budget_usd == 0
     assert context.budget_usd == 0
+    paid_fixed, paid_context = approved_execution_configs(fixed, context, 2.0 / 7.5)
+    assert paid_fixed.budget_usd == pytest.approx(1.0 / 7.5)
+    assert paid_context.budget_usd == pytest.approx(1.0 / 7.5)
     with pytest.raises(ValueError, match="within"):
-        approved_execution_configs(fixed, context, 0.21)
+        approved_execution_configs(fixed, context, 0.27)
 
 
 def test_blind_review_hides_arm_identity_and_keeps_separate_key():

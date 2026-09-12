@@ -496,7 +496,8 @@ def ab_run_development(
     if fixed_estimate["estimated_max_cost_usd"] > per_arm or context_estimate["estimated_max_cost_usd"] > per_arm:
         raise typer.BadParameter("one-pass estimate exceeds the equal per-arm budget")
     fixed_summary = run_units(captured, fixed, runs_root)
-    if fixed_summary.get("states") != {"accepted": len(captured)}:
+    fixed_done = fixed_summary.get("states", {}).get("accepted", 0) + fixed_summary.get("states", {}).get("needs_review", 0)
+    if fixed_done != len(captured):
         raise RuntimeError("fixed arm did not fully pass; context arm was not started")
     context_summary = run_units(captured, context, runs_root)
     combined_cost = fixed_summary["cost_usd"] + context_summary["cost_usd"]
@@ -508,8 +509,8 @@ def ab_run_development(
 @app.command("ab-export-blind-review")
 def ab_export_blind_review(
     units: Annotated[Path, typer.Option("--units")] = Path("output/pdf/v0.6-development-capture/units.jsonl"),
-    fixed_run_id: Annotated[str, typer.Option("--fixed-run-id")] = "v0.6-ab-fixed-deepseek-r1",
-    context_run_id: Annotated[str, typer.Option("--context-run-id")] = "v0.6-ab-context-deepseek-r1",
+    fixed_run_id: Annotated[str, typer.Option("--fixed-run-id")] = "v0.6-ab-fixed-deepseek-r5",
+    context_run_id: Annotated[str, typer.Option("--context-run-id")] = "v0.6-ab-context-deepseek-r5",
     runs_root: Annotated[Path, typer.Option("--runs-root")] = Path("runs"),
     review_output: Annotated[Path, typer.Option("--review-output")] = Path("reports/v0.6_ab_blind_review.json"),
     key_output: Annotated[Path, typer.Option("--key-output")] = Path("reports/v0.6_ab_blind_key.json"),
@@ -527,7 +528,7 @@ def ab_export_blind_review(
         fixed_result = fixed_store.result(fixed_run_id, unit.unit_id)
         context_result = context_store.result(context_run_id, unit.unit_id)
         if fixed_result is None or fixed_result.draft is None or context_result is None or context_result.draft is None:
-            raise typer.BadParameter(f"both accepted translations are required for {unit.unit_id}")
+            raise typer.BadParameter(f"both reviewable translations are required for {unit.unit_id}")
         fixed_targets[unit.unit_id] = fixed_result.draft.translated_text
         context_targets[unit.unit_id] = context_result.draft.translated_text
     review, key = build_blind_review(captured, fixed_targets, context_targets, seed=seed)

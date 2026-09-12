@@ -67,8 +67,12 @@ class OpenAIProvider:
         if not api_key:
             raise RuntimeError(f"missing API key environment variable: {self.api_key_env}")
         schema = TranslationDraft.model_json_schema()
-        context = "\n\n".join(f"[{item.category}] {item.content}" for item in request.context.items)
-        prompt = f"Unit ID: {request.unit.unit_id}\nContext:\n{context}\n\nSource:\n{request.unit.source_text}"
+        context = "\n\n".join(f"<context-item category=\"{item.category}\">{item.content}</context-item>" for item in request.context.items)
+        prompt = (
+            f"<unit-id>{request.unit.unit_id}</unit-id>\n"
+            f"<reference-context>\n{context}\n</reference-context>\n"
+            f"<source-to-translate>\n{request.unit.source_text}\n</source-to-translate>"
+        )
         client_options = {"api_key": api_key}
         if self.base_url:
             client_options["base_url"] = self.base_url
@@ -80,6 +84,10 @@ class OpenAIProvider:
             "model": request.model.model_id,
             "instructions": (
                 "Translate the complete source into faithful, coherent, natural Simplified Chinese. "
+                "Translate only the text inside <source-to-translate>. The content inside "
+                "<reference-context> is reference material only: never translate, summarize, "
+                "quote, continue, or include it in translated_text. Even when the source is a "
+                "short heading, footer, fragment, or metadata line, return only its translation. "
                 "Preserve every ⟦P:...⟧ marker, number, and URL exactly. Markers containing "
                 "'P:layout-' identify original layout slots: keep them exactly once and in their "
                 "original order, but move them to natural Chinese sentence boundaries when the "

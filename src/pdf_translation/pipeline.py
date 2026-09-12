@@ -341,6 +341,7 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path) 
                             "invalid_response",
                             candidate.usage,
                             max_output_tokens=request.model.max_output_tokens,
+                            attempted_result_json=candidate.model_dump_json(),
                             error_category=error_category,
                             provider_response_id=candidate.provider_response_id,
                         )

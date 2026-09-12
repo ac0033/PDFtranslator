@@ -10,7 +10,9 @@ from .schemas import TranslationUnit
 
 
 ALLOWED_CONFIG_DIFFERENCES = frozenset({"run_id", "context_engine", "context_db"})
-MAX_COMBINED_AB_BUDGET_USD = 0.20
+# The experiment uses a fixed control rate of 7.5 CNY/USD. The user-authorized
+# absolute stop is CNY 2.00; the one-pass plan remains CNY 1.50 / USD 0.20.
+MAX_COMBINED_AB_BUDGET_USD = 2.0 / 7.5
 
 
 def _assert_controlled_pair(fixed: RunConfig, context: RunConfig) -> None:

@@ -205,10 +205,23 @@ def restore_and_rebalance_layout_markers(source_text: str, translated_text: str)
         base = base.replace(marker, "", 1)
     boundary_positions = _sentence_boundaries(base)
     footnote_placements: list[tuple[int, int, str]] = []
+    boundary_marker_names = {marker for marker, _ in boundary_markers}
+    remaining_positions = {
+        marker: base.find(marker)
+        for marker in source_non_layout
+        if marker not in boundary_marker_names
+    }
     previous = 0
     for order, (marker, ratio) in enumerate(boundary_markers):
+        sequence_index = source_non_layout.index(marker)
+        preceding = [item for item in source_non_layout[:sequence_index] if item not in boundary_marker_names]
+        following = [item for item in source_non_layout[sequence_index + 1 :] if item not in boundary_marker_names]
+        lower = max((remaining_positions[item] + len(item) for item in preceding), default=0)
+        upper = min((remaining_positions[item] for item in following), default=len(base))
         approximate = round(ratio * len(base))
-        candidates = [boundary for boundary in boundary_positions if boundary >= previous]
+        candidates = [boundary for boundary in boundary_positions if boundary >= max(previous, lower) and boundary <= upper]
+        if not candidates:
+            return translated_text, False
         placement = min(candidates, key=lambda boundary: (abs(boundary - approximate), boundary), default=len(base))
         footnote_placements.append((placement, order, marker))
         previous = placement

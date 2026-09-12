@@ -47,6 +47,7 @@ class StateStore:
                 input_tokens INTEGER,
                 output_tokens INTEGER,
                 max_output_tokens INTEGER,
+                attempted_result_json TEXT,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(run_id, unit_id, request_id, attempt_no)
             );
@@ -55,6 +56,8 @@ class StateStore:
             columns = {row[1] for row in con.execute("PRAGMA table_info(provider_attempts)")}
             if "max_output_tokens" not in columns:
                 con.execute("ALTER TABLE provider_attempts ADD COLUMN max_output_tokens INTEGER")
+            if "attempted_result_json" not in columns:
+                con.execute("ALTER TABLE provider_attempts ADD COLUMN attempted_result_json TEXT")
 
     def begin_run(self, run_id: str, input_hash: str, config_hash: str) -> None:
         with self.connect() as con:
@@ -101,6 +104,7 @@ class StateStore:
         usage: Usage,
         *,
         max_output_tokens: int,
+        attempted_result_json: str | None = None,
         error_category: str | None = None,
         provider_response_id: str | None = None,
     ) -> None:
@@ -108,8 +112,8 @@ class StateStore:
         source = f"provider_{outcome}:{usage.usage_source}"
         with self.connect() as con:
             con.execute(
-                "INSERT INTO provider_attempts(run_id,unit_id,request_id,attempt_no,outcome,error_category,provider_response_id,cost_usd,input_tokens,output_tokens,max_output_tokens) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-                (run_id, unit_id, request_id, attempt_no, outcome, error_category, provider_response_id, usage.cost_usd, usage.input_tokens, usage.output_tokens, max_output_tokens),
+                "INSERT INTO provider_attempts(run_id,unit_id,request_id,attempt_no,outcome,error_category,provider_response_id,cost_usd,input_tokens,output_tokens,max_output_tokens,attempted_result_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                (run_id, unit_id, request_id, attempt_no, outcome, error_category, provider_response_id, usage.cost_usd, usage.input_tokens, usage.output_tokens, max_output_tokens, attempted_result_json),
             )
             con.execute(
                 "INSERT INTO ledger(run_id,unit_id,cost_usd,input_tokens,output_tokens,source) VALUES(?,?,?,?,?,?)",

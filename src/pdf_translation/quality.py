@@ -82,10 +82,11 @@ def check_quality(unit: TranslationUnit, result: TranslationResult) -> QualityRe
     translated_markers = MARKERS.findall(translated)
     if sorted(source_markers) != sorted(translated_markers):
         add("protected_marker", "critical", "protected marker multiset changed")
-    elif source_markers != translated_markers:
-        add("protected_marker_order", "critical", "protected marker order changed")
     source_layout_markers = LAYOUT_MARKER.findall(unit.source_text)
     translated_layout_markers = LAYOUT_MARKER.findall(translated)
+    if sorted(source_markers) == sorted(translated_markers) and source_markers != translated_markers:
+        severity = "critical" if source_layout_markers else "major"
+        add("protected_marker_order", severity, "protected marker order changed")
     if source_layout_markers != translated_layout_markers:
         add("layout_marker_order", "critical", "layout marker order changed")
     elif source_layout_markers and not layout_boundaries_are_natural(translated):

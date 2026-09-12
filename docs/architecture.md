@@ -32,6 +32,8 @@ Every packet records selection reasons, source IDs, revisions, a memory snapshot
 
 The rc.2 A/B path freezes two zero-budget configurations with identical model, prompt, adapter, common style and adaptive per-unit output ceilings. The context arm adds only neighboring source excerpts from a dedicated database. Preparation rejects approved glossary, semantic or confirmed translation-memory content as confounders. Paid execution remains double gated by an explicit CLI flag and an in-memory combined budget; tracked configuration files stay at zero. Results can be exported as deterministic anonymous X/Y pairs with a separate reveal key.
 
+The rc.5 prompt encloses reference context and the source to translate in separate tags and explicitly forbids returning translated context. A paid diagnostic found that without this boundary a short copyright footer could inherit neighboring prose. Both final A/B arms use the same corrected prompt. Formula-marker reordering without a layout split is retained as a major human-review issue; with layout splits it remains a critical block. Boundary-adjacent formula markers can move only within their neighboring protected-marker interval.
+
 Output ceilings use `min(configured maximum, max(384, ceil(source characters * 0.75) + 128))`. A response explicitly truncated at `max_output_tokens` is charged and recorded before one bounded retry with an expanded ceiling; resume continues from the persisted attempted ceiling rather than starting over.
 
 The v0.6 release candidate has structural evidence on smoke and development samples, but no paid translation-quality comparison. Frozen-test pages remain untouched until a candidate is locked and a separate blind-test decision is approved.

@@ -1,12 +1,12 @@
 schema_version = "1.0"
-run_id = "v0.6-ab-context-deepseek-r1"
+run_id = "v0.6-ab-context-deepseek-r5"
 provider = "deepseek"
 model_id = "deepseek-flash"
 source_lang = "en"
 target_lang = "zh-CN"
 style_revision = "v0.6-ab-style"
-prompt_revision = "v0.6-ab-controlled"
-adapter_revision = "babeldoc-context-graph-v0.6.0-rc.2"
+prompt_revision = "v0.6-ab-source-isolation"
+adapter_revision = "babeldoc-context-graph-v0.6.0-rc.5"
 pricing_revision = "deepseek-2026-09-10-peak"
 max_output_tokens = 2000
 budget_usd = 0.0
