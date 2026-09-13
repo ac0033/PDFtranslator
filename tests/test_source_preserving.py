@@ -52,8 +52,53 @@ def test_text_operation_editor_rejects_math_glyph_at_selected_operator_origin():
         transformation_matrix=pymupdf.Identity,
         get_texttrace=lambda: ({"font": "CMR10", "chars": ((80, 1, (10, 100), (10, 90, 16, 101)),)},),
     )
-    with pytest.raises(SourcePreservingUnsupported, match="immutable formula or symbol"):
+    with pytest.raises(SourcePreservingUnsupported, match="contains an immutable formula or symbol"):
         _remove_whole_show_operations(stream, page, [pymupdf.Rect(9, 99, 20, 110)])
+
+
+def test_text_operation_editor_rejects_protected_glyph_after_plain_first_glyph():
+    stream = b"BT\n/F1 10 Tf\n1 0 0 1 10 100 Tm [(Value 1)]TJ\nET"
+    page = SimpleNamespace(
+        rotation=0,
+        transformation_matrix=pymupdf.Identity,
+        get_texttrace=lambda: ({
+            "font": "TeXGyrePagella-Regular",
+            "chars": ((86, 1, (10, 100), (10, 90, 16, 101)), (49, 2, (48, 100), (48, 90, 54, 101))),
+        },),
+    )
+    with pytest.raises(SourcePreservingUnsupported, match="contains an immutable formula or symbol"):
+        _remove_whole_show_operations(stream, page, [pymupdf.Rect(9, 99, 60, 110)])
+
+
+def test_text_operation_editor_rejects_ambiguous_glyph_provenance():
+    stream = b"BT\n/F1 10 Tf\n1 0 0 1 10 100 Tm [(Hello)]TJ\nET"
+    span = {"font": "Helvetica", "chars": ((72, 1, (10, 100), (10, 90, 16, 101)),)}
+    page = SimpleNamespace(
+        rotation=0,
+        transformation_matrix=pymupdf.Identity,
+        get_texttrace=lambda: (span, span),
+    )
+    with pytest.raises(SourcePreservingUnsupported, match="not uniquely linked"):
+        _remove_whole_show_operations(stream, page, [pymupdf.Rect(9, 99, 20, 110)])
+
+
+def test_text_operation_editor_separates_coalesced_trace_at_next_pdf_operation():
+    stream = (
+        b"BT\n/F1 10 Tf\n1 0 0 1 10 100 Tm [(Hello)]TJ\n"
+        b"1 0 0 1 10 80 Tm [(1)]TJ\nET"
+    )
+    page = SimpleNamespace(
+        rotation=0,
+        transformation_matrix=pymupdf.Identity,
+        get_texttrace=lambda: ({
+            "font": "Helvetica",
+            "chars": ((72, 1, (10, 100), (10, 90, 16, 101)), (49, 2, (10, 80), (10, 70, 16, 81))),
+        },),
+    )
+    edited, removed = _remove_whole_show_operations(stream, page, [pymupdf.Rect(9, 99, 20, 110)])
+    assert removed == 1
+    assert b"10 100 Tm []TJ" in edited
+    assert b"10 80 Tm [(1)]TJ" in edited
 
 
 def test_pixel_audit_rejects_change_outside_target_rectangle():

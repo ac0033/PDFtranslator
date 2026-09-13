@@ -58,6 +58,22 @@ def test_placeholder_capture_maps_prose_around_unchanged_footnote():
     document.close()
 
 
+def test_placeholder_capture_maps_real_pdf_line_break_hyphenation():
+    document = pymupdf.open()
+    page = document.new_page(width=400, height=200)
+    page.insert_text((50, 75), "The nota-", fontsize=12)
+    page.insert_text((50, 95), "tion is clear.", fontsize=12)
+    page.insert_text((160, 95), "7", fontsize=7)
+    record = {
+        "fragment_id": "f3", "bbox": (45, 60, 240, 105), "bbox_confidence": 1.0,
+        "babeldoc_text": "The nota- tion is clear.<b1>", "marker_map": {"marker": "<b1>"},
+        "protected_only": False,
+    }
+    mapping = map_placeholder_capture_fragment(page, record)
+    assert [segment.text for segment in mapping.segments] == ["The nota-", "tion is clear."]
+    document.close()
+
+
 def test_single_line_planner_uses_saved_target_and_native_geometry():
     font = Path("C:/Windows/Fonts/simfang.ttf")
     if not font.is_file():

@@ -76,27 +76,51 @@ def _glyphs_outside(page: pymupdf.Page, rects: tuple[pymupdf.Rect, ...]) -> Coun
 def _remove_whole_show_operations(stream: bytes, page: pymupdf.Page, rects: list[pymupdf.Rect]) -> tuple[bytes, int]:
     if page.rotation != 0:
         raise SourcePreservingUnsupported("rotated pages are not supported by this text operator editor")
-    protected_origins = []
-    if hasattr(page, "get_texttrace"):
-        for span in page.get_texttrace():
-            is_math_font = any(hint in span["font"].casefold() for hint in FORMULA_FONT_HINTS)
-            for character in span["chars"]:
-                glyph = chr(character[0]) if isinstance(character[0], int) else character[0]
-                if is_math_font or glyph.isdigit() or glyph in IMMUTABLE_SYMBOLS:
-                    protected_origins.append(pymupdf.Point(character[2]))
+    traced_spans = tuple(span for span in page.get_texttrace() if span["chars"]) if hasattr(page, "get_texttrace") else None
+    operations = tuple(SHOW_OPERATION.finditer(stream))
+    operation_index = {match.start(): index for index, match in enumerate(operations)}
+    operation_origins = tuple(
+        pymupdf.Point(float(match.group(2)), float(match.group(3))) * page.transformation_matrix
+        for match in operations
+    )
     matches_per_rect = [0] * len(rects)
     selected = 0
 
     def replace(match: re.Match[bytes]) -> bytes:
         nonlocal selected
-        origin = pymupdf.Point(float(match.group(2)), float(match.group(3))) * page.transformation_matrix
+        index = operation_index[match.start()]
+        origin = operation_origins[index]
         selected_rects = [index for index, rect in enumerate(rects) if rect.contains(origin)]
         if not selected_rects:
             return match.group(0)
         if len(selected_rects) != 1:
             raise SourcePreservingUnsupported("a text operation belongs to multiple target segments")
-        if any(origin.distance_to(protected) < 0.05 for protected in protected_origins):
-            raise SourcePreservingUnsupported("target text operation starts with an immutable formula or symbol glyph")
+        if traced_spans is not None:
+            matches = [
+                (span, char_index) for span in traced_spans
+                for char_index, character in enumerate(span["chars"])
+                if pymupdf.Point(character[2]).distance_to(origin) < 0.05
+            ]
+            if len(matches) != 1:
+                raise SourcePreservingUnsupported("target text operation is not uniquely linked to rendered glyphs")
+            span, first_char = matches[0]
+            last_char = len(span["chars"])
+            if index + 1 < len(operations):
+                next_origin = operation_origins[index + 1]
+                next_matches = [
+                    char_index for char_index in range(first_char + 1, last_char)
+                    if pymupdf.Point(span["chars"][char_index][2]).distance_to(next_origin) < 0.05
+                ]
+                if len(next_matches) > 1:
+                    raise SourcePreservingUnsupported("next text operation has ambiguous rendered glyph boundary")
+                if next_matches:
+                    last_char = next_matches[0]
+            if any(hint in span["font"].casefold() for hint in FORMULA_FONT_HINTS) or any(
+                (chr(character[0]) if isinstance(character[0], int) else character[0]).isdigit()
+                or (chr(character[0]) if isinstance(character[0], int) else character[0]) in IMMUTABLE_SYMBOLS
+                for character in span["chars"][first_char:last_char]
+            ):
+                raise SourcePreservingUnsupported("target text operation contains an immutable formula or symbol glyph")
         matches_per_rect[selected_rects[0]] += 1
         selected += 1
         return match.group(0).replace(b"[" + match.group(4) + b"]TJ", b"[]TJ", 1)

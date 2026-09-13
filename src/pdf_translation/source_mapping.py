@@ -137,7 +137,11 @@ def map_placeholder_capture_fragment(page: pymupdf.Page, record: dict) -> PlainF
     segments: list[ExactSourceSegment] = []
     for chunk in chunks:
         hits = page.search_for(chunk, clip=clip)
-        if not hits or normalized_pdf_text("".join(page.get_textbox(hit) for hit in hits)) != normalized_pdf_text(chunk):
+        # A search hit can end at a PDF line break (for example, ``nota-`` /
+        # ``tion``). Preserve that boundary so the existing alphabetic
+        # line-hyphen rule can compare the original prose without loosening
+        # punctuation, numbers or mathematical operators.
+        if not hits or normalized_pdf_text("\n".join(page.get_textbox(hit) for hit in hits)) != normalized_pdf_text(chunk):
             raise SourcePreservingUnsupported(f"protected-fragment prose is not exactly located: {chunk!r}")
         for hit in hits:
             if not clip.contains(hit):
