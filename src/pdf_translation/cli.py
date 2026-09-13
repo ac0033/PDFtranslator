@@ -242,7 +242,7 @@ def pdf_translate(
         report["formal_use_ready"] = False
         blockers = []
         if not fidelity["visual_primitives_passed"]:
-            blockers.append("visual primitives or math-font glyphs differ from the source")
+            blockers.append("visual primitives, math-font glyphs or numeric/symbol glyphs differ from the source")
         if report["low_bbox_matches"]:
             blockers.append("low-confidence source text locations require review")
         blockers.extend((

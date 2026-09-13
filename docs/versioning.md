@@ -22,5 +22,6 @@ Snapshot mapping:
 | `v0.6.0-rc.5` | Paid development A/B complete; source/context isolation and marker-safety fixes; blind review pending | release candidate |
 | `v0.7.0-rc.1` | Context-first whole-PDF entry, capture identity gate and non-text visual-primitives audit | release candidate |
 | `v0.7.0-rc.2` | Fail-closed source-page text-operation editor; one-paragraph untouched-element proof | release candidate |
+| `v0.7.0-rc.3` | Offline automatic source-segment mapping for a complete semantic group, immutable number/symbol gate, one-paragraph automatic placement proof | release candidate |
 
-Intermediate v0.6 rc.3 and rc.4 were experimental local run revisions, not Git snapshots. The `v` prefix is a Git tag convention. Python packaging normalizes candidate suffixes, so tag `v0.7.0-rc.2` is stored as package version `0.7.0rc2`.
+Intermediate v0.6 rc.3 and rc.4 were experimental local run revisions, not Git snapshots. The `v` prefix is a Git tag convention. Python packaging normalizes candidate suffixes, so tag `v0.7.0-rc.3` is stored as package version `0.7.0rc3`.

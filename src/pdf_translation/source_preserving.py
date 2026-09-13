@@ -20,7 +20,9 @@ from .pdf_fidelity import compare_visual_primitives
 
 
 SHOW_OPERATION = re.compile(rb"([0-9.]+) 0 0 1 ([0-9.]+) ([0-9.]+) Tm \[(.*?)\]TJ", re.S)
-RASTER_ANTIALIAS_MARGIN_PT = 0.25
+# At 2x rendering, 0.5 pt is exactly one output pixel around source glyph bboxes.
+# Glyph, image and vector checks remain unmasked and exact outside edit slots.
+RASTER_ANTIALIAS_MARGIN_PT = 0.5
 
 
 class SourcePreservingUnsupported(RuntimeError):
@@ -116,12 +118,16 @@ def _changed_pixels_outside(
         )
         current = 0
         for left, right in intervals + [(a.width, a.width)]:
-            for x in range(current, max(current, left)):
-                offset = row + x * a.n
-                if first[offset : offset + a.n] != second[offset : offset + a.n]:
-                    changed += 1
-                    if len(samples) < 10:
-                        samples.append((x / scale, y / scale))
+            end = max(current, left)
+            start_byte = row + current * a.n
+            end_byte = row + end * a.n
+            if first[start_byte:end_byte] != second[start_byte:end_byte]:
+                for x in range(current, end):
+                    offset = row + x * a.n
+                    if first[offset : offset + a.n] != second[offset : offset + a.n]:
+                        changed += 1
+                        if len(samples) < 10:
+                            samples.append((x / scale, y / scale))
             current = max(current, right)
     return changed, samples
 

@@ -4,10 +4,11 @@ from pdf_translation.pdf_fidelity import compare_visual_primitives
 class FakePage:
     rect = (0, 0, 576, 648)
 
-    def __init__(self, *, image_x: float = 20, drawing_x: float = 4, formula_x: float = 30) -> None:
+    def __init__(self, *, image_x: float = 20, drawing_x: float = 4, formula_x: float = 30, digit_x: float = 80) -> None:
         self.image_x = image_x
         self.drawing_x = drawing_x
         self.formula_x = formula_x
+        self.digit_x = digit_x
 
     def get_image_info(self, *, hashes: bool):
         assert hashes
@@ -18,7 +19,10 @@ class FakePage:
 
     def get_text(self, format: str):
         assert format == "rawdict"
-        return {"blocks": [{"lines": [{"spans": [{"font": "CMR10", "size": 10, "chars": [{"c": "=", "bbox": (self.formula_x, 20, self.formula_x + 4, 30)}]}]}]}]}
+        return {"blocks": [{"lines": [{"spans": [
+            {"font": "CMR10", "size": 10, "chars": [{"c": "=", "bbox": (self.formula_x, 20, self.formula_x + 4, 30)}]},
+            {"font": "TeXGyrePagella-Regular", "size": 8, "chars": [{"c": "5", "bbox": (self.digit_x, 20, self.digit_x + 4, 28)}]},
+        ]}]}]}
 
 
 def test_visual_primitive_audit_accepts_renderer_roundoff():
@@ -44,3 +48,10 @@ def test_visual_primitive_audit_blocks_formula_glyph_movement():
     assert not result["passed"]
     assert not result["checks"]["formula_font_glyphs_text_font_size_bbox_equal"]
     assert result["source_formula_font_glyph_count"] == 1
+
+
+def test_visual_primitive_audit_blocks_footnote_digit_movement_in_ordinary_font():
+    result = compare_visual_primitives(FakePage(), FakePage(digit_x=81))
+    assert not result["passed"]
+    assert not result["checks"]["numeric_symbol_glyphs_text_font_size_bbox_equal"]
+    assert result["source_numeric_symbol_glyph_count"] == 2
