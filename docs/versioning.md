@@ -24,5 +24,6 @@ Snapshot mapping:
 | `v0.7.0-rc.2` | Fail-closed source-page text-operation editor; one-paragraph untouched-element proof | release candidate |
 | `v0.7.0-rc.3` | Offline automatic source-segment mapping for a complete semantic group, immutable number/symbol gate, one-paragraph automatic placement proof | release candidate |
 | `v0.7.0-rc.4` | Verifiable native formula/footnote literal hints in translation requests, cost/cache identity, and unresolved-content review gate | release candidate |
+| `v0.7.0-rc.5` | Two-line Chinese reflow around unmoved terminal digits; in-stream insertion restores copied-text order without changing pixels | release candidate |
 
-Intermediate v0.6 rc.3 and rc.4 were experimental local run revisions, not Git snapshots. The `v` prefix is a Git tag convention. Python packaging normalizes candidate suffixes, so tag `v0.7.0-rc.4` is stored as package version `0.7.0rc4`.
+Intermediate v0.6 rc.3 and rc.4 were experimental local run revisions, not Git snapshots. The `v` prefix is a Git tag convention. Python packaging normalizes candidate suffixes, so tag `v0.7.0-rc.5` is stored as package version `0.7.0rc5`.

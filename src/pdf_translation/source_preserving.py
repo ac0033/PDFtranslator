@@ -97,6 +97,69 @@ def _remove_whole_show_operations(stream: bytes, page: pymupdf.Page, rects: list
     return edited, selected
 
 
+def _inline_before_preserved_suffix(
+    output: pymupdf.Document,
+    page: pymupdf.Page,
+    source_stream_xref: int,
+    target_rects: list[pymupdf.Rect],
+    suffix_rect: pymupdf.Rect,
+    insertions: tuple[TargetText, ...],
+    removed_operators: int,
+) -> pymupdf.Page:
+    """Splice MuPDF-generated text into the original BT block before `1:`.
+
+    This is permitted only when the next original show operation is the suffix
+    and explicitly resets its own font. Unknown generated streams fail closed.
+    """
+    stream = output.xref_stream(source_stream_xref)
+    empty_targets = [
+        match for match in SHOW_OPERATION.finditer(stream)
+        if match.group(4) == b"" and any(
+            rect.contains(pymupdf.Point(float(match.group(2)), float(match.group(3))) * page.transformation_matrix)
+            for rect in target_rects
+        )
+    ]
+    if len(empty_targets) != removed_operators:
+        raise SourcePreservingUnsupported("cannot identify all emptied source text operations for inline insertion")
+    intervening = list(SHOW_OPERATION.finditer(stream, empty_targets[0].start(), empty_targets[-1].end()))
+    if len(intervening) != len(empty_targets):
+        raise SourcePreservingUnsupported("protected text occurs between translated source operations")
+    cut = empty_targets[-1].end()
+    text_boundaries = list(re.finditer(rb"(?<!\S)(BT|ET)(?!\S)", stream[:cut]))
+    if not text_boundaries or text_boundaries[-1].group(1) != b"BT":
+        raise SourcePreservingUnsupported("target operation is not inside a source text object")
+    next_show = next(SHOW_OPERATION.finditer(stream, cut), None)
+    if next_show is None:
+        raise SourcePreservingUnsupported("original suffix text operation is missing")
+    suffix_origin = pymupdf.Point(float(next_show.group(2)), float(next_show.group(3))) * page.transformation_matrix
+    if not suffix_rect.contains(suffix_origin) or not re.search(rb"/[A-Za-z0-9_-]+\s+[0-9.]+\s+Tf", stream[cut:next_show.start()]):
+        raise SourcePreservingUnsupported("preserved suffix is not next with an explicit original font reset")
+
+    generated = []
+    for item in insertions:
+        font_token = re.escape(item.fontname.encode("ascii"))
+        pattern = (
+            rb"\nq\nBT\n(1 0 0 1 ([-0-9.]+) ([-0-9.]+) Tm\n/"
+            + font_token
+            + rb" [0-9.]+ Tf \[<[0-9A-Fa-f]+>\]TJ\n)ET\nQ\n"
+        )
+        matches = [
+            (xref, match) for xref in page.get_contents()
+            if xref != source_stream_xref
+            for match in [re.fullmatch(pattern, output.xref_stream(xref))]
+            if match is not None and (
+                pymupdf.Point(float(match.group(2)), float(match.group(3))) * page.transformation_matrix
+            ).distance_to(pymupdf.Point(item.origin)) < 0.02
+        ]
+        if len(matches) != 1 or any(xref == matches[0][0] for xref, _ in generated):
+            raise SourcePreservingUnsupported("generated Chinese insertion stream is not uniquely recognizable")
+        generated.append(matches[0])
+    output.update_stream(source_stream_xref, stream[:cut] + b"\n" + b"".join(match.group(1) for _, match in generated) + stream[cut:])
+    for xref, _ in generated:
+        output.update_stream(xref, b"")
+    return output.reload_page(page)
+
+
 def _changed_pixels_outside(
     source: pymupdf.Page, target: pymupdf.Page, allowed: tuple[pymupdf.Rect, ...], scale: int = 2
 ) -> tuple[int, list[tuple[float, float]]]:
@@ -132,12 +195,43 @@ def _changed_pixels_outside(
     return changed, samples
 
 
+def _assert_inserted_text(
+    page: pymupdf.Page,
+    insertions: tuple[TargetText, ...],
+    preserved_suffix: ExactSourceSegment | None,
+    suffix_rect: pymupdf.Rect | None,
+) -> None:
+    insertion_rects = [pymupdf.Rect(item.allowed_rect) for item in insertions]
+    for item, rect in zip(insertions, insertion_rects, strict=True):
+        if item.text not in page.get_textbox(rect):
+            raise SourcePreservingUnsupported("translated text is missing or clipped in its planned PDF slot")
+    if preserved_suffix is None or suffix_rect is None:
+        return
+    region_rects = insertion_rects + [suffix_rect]
+    region = pymupdf.Rect(
+        min(rect.x0 for rect in region_rects) - 1,
+        min(rect.y0 for rect in region_rects) - 1,
+        max(rect.x1 for rect in region_rects) + 1,
+        max(rect.y1 for rect in region_rects) + 1,
+    )
+    extracted = page.get_textbox(region)
+    cursor = 0
+    for item in insertions:
+        position = extracted.find(item.text, cursor)
+        if position < 0:
+            raise SourcePreservingUnsupported("translated text has the wrong PDF extraction order")
+        cursor = position + len(item.text)
+    if extracted.find(preserved_suffix.text, cursor) < 0:
+        raise SourcePreservingUnsupported("original terminal suffix is missing or precedes translated prose")
+
+
 def write_source_preserving_page(
     source_path: Path,
     page_index: int,
     output_path: Path,
     segments: tuple[ExactSourceSegment, ...],
     insertions: tuple[TargetText, ...],
+    preserved_suffix: ExactSourceSegment | None = None,
 ) -> dict:
     """Edit one source page and prove every glyph/pixel outside allowed slots survived."""
     if output_path.exists():
@@ -147,6 +241,9 @@ def write_source_preserving_page(
             raise IndexError("source page index out of range")
         source_page = source[page_index]
         matched_rects = _located_segments(source_page, segments)
+        suffix_rect = _located_segments(source_page, (preserved_suffix,))[0] if preserved_suffix else None
+        if suffix_rect is not None and any(suffix_rect.intersects(rect) for rect in matched_rects):
+            raise SourcePreservingUnsupported("preserved suffix overlaps editable source text")
         if not insertions:
             raise ValueError("at least one target text insertion is required")
         insertion_rects = tuple(pymupdf.Rect(item.allowed_rect) for item in insertions)
@@ -170,6 +267,7 @@ def write_source_preserving_page(
         output = pymupdf.open()
         output.insert_pdf(source, from_page=page_index, to_page=page_index)
         candidate_path = None
+        inline_visual_baseline = None
         try:
             page = output[0]
             copied_contents = page.get_contents()
@@ -184,6 +282,14 @@ def write_source_preserving_page(
             for item in insertions:
                 page.insert_font(fontname=item.fontname, fontfile=str(item.fontfile))
                 page.insert_text(item.origin, item.text, fontname=item.fontname, fontsize=item.fontsize)
+            if suffix_rect is not None:
+                inline_visual_baseline = page.get_pixmap(matrix=pymupdf.Matrix(2, 2), alpha=False).samples
+                page = _inline_before_preserved_suffix(
+                    output, page, copied_contents[0], matched_rects, suffix_rect, insertions, removed_operators
+                )
+                if page.get_pixmap(matrix=pymupdf.Matrix(2, 2), alpha=False).samples != inline_visual_baseline:
+                    raise SourcePreservingUnsupported("inlining translated text changed its rendered appearance")
+            _assert_inserted_text(page, insertions, preserved_suffix, suffix_rect)
             allowed = tuple(matched_rects) + insertion_rects
             if _glyphs_outside(source_page, allowed) != _glyphs_outside(page, allowed):
                 raise SourcePreservingUnsupported("non-target glyph text/font/size/position changed")
@@ -221,6 +327,9 @@ def write_source_preserving_page(
                 if len(persisted) != 1:
                     raise SourcePreservingUnsupported("saved PDF page count changed")
                 saved_page = persisted[0]
+                if inline_visual_baseline is not None and saved_page.get_pixmap(matrix=pymupdf.Matrix(2, 2), alpha=False).samples != inline_visual_baseline:
+                    raise SourcePreservingUnsupported("saved inline PDF changed translated text appearance")
+                _assert_inserted_text(saved_page, insertions, preserved_suffix, suffix_rect)
                 if _glyphs_outside(source_page, allowed) != _glyphs_outside(saved_page, allowed):
                     raise SourcePreservingUnsupported("saved PDF changed non-target glyphs")
                 if not compare_visual_primitives(source_page, saved_page)["passed"]:
@@ -244,6 +353,8 @@ def write_source_preserving_page(
         "unchanged_glyphs_outside_target": True,
         "changed_pixels_outside_target_at_2x": 0,
         "pixel_mask_antialias_margin_pt": RASTER_ANTIALIAS_MARGIN_PT,
+        "reading_order_in_source_stream": preserved_suffix is not None,
+        "inline_appearance_identical_at_2x": True if preserved_suffix is not None else None,
         "visual_primitives": primitives,
         "full_translation_verified": False,
         "formal_use_ready": False,
