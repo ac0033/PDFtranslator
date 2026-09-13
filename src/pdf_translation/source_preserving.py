@@ -16,7 +16,7 @@ import tempfile
 
 import pymupdf
 
-from .pdf_fidelity import compare_visual_primitives
+from .pdf_fidelity import FORMULA_FONT_HINTS, IMMUTABLE_SYMBOLS, compare_visual_primitives
 
 
 SHOW_OPERATION = re.compile(rb"([0-9.]+) 0 0 1 ([0-9.]+) ([0-9.]+) Tm \[(.*?)\]TJ", re.S)
@@ -76,6 +76,14 @@ def _glyphs_outside(page: pymupdf.Page, rects: tuple[pymupdf.Rect, ...]) -> Coun
 def _remove_whole_show_operations(stream: bytes, page: pymupdf.Page, rects: list[pymupdf.Rect]) -> tuple[bytes, int]:
     if page.rotation != 0:
         raise SourcePreservingUnsupported("rotated pages are not supported by this text operator editor")
+    protected_origins = []
+    if hasattr(page, "get_texttrace"):
+        for span in page.get_texttrace():
+            is_math_font = any(hint in span["font"].casefold() for hint in FORMULA_FONT_HINTS)
+            for character in span["chars"]:
+                glyph = chr(character[0]) if isinstance(character[0], int) else character[0]
+                if is_math_font or glyph.isdigit() or glyph in IMMUTABLE_SYMBOLS:
+                    protected_origins.append(pymupdf.Point(character[2]))
     matches_per_rect = [0] * len(rects)
     selected = 0
 
@@ -87,6 +95,8 @@ def _remove_whole_show_operations(stream: bytes, page: pymupdf.Page, rects: list
             return match.group(0)
         if len(selected_rects) != 1:
             raise SourcePreservingUnsupported("a text operation belongs to multiple target segments")
+        if any(origin.distance_to(protected) < 0.05 for protected in protected_origins):
+            raise SourcePreservingUnsupported("target text operation starts with an immutable formula or symbol glyph")
         matches_per_rect[selected_rects[0]] += 1
         selected += 1
         return match.group(0).replace(b"[" + match.group(4) + b"]TJ", b"[]TJ", 1)

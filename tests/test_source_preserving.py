@@ -45,6 +45,17 @@ def test_text_operation_editor_rejects_overlapping_target_regions():
         )
 
 
+def test_text_operation_editor_rejects_math_glyph_at_selected_operator_origin():
+    stream = b"BT\n/F1 10 Tf\n1 0 0 1 10 100 Tm [(P)]TJ\nET"
+    page = SimpleNamespace(
+        rotation=0,
+        transformation_matrix=pymupdf.Identity,
+        get_texttrace=lambda: ({"font": "CMR10", "chars": ((80, 1, (10, 100), (10, 90, 16, 101)),)},),
+    )
+    with pytest.raises(SourcePreservingUnsupported, match="immutable formula or symbol"):
+        _remove_whole_show_operations(stream, page, [pymupdf.Rect(9, 99, 20, 110)])
+
+
 def test_pixel_audit_rejects_change_outside_target_rectangle():
     white = bytes([255] * 12)
     changed = bytes([255, 255, 255, 0, 0, 0, 255, 255, 255, 255, 255, 255])
