@@ -10,7 +10,9 @@ from pdf_translation.source_preserving import (
     TargetText,
     _changed_pixels_outside,
     _assert_inserted_text,
+    _assert_interleaved_reading_order,
     _inline_before_preserved_suffix,
+    _inline_each_removed_operation,
     _remove_whole_show_operations,
     write_source_preserving_page,
 )
@@ -140,6 +142,28 @@ def test_inline_writer_rejects_protected_text_between_target_operations():
         )
 
 
+def test_interleaved_writer_rejects_missing_original_font_reset():
+    stream = (
+        b"BT\n/F1 10 Tf\n1 0 0 1 10 100 Tm []TJ\n"
+        b"1 0 0 1 20 100 Tm [(KEEP)]TJ\nET\n"
+    )
+    document = SimpleNamespace(xref_stream=lambda _xref: stream)
+    page = SimpleNamespace(transformation_matrix=pymupdf.Identity)
+    item = TargetText("甲", (10, 100), (9, 90, 20, 110), Path("C:/Windows/Fonts/simfang.ttf"), "zh-fangsong", 10)
+    with pytest.raises(SourcePreservingUnsupported, match="explicit font reset"):
+        _inline_each_removed_operation(
+            document, page, 1, [pymupdf.Rect(9, 99, 12, 102)], (item,), 1
+        )
+
+
+def test_interleaved_reading_order_rejects_original_anchor_before_chinese():
+    font = Path("C:/Windows/Fonts/simfang.ttf")
+    item = TargetText("甲", (10, 100), (9, 90, 20, 110), font, "zh-fangsong", 10)
+    page = SimpleNamespace(get_textbox=lambda _rect: "1甲")
+    with pytest.raises(SourcePreservingUnsupported, match="wrong extraction order"):
+        _assert_interleaved_reading_order(page, (item,), ("甲", "1"))
+
+
 def test_source_page_copy_replaces_only_one_text_operation(tmp_path: Path):
     font = Path("C:/Windows/Fonts/simfang.ttf")
     if not font.is_file():
@@ -217,3 +241,41 @@ def test_inline_chinese_precedes_unmoved_numeric_suffix_in_pdf_text_order(tmp_pa
         text = after[0].get_textbox(pymupdf.Rect(40, 65, 175, 110))
         assert text.index("甲乙。") < text.index("合计为") < text.index("1:")
         assert before[0].search_for("1:") == after[0].search_for("1:")
+
+
+def test_interleaved_chinese_preserves_number_between_source_operations(tmp_path: Path):
+    font = Path("C:/Windows/Fonts/simfang.ttf")
+    if not font.is_file():
+        pytest.skip("Chinese font fixture is unavailable")
+    source = tmp_path / "source.pdf"
+    target = tmp_path / "target.pdf"
+    document = pymupdf.open()
+    page = document.new_page(width=400, height=400)
+    page.insert_font(fontname="helv")
+    content_xref = document.get_new_xref()
+    document.update_object(content_xref, "<<>>")
+    document.update_stream(
+        content_xref,
+        b"BT\n/helv 12 Tf\n1 0 0 1 50 320 Tm [(Hello)]TJ\n"
+        b"/helv 12 Tf\n1 0 0 1 110 320 Tm [(1)]TJ\n"
+        b"/helv 12 Tf\n1 0 0 1 125 320 Tm [(world)]TJ\n"
+        b"/helv 12 Tf\n1 0 0 1 250 320 Tm [(END)]TJ\nET\n",
+    )
+    page.set_contents(content_xref)
+    document.save(source)
+    document.close()
+    result = write_source_preserving_page(
+        source, 0, target,
+        (ExactSourceSegment("Hello", (45, 65, 85, 90)), ExactSourceSegment("world", (120, 65, 170, 90))),
+        (
+            TargetText("甲", (50, 80), (49, 65, 75, 85), font, "zh-fangsong", 12),
+            TargetText("乙", (125, 80), (124, 65, 150, 85), font, "zh-fangsong", 12),
+        ),
+        interleaved_reading_order=("甲", "1", "乙"),
+    )
+    assert result["reading_order_in_source_stream"]
+    assert result["inline_appearance_identical_at_2x"]
+    with pymupdf.open(source) as before, pymupdf.open(target) as after:
+        text = after[0].get_textbox(pymupdf.Rect(45, 65, 155, 90))
+        assert text.index("甲") < text.index("1") < text.index("乙")
+        assert before[0].search_for("1") == after[0].search_for("1")
