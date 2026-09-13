@@ -1,4 +1,5 @@
 from pathlib import Path
+import hashlib
 
 import pymupdf
 import pytest
@@ -8,12 +9,20 @@ from pdf_translation.source_mapping import (
     editable_segments,
     terminal_immutable_suffix,
     map_placeholder_capture_fragment,
+    map_single_line_mixed_native_prose,
     map_plain_capture_fragment,
     normalized_pdf_text,
     plan_single_line_fragment_insertions,
     plan_terminal_suffix_paragraph,
 )
-from pdf_translation.source_preserving import SourcePreservingUnsupported
+from pdf_translation.source_preserving import (
+    SourcePreservingUnsupported,
+    _changed_pixels_outside,
+    _glyphs_outside,
+    _located_segments,
+    _remove_whole_show_operations,
+)
+from pdf_translation.pdf_fidelity import compare_visual_primitives
 
 
 def test_normalization_keeps_number_and_operator_meaning():
@@ -72,6 +81,52 @@ def test_placeholder_capture_maps_real_pdf_line_break_hyphenation():
     mapping = map_placeholder_capture_fragment(page, record)
     assert [segment.text for segment in mapping.segments] == ["The nota-", "tion is clear."]
     document.close()
+
+
+def test_real_single_line_native_mapping_preserves_inline_formula_and_variable():
+    source = Path("pdf/dm.pdf")
+    expected_hash = "297196f2cad5ab23cf4855f815fd69e7b7b9ee9c31255f743b668416677ad24e"
+    if not source.is_file() or hashlib.sha256(source.read_bytes()).hexdigest() != expected_hash:
+        pytest.skip("registered PDF source fixture is unavailable or has changed")
+    record = {
+        "fragment_id": "p0042-f6948205fd388",
+        "bbox": (35.446998596191406, 567.2230224609375, 280.577392578125, 579.0684814453125),
+        "bbox_confidence": 0.988764,
+        "babeldoc_text": "we use P(x<b1>) to represent the probability that X is false.",
+        "marker_map": {"protected-0": "<b1>"},
+        "protected_only": False,
+    }
+    with pymupdf.open(source) as document:
+        page = document[41]
+        mapping = map_single_line_mixed_native_prose(page, record)
+        assert [segment.text for segment in mapping.segments] == [
+            "we use", "to represent the probability that", "is false.",
+        ]
+        rects = _located_segments(page, mapping.segments)
+        edited, count = _remove_whole_show_operations(document.xref_stream(page.get_contents()[0]), page, rects)
+        assert count == 3
+        copied = pymupdf.open()
+        try:
+            copied.insert_pdf(document, from_page=41, to_page=41)
+            target = copied[0]
+            copied.update_stream(target.get_contents()[0], edited)
+            assert all(not target.get_textbox(rect).strip() for rect in rects)
+            assert _glyphs_outside(page, tuple(rects)) == _glyphs_outside(target, tuple(rects))
+            assert compare_visual_primitives(page, target)["passed"]
+            mask = tuple(pymupdf.Rect(r.x0 - 0.5, r.y0 - 0.5, r.x1 + 0.5, r.y1 + 0.5) for r in rects)
+            assert _changed_pixels_outside(page, target, mask)[0] == 0
+        finally:
+            copied.close()
+        with pytest.raises(SourcePreservingUnsupported, match="not uniquely aligned"):
+            map_single_line_mixed_native_prose(
+                document[41], {**record, "babeldoc_text": record["babeldoc_text"].replace("P(x", "P(y")},
+            )
+        with pytest.raises(SourcePreservingUnsupported, match="confidence is too low"):
+            map_single_line_mixed_native_prose(document[41], {**record, "bbox_confidence": 0.2})
+        with pytest.raises(SourcePreservingUnsupported, match="exactly one protected marker"):
+            map_single_line_mixed_native_prose(
+                document[41], {**record, "marker_map": {"first": "<b1>", "second": "<b2>"}},
+            )
 
 
 def test_single_line_planner_uses_saved_target_and_native_geometry():

@@ -14,6 +14,7 @@ import unicodedata
 
 import pymupdf
 
+from .pdf_fidelity import FORMULA_FONT_HINTS, IMMUTABLE_SYMBOLS
 from .source_preserving import ExactSourceSegment, SourcePreservingUnsupported, TargetText, _located_segments
 
 
@@ -165,6 +166,76 @@ def map_placeholder_capture_fragment(page: pymupdf.Page, record: dict) -> PlainF
         line_count=len(segments),
         bbox_confidence=float(record.get("bbox_confidence", 0.0)),
     )
+
+
+def _immutable_native_span(span: dict) -> bool:
+    """Conservatively leave single-letter variables and non-prose glyphs in place."""
+    value = span["text"].strip()
+    return (
+        any(hint in span["font"].casefold() for hint in FORMULA_FONT_HINTS)
+        or any(character.isdigit() or character in IMMUTABLE_SYMBOLS for character in value)
+        or (len(value) == 1 and value.isascii() and value.isalpha())
+    )
+
+
+def map_single_line_mixed_native_prose(page: pymupdf.Page, record: dict) -> PlainFragmentMapping:
+    """Isolate one mixed line's prose when its sole marker equals one native span.
+
+    Unlike a coarse search rectangle, the candidate spans omit the source PDF's
+    formula glyphs. The marker must align to exactly one immutable native span;
+    a missing/ambiguous span or a multi-line capture fails closed. The caller
+    must still run whole-operation, glyph, primitive and pixel audits.
+    """
+    marker_map = record.get("marker_map") or {}
+    if record.get("protected_only") or len(marker_map) != 1:
+        raise SourcePreservingUnsupported("native mixed-line mapping requires exactly one protected marker")
+    confidence = float(record.get("bbox_confidence", 0.0))
+    if confidence < MIN_CAPTURE_BBOX_CONFIDENCE:
+        raise SourcePreservingUnsupported("native mixed-line source location confidence is too low")
+    marker = next(iter(marker_map.values()))
+    source = record.get("babeldoc_text", "")
+    if source.count(marker) != 1 or len(re.findall(r"<[^>]+>", source)) != 1:
+        raise SourcePreservingUnsupported("native mixed-line protected marker occurrence is ambiguous")
+    before, after = source.split(marker)
+    capture_bbox = pymupdf.Rect(record["bbox"])
+    lines = [
+        line for block in page.get_text("dict")["blocks"]
+        for line in block.get("lines", [])
+        if capture_bbox.contains((pymupdf.Rect(line["bbox"]).tl + pymupdf.Rect(line["bbox"]).br) / 2)
+    ]
+    if len(lines) != 1:
+        raise SourcePreservingUnsupported("native mixed-line capture does not uniquely cover one PDF line")
+    spans = lines[0]["spans"]
+    marker_indices = [
+        index for index, span in enumerate(spans)
+        if _immutable_native_span(span)
+        and normalized_pdf_text("".join(item["text"] for item in spans[:index])) == normalized_pdf_text(before)
+        and normalized_pdf_text("".join(item["text"] for item in spans[index + 1:])) == normalized_pdf_text(after)
+    ]
+    if len(marker_indices) != 1:
+        raise SourcePreservingUnsupported("protected marker is not uniquely aligned to one native PDF span")
+    marker_index = marker_indices[0]
+    segments = []
+    for index, span in enumerate(spans):
+        if index == marker_index or _immutable_native_span(span):
+            continue
+        prose = span["text"].strip()
+        if not prose:
+            continue
+        bbox = pymupdf.Rect(span["bbox"])
+        segments.append(ExactSourceSegment(
+            prose,
+            (
+                bbox.x0 - LINE_CLIP_MARGIN_PT,
+                bbox.y0 - LINE_CLIP_MARGIN_PT,
+                bbox.x1 + LINE_CLIP_MARGIN_PT,
+                bbox.y1 + LINE_CLIP_MARGIN_PT,
+            ),
+        ))
+    if not segments:
+        raise SourcePreservingUnsupported("native mixed-line capture has no isolated prose spans")
+    _located_segments(page, tuple(segments))
+    return PlainFragmentMapping(record["fragment_id"], tuple(segments), 1, confidence)
 
 
 def plan_single_line_fragment_insertions(
