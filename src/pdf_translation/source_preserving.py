@@ -1,0 +1,244 @@
+"""Fail-closed editing of simple PDF text-show operations on a source-page copy.
+
+This supports only pages whose target text can be isolated as whole TJ operations
+with explicit Tm positions in one content stream. Unsupported pages must use a
+different editor; they must never silently fall back to whole-page replay.
+"""
+
+from __future__ import annotations
+
+from collections import Counter
+from dataclasses import dataclass
+import os
+from pathlib import Path
+import re
+import tempfile
+
+import pymupdf
+
+from .pdf_fidelity import compare_visual_primitives
+
+
+SHOW_OPERATION = re.compile(rb"([0-9.]+) 0 0 1 ([0-9.]+) ([0-9.]+) Tm \[(.*?)\]TJ", re.S)
+RASTER_ANTIALIAS_MARGIN_PT = 0.25
+
+
+class SourcePreservingUnsupported(RuntimeError):
+    """The source page cannot be edited without risking other page objects."""
+
+
+@dataclass(frozen=True)
+class ExactSourceSegment:
+    text: str
+    search_clip: tuple[float, float, float, float]
+
+
+@dataclass(frozen=True)
+class TargetText:
+    text: str
+    origin: tuple[float, float]
+    allowed_rect: tuple[float, float, float, float]
+    fontfile: Path
+    fontname: str
+    fontsize: float
+
+
+def _located_segments(page: pymupdf.Page, segments: tuple[ExactSourceSegment, ...]) -> list[pymupdf.Rect]:
+    if not segments:
+        raise ValueError("at least one exact source segment is required")
+    result = []
+    for segment in segments:
+        clip = pymupdf.Rect(segment.search_clip)
+        found = [rect for rect in page.search_for(segment.text, clip=clip) if clip.contains(rect)]
+        if len(found) != 1 or page.get_textbox(found[0]) != segment.text:
+            raise SourcePreservingUnsupported(f"source text is not uniquely and exactly located: {segment.text!r}")
+        result.append(found[0])
+    return result
+
+
+def _glyph_is_in_rects(character: tuple, rects: tuple[pymupdf.Rect, ...]) -> bool:
+    bbox = pymupdf.Rect(character[3])
+    origin = pymupdf.Point(character[2])
+    return any(rect.intersects(bbox) or rect.contains(origin) for rect in rects)
+
+
+def _glyphs_outside(page: pymupdf.Page, rects: tuple[pymupdf.Rect, ...]) -> Counter:
+    return Counter(
+        (character[0], span["font"], span["size"], tuple(character[2]), tuple(character[3]))
+        for span in page.get_texttrace()
+        for character in span["chars"]
+        if not _glyph_is_in_rects(character, rects)
+    )
+
+
+def _remove_whole_show_operations(stream: bytes, page: pymupdf.Page, rects: list[pymupdf.Rect]) -> tuple[bytes, int]:
+    if page.rotation != 0:
+        raise SourcePreservingUnsupported("rotated pages are not supported by this text operator editor")
+    matches_per_rect = [0] * len(rects)
+    selected = 0
+
+    def replace(match: re.Match[bytes]) -> bytes:
+        nonlocal selected
+        origin = pymupdf.Point(float(match.group(2)), float(match.group(3))) * page.transformation_matrix
+        selected_rects = [index for index, rect in enumerate(rects) if rect.contains(origin)]
+        if not selected_rects:
+            return match.group(0)
+        if len(selected_rects) != 1:
+            raise SourcePreservingUnsupported("a text operation belongs to multiple target segments")
+        matches_per_rect[selected_rects[0]] += 1
+        selected += 1
+        return match.group(0).replace(b"[" + match.group(4) + b"]TJ", b"[]TJ", 1)
+
+    edited = SHOW_OPERATION.sub(replace, stream)
+    if not all(matches_per_rect):
+        raise SourcePreservingUnsupported("some target text has no isolated TJ operation")
+    return edited, selected
+
+
+def _changed_pixels_outside(
+    source: pymupdf.Page, target: pymupdf.Page, allowed: tuple[pymupdf.Rect, ...], scale: int = 2
+) -> tuple[int, list[tuple[float, float]]]:
+    matrix = pymupdf.Matrix(scale, scale)
+    a = source.get_pixmap(matrix=matrix, alpha=False)
+    b = target.get_pixmap(matrix=matrix, alpha=False)
+    if (a.width, a.height, a.n) != (b.width, b.height, b.n):
+        raise SourcePreservingUnsupported("source and target raster dimensions differ")
+    first = memoryview(a.samples)
+    second = memoryview(b.samples)
+    changed = 0
+    samples = []
+    for y in range(a.height):
+        row = y * a.width * a.n
+        intervals = sorted(
+            (max(0, int(rect.x0 * scale)), min(a.width, int(rect.x1 * scale) + 1))
+            for rect in allowed
+            if rect.y0 * scale <= y <= rect.y1 * scale
+        )
+        current = 0
+        for left, right in intervals + [(a.width, a.width)]:
+            for x in range(current, max(current, left)):
+                offset = row + x * a.n
+                if first[offset : offset + a.n] != second[offset : offset + a.n]:
+                    changed += 1
+                    if len(samples) < 10:
+                        samples.append((x / scale, y / scale))
+            current = max(current, right)
+    return changed, samples
+
+
+def write_source_preserving_page(
+    source_path: Path,
+    page_index: int,
+    output_path: Path,
+    segments: tuple[ExactSourceSegment, ...],
+    insertions: tuple[TargetText, ...],
+) -> dict:
+    """Edit one source page and prove every glyph/pixel outside allowed slots survived."""
+    if output_path.exists():
+        raise FileExistsError(f"refusing to overwrite existing PDF: {output_path}")
+    with pymupdf.open(source_path) as source:
+        if page_index < 0 or page_index >= len(source):
+            raise IndexError("source page index out of range")
+        source_page = source[page_index]
+        matched_rects = _located_segments(source_page, segments)
+        if not insertions:
+            raise ValueError("at least one target text insertion is required")
+        insertion_rects = tuple(pymupdf.Rect(item.allowed_rect) for item in insertions)
+        for item, rect in zip(insertions, insertion_rects):
+            if not item.fontfile.is_file() or item.fontsize <= 0 or not rect.contains(pymupdf.Point(item.origin)):
+                raise ValueError("target font, size or insertion geometry is invalid")
+            if any(
+                _glyph_is_in_rects(char, (rect,)) and not _glyph_is_in_rects(char, tuple(matched_rects))
+                for span in source_page.get_texttrace()
+                for char in span["chars"]
+            ):
+                raise SourcePreservingUnsupported("target insertion slot intersects unchanged source glyphs")
+            if any(rect.intersects(pymupdf.Rect(path["rect"])) for path in source_page.get_drawings()):
+                raise SourcePreservingUnsupported("target insertion slot intersects source vector graphics")
+            if any(rect.intersects(pymupdf.Rect(image["bbox"])) for image in source_page.get_image_info()):
+                raise SourcePreservingUnsupported("target insertion slot intersects a source image")
+        contents = source_page.get_contents()
+        if len(contents) != 1:
+            raise SourcePreservingUnsupported("expected exactly one source content stream")
+        original_stream = source.xref_stream(contents[0])
+        output = pymupdf.open()
+        output.insert_pdf(source, from_page=page_index, to_page=page_index)
+        candidate_path = None
+        try:
+            page = output[0]
+            copied_contents = page.get_contents()
+            if len(copied_contents) != 1 or output.xref_stream(copied_contents[0]) != original_stream:
+                raise SourcePreservingUnsupported("copy changed the source page content stream")
+            edited_stream, removed_operators = _remove_whole_show_operations(original_stream, source_page, matched_rects)
+            output.update_stream(copied_contents[0], edited_stream)
+            if _glyphs_outside(source_page, tuple(matched_rects)) != _glyphs_outside(page, tuple(matched_rects)):
+                raise SourcePreservingUnsupported("removing target operations changed other source glyphs")
+            if any(page.get_textbox(rect).strip() for rect in matched_rects):
+                raise SourcePreservingUnsupported("source text remains in a target segment after removal")
+            for item in insertions:
+                page.insert_font(fontname=item.fontname, fontfile=str(item.fontfile))
+                page.insert_text(item.origin, item.text, fontname=item.fontname, fontsize=item.fontsize)
+            allowed = tuple(matched_rects) + insertion_rects
+            if _glyphs_outside(source_page, allowed) != _glyphs_outside(page, allowed):
+                raise SourcePreservingUnsupported("non-target glyph text/font/size/position changed")
+            primitives = compare_visual_primitives(source_page, page)
+            if not primitives["passed"]:
+                raise SourcePreservingUnsupported("source page images, vectors or mathematical glyphs changed")
+            pixel_allowed = tuple(
+                pymupdf.Rect(
+                    rect.x0 - RASTER_ANTIALIAS_MARGIN_PT,
+                    rect.y0 - RASTER_ANTIALIAS_MARGIN_PT,
+                    rect.x1 + RASTER_ANTIALIAS_MARGIN_PT,
+                    rect.y1 + RASTER_ANTIALIAS_MARGIN_PT,
+                )
+                for rect in allowed
+            )
+            changed_outside, pixel_samples = _changed_pixels_outside(source_page, page, pixel_allowed)
+            if changed_outside:
+                raise SourcePreservingUnsupported(
+                    f"{changed_outside} pixels changed outside target text regions; samples={pixel_samples}"
+                )
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            handle, candidate_name = tempfile.mkstemp(prefix=".source-preserving-", suffix=".pdf", dir=output_path.parent)
+            os.close(handle)
+            candidate_path = Path(candidate_name)
+            candidate_path.unlink()
+            output.save(candidate_path, garbage=4, deflate=True)
+        except BaseException:
+            if candidate_path is not None:
+                candidate_path.unlink(missing_ok=True)
+            raise
+        finally:
+            output.close()
+        try:
+            with pymupdf.open(candidate_path) as persisted:
+                if len(persisted) != 1:
+                    raise SourcePreservingUnsupported("saved PDF page count changed")
+                saved_page = persisted[0]
+                if _glyphs_outside(source_page, allowed) != _glyphs_outside(saved_page, allowed):
+                    raise SourcePreservingUnsupported("saved PDF changed non-target glyphs")
+                if not compare_visual_primitives(source_page, saved_page)["passed"]:
+                    raise SourcePreservingUnsupported("saved PDF changed original visual primitives")
+                saved_pixel_diff, pixel_samples = _changed_pixels_outside(source_page, saved_page, pixel_allowed)
+                if saved_pixel_diff:
+                    raise SourcePreservingUnsupported(
+                        f"saved PDF changed {saved_pixel_diff} pixels outside target regions; samples={pixel_samples}"
+                    )
+            if output_path.exists():
+                raise FileExistsError(f"output PDF appeared during verification: {output_path}")
+            # A same-directory hard link is atomic and refuses an existing name,
+            # unlike os.replace(), which could overwrite a concurrent output.
+            os.link(candidate_path, output_path)
+        finally:
+            candidate_path.unlink(missing_ok=True)
+    return {
+        "source_page": page_index + 1,
+        "target_segment_count": len(segments),
+        "removed_text_operators": removed_operators,
+        "unchanged_glyphs_outside_target": True,
+        "changed_pixels_outside_target_at_2x": 0,
+        "pixel_mask_antialias_margin_pt": RASTER_ANTIALIAS_MARGIN_PT,
+        "visual_primitives": primitives,
+        "full_translation_verified": False,
+        "formal_use_ready": False,
+    }
