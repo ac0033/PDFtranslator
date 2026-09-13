@@ -1,11 +1,15 @@
 from pathlib import Path
+import json
+from types import SimpleNamespace
 
 import pymupdf
 import pytest
 
 from pdf_translation import babeldoc_adapter
-from pdf_translation.babeldoc_adapter import ContentMatcher, canonicalize_babeldoc_text, locate_source_bbox, restore_babeldoc_placeholders
+from pdf_translation.babeldoc_adapter import ContentMatcher, _write_content_review_queue, canonicalize_babeldoc_text, locate_source_bbox, restore_babeldoc_placeholders, validate_capture_identity
 from pdf_translation.config import load_config
+from pdf_translation.hashing import sha256_file, stable_hash
+from pdf_translation.schemas import TranslationUnit
 
 
 def test_babeldoc_placeholders_round_trip_and_have_distinct_occurrences():
@@ -79,3 +83,42 @@ def test_reuse_capture_checks_files_before_loading_layout_model(tmp_path: Path, 
             tmp_path / "capture",
             reuse_capture=True,
         )
+
+
+def test_reused_capture_rejects_wrong_pdf_identity(tmp_path: Path):
+    source = tmp_path / "source.pdf"
+    source.write_bytes(b"pdf identity A")
+    text = "A sentence."
+    wrong = TranslationUnit(unit_id="u1", document_id="other-document", ir_revision="test", unit_type="paragraph", source_lang="en", target_lang="zh-CN", source_text=text, source_hash=stable_hash(text))
+    with pytest.raises(ValueError, match="source PDF hash"):
+        validate_capture_identity(source, (0,), [wrong], {0: [{"unit_id": "u1"}]})
+
+
+def test_reused_capture_rejects_wrong_page_selection(tmp_path: Path):
+    source = tmp_path / "source.pdf"
+    source.write_bytes(b"pdf identity B")
+    text = "A sentence."
+    document_id = f"{source.stem}-{sha256_file(source)[:16]}"
+    value = TranslationUnit(unit_id="u1", document_id=document_id, ir_revision="test", unit_type="paragraph", source_lang="en", target_lang="zh-CN", source_text=text, source_hash=stable_hash(text))
+    with pytest.raises(ValueError, match="page set"):
+        validate_capture_identity(source, (0,), [value], {1: [{"unit_id": "u1"}]})
+
+
+def test_content_review_queue_keeps_a_blocked_translation_available(tmp_path: Path):
+    text = "A sentence about probability."
+    value = TranslationUnit(unit_id="u1", document_id="doc", ir_revision="test", unit_type="paragraph", source_lang="en", target_lang="zh-CN", source_text=text, source_hash=stable_hash(text))
+
+    class FakeStore:
+        def quality_reports(self, run_id):
+            return [{"unit_id": "u1", "state": "needs_review", "quality": {"result_hash": "a" * 64, "issues": [{"category": "number"}]}}]
+
+        def result(self, run_id, unit_id):
+            return SimpleNamespace(draft=SimpleNamespace(translated_text="关于概率的一句话。"))
+
+    output = tmp_path / "content-review.jsonl"
+    _write_content_review_queue([value], FakeStore(), "run", output)
+    row = json.loads(output.read_text(encoding="utf-8"))
+    assert row["source_text"] == text
+    assert row["translated_text"] == "关于概率的一句话。"
+    assert row["meaning_equivalent_human_review"] is None
+    assert row["state"] == "needs_review"

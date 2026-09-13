@@ -63,3 +63,29 @@ def test_pdf_context_can_cross_consecutive_pages_but_skips_protected_units():
     assert enriched["body-a"].neighbor_ids == ("body-b",)
     assert enriched["body-b"].neighbor_ids == ("body-a",)
     assert enriched["formula"].neighbor_ids == ()
+
+
+def test_pdf_context_does_not_cross_section_boundary():
+    values = [
+        unit("old-body", "Previous section ends here.", 41, 90),
+        unit("new-heading", "2.3 Bayesian Networks", 41, 120),
+        unit("new-body", "A network represents dependencies.", 41, 150),
+    ]
+    values[0] = values[0].model_copy(update={"section_path": ("2.2 Probability Distributions",)})
+    enriched = {value.unit_id: value for value in enrich_pdf_units_with_context(values)}
+    assert enriched["old-body"].neighbor_ids == ()
+    assert enriched["new-heading"].neighbor_ids == ("new-body",)
+    assert enriched["new-body"].neighbor_ids == ("new-heading",)
+
+
+def test_pdf_context_excludes_copyright_footer_and_recomputes_stale_links():
+    values = [
+        unit("body-a", "A distribution assigns probability.", 41, 90),
+        unit("footer", "© 2022 MIT, shared under Creative Commons CC-BY-NC-ND.", 41, 600),
+        unit("body-b", "The density integrates to one.", 42, 90),
+    ]
+    values[0] = values[0].model_copy(update={"neighbor_ids": ("footer",)})
+    enriched = {value.unit_id: value for value in enrich_pdf_units_with_context(values)}
+    assert enriched["body-a"].neighbor_ids == ("body-b",)
+    assert enriched["body-b"].neighbor_ids == ("body-a",)
+    assert enriched["footer"].neighbor_ids == ()

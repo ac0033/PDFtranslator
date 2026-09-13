@@ -4,10 +4,11 @@ import json
 from pathlib import Path
 from typing import Annotated
 
+import pymupdf
 import typer
 from dotenv import load_dotenv
 
-from .babeldoc_adapter import capture_pdf_sample, run_one_page_spike, run_smoke_document
+from .babeldoc_adapter import capture_pdf_sample, run_one_page_spike, run_smoke_document, validate_capture_identity
 from .ab_experiment import MAX_COMBINED_AB_BUDGET_USD, approved_execution_configs, build_blind_review, prepare_ab_manifest
 from .benchmark import build_samples
 from .config import load_config
@@ -16,9 +17,10 @@ from .context_models import ContextBundle, GlossaryEntry, Scope, StyleRule, make
 from .context_router import build_context_packet
 from .context_store import ContextStore
 from .document_context import enrich_pdf_units_with_context
-from .hashing import sha256_bytes, stable_hash
+from .hashing import sha256_bytes, sha256_file, stable_hash
 from .manifest import BenchmarkManifest, load_manifest, load_units
 from .pdf_adapter import inspect_pdf
+from .pdf_fidelity import audit_pdf_primitives
 from .pipeline import DEFAULT_TRANSLATION_STYLE, estimate_units, make_request, run_units
 from .schemas import TranslationUnit
 from .storage import StateStore
@@ -170,6 +172,104 @@ def capture_development(
         raise typer.BadParameter("manifest has no frozen development sample")
     document = (manifest.parent / current.document_uri).resolve()
     typer.echo(json.dumps(capture_pdf_sample(document, sample.page_indices, output_dir, capture_root), ensure_ascii=False, indent=2))
+
+
+@app.command("pdf-translate")
+def pdf_translate(
+    input: Annotated[Path, typer.Option("--input")],
+    config: Annotated[Path, typer.Option("--config")],
+    output_root: Annotated[Path, typer.Option("--output-root")] = Path("output/pdf/production"),
+    runs_root: Annotated[Path, typer.Option("--runs-root")] = Path("runs"),
+    capture_root: Annotated[Path, typer.Option("--capture-root")] = Path("tmp/pdfs/production"),
+    source_page: Annotated[list[int] | None, typer.Option("--source-page", help="One-based physical page; repeat to test a selection. Omit for the full PDF.")] = None,
+    execute_paid: Annotated[bool, typer.Option("--execute-paid")] = False,
+    reuse_capture: Annotated[bool, typer.Option("--reuse-capture")] = False,
+) -> None:
+    """Run a context-first PDF translation without a benchmark A/B dependency."""
+    if not input.is_file():
+        raise typer.BadParameter("--input must be an existing PDF")
+    with pymupdf.open(input) as source_pdf:
+        page_count = len(source_pdf)
+    pages = tuple(page - 1 for page in source_page) if source_page else tuple(range(page_count))
+    if not pages or len(set(pages)) != len(pages) or any(page < 0 or page >= page_count for page in pages):
+        raise typer.BadParameter("source pages must be unique and within the physical PDF page range")
+    base_config = load_config(config)
+    if base_config.context_engine != "v1" or not base_config.context_db:
+        raise typer.BadParameter("pdf-translate requires V1 neighboring context and a context_db")
+    source_hash = sha256_file(input)
+    selection_hash = stable_hash(pages)[:8]
+    run_config = base_config.model_copy(update={"run_id": f"{base_config.run_id}-{source_hash[:12]}-{selection_hash}"})
+    work_dir = output_root / f"{input.stem}-{source_hash[:12]}" / selection_hash
+    units_path = work_dir / "units.jsonl"
+    if not reuse_capture:
+        if units_path.exists():
+            raise typer.BadParameter("capture already exists; use --reuse-capture or a different output root")
+        capture_pdf_sample(input, pages, work_dir, capture_root / f"{input.stem}-{source_hash[:12]}" / selection_hash)
+    units = _load_captured_units(units_path)
+    records_by_page: dict[int, list[dict]] = {}
+    for line in (work_dir / "capture-map.jsonl").read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            record = json.loads(line)
+            records_by_page.setdefault(record["page_index"], []).append(record)
+    validate_capture_identity(input, pages, units, records_by_page)
+    context_store = ContextStore(Path(run_config.context_db))
+    document_id = units[0].document_id
+    if not any(rule.status == "approved" and rule.scope.kind == "document" and rule.scope.value == document_id for rule in context_store.styles()):
+        context_store.put_style(
+            StyleRule(
+                rule_id=f"default-style-{document_id}",
+                content=DEFAULT_TRANSLATION_STYLE,
+                scope=Scope(kind="document", value=document_id),
+                version="v0.7-default-style",
+            )
+        )
+    report = run_smoke_document(
+        input, pages, run_config, work_dir, runs_root,
+        capture_root / f"{input.stem}-{source_hash[:12]}" / selection_hash,
+        execute_paid=execute_paid,
+        reuse_capture=True,
+        sample_name="full" if len(pages) == page_count else "selection",
+    )
+    report["formal_use_ready"] = False
+    report.setdefault("formal_use_blockers", ["translation or rendering has not passed all formal-use gates"])
+    if report.get("mono_pdf"):
+        fidelity_path = work_dir / "nontext.audit.json"
+        fidelity = audit_pdf_primitives(input, work_dir / report["mono_pdf"], pages)
+        fidelity_path.write_text(json.dumps(fidelity, ensure_ascii=False, indent=2), encoding="utf-8")
+        report["nontext_audit"] = fidelity_path.name
+        report["visual_primitives_passed"] = fidelity["visual_primitives_passed"]
+        report["full_non_text_fidelity_verified"] = False
+        report["formal_use_ready"] = False
+        blockers = []
+        if not fidelity["visual_primitives_passed"]:
+            blockers.append("visual primitives or math-font glyphs differ from the source")
+        if report["low_bbox_matches"]:
+            blockers.append("low-confidence source text locations require review")
+        blockers.extend((
+            "unchanged glyphs outside recognized math fonts are not yet verified",
+            "source/target meaning equivalence is not yet human-verified",
+        ))
+        report["formal_use_blockers"] = blockers
+        if not fidelity["visual_primitives_passed"]:
+            report["status"] = "visual_primitive_gate_blocked"
+        (work_dir / "run.report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    typer.echo(json.dumps({"output_dir": str(work_dir), **report}, ensure_ascii=False, indent=2))
+
+
+@app.command("audit-nontext")
+def audit_nontext(
+    source: Annotated[Path, typer.Option("--source")],
+    translated: Annotated[Path, typer.Option("--translated")],
+    source_page: Annotated[list[int], typer.Option("--source-page", help="One-based source PDF page; repeat in translated PDF order.")],
+    output: Annotated[Path, typer.Option("--output")],
+) -> None:
+    """Check unchanged visual primitives; report text-glyph fidelity as unverified."""
+    if not source_page:
+        raise typer.BadParameter("provide at least one --source-page")
+    report = audit_pdf_primitives(source, translated, tuple(page - 1 for page in source_page))
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    typer.echo(json.dumps(report, ensure_ascii=False, indent=2))
 
 
 @app.command()

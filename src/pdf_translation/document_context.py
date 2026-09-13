@@ -10,10 +10,15 @@ MARKER = re.compile(r"⟦P:[^⟧]+⟧")
 CHAPTER_HEADING = re.compile(r"^\s*(?:\d+\s+)?(chapter\s+\d+\b[^!?]{0,120})\s*$", re.IGNORECASE)
 SECTION_HEADING = re.compile(r"^\s*((?:\d+\.)+\d*)\s+([^.!?]{1,120})\s*$")
 NUMBERED_HEADING = re.compile(r"^((?:\d+\.)+\d*)\b")
+RUNNING_MATTER = re.compile(r"(?:©|\bcopyright\b|creative\s+commons|\bcc-by(?:-[a-z]+)*\b|\bcomments\s+to\s+\S+@)", re.IGNORECASE)
 
 
 def _visible_text(unit: TranslationUnit) -> str:
     return " ".join(MARKER.sub("", unit.source_text).split())
+
+
+def _is_running_matter(unit: TranslationUnit) -> bool:
+    return bool(RUNNING_MATTER.search(_visible_text(unit)))
 
 
 def _order_key(unit: TranslationUnit) -> tuple[int, float, float, str]:
@@ -76,7 +81,7 @@ def enrich_pdf_units_with_context(units: list[TranslationUnit]) -> list[Translat
     for unit in unpaged:
         sections[unit.unit_id] = unit.section_path
 
-    eligible = [unit for unit in ordered if unit.unit_type not in {"code", "protected"}]
+    eligible = [unit for unit in ordered if unit.unit_type not in {"code", "protected"} and not _is_running_matter(unit)]
     inferred_neighbors: dict[str, list[str]] = defaultdict(list)
     for index, unit in enumerate(eligible):
         unit_page = _page_index(unit)
@@ -85,13 +90,14 @@ def enrich_pdf_units_with_context(units: list[TranslationUnit]) -> list[Translat
                 continue
             neighbor = eligible[neighbor_index]
             neighbor_page = _page_index(neighbor)
-            if unit_page is None or neighbor_page is None or abs(unit_page - neighbor_page) <= 1:
+            same_section = sections[unit.unit_id] == sections[neighbor.unit_id]
+            if same_section and (unit_page is None or neighbor_page is None or abs(unit_page - neighbor_page) <= 1):
                 inferred_neighbors[unit.unit_id].append(neighbor.unit_id)
 
     enriched: list[TranslationUnit] = []
     for unit in units:
-        neighbors = tuple(dict.fromkeys((*unit.neighbor_ids, *inferred_neighbors[unit.unit_id])))
-        risk_tags = tuple(sorted(set(unit.risk_tags) | {"context_graph_v0.6"}))
+        neighbors = tuple(dict.fromkeys(inferred_neighbors[unit.unit_id]))
+        risk_tags = tuple(sorted(set(unit.risk_tags) | {"context_graph_v0.7"}))
         enriched.append(
             unit.model_copy(
                 update={

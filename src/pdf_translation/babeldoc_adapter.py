@@ -15,7 +15,7 @@ import pymupdf
 from .config import RunConfig
 from .document_context import enrich_pdf_units_with_context
 from .hashing import sha256_bytes, sha256_file, stable_hash
-from .pipeline import estimate_units, run_units
+from .pipeline import ProviderAttemptsExhausted, estimate_units, run_units
 from .schemas import ArtifactRef, ProtectedSpan, SourceRef, TranslationUnit
 from .semantic_layout import group_semantic_fragments, layout_marker, plain_fragment_text, split_layout_translation
 from .storage import StateStore
@@ -528,6 +528,53 @@ def capture_pdf_sample(
     return report
 
 
+def validate_capture_identity(
+    source: Path,
+    page_indices: tuple[int, ...],
+    units: list[TranslationUnit],
+    records_by_page: dict[int, list[dict]],
+) -> None:
+    """Reject a captured workload from another PDF or page selection."""
+    expected_document_id = f"{source.stem}-{sha256_file(source)[:16]}"
+    if not units or {unit.document_id for unit in units} != {expected_document_id}:
+        raise ValueError("captured units do not belong to the current source PDF hash")
+    if set(records_by_page) != set(page_indices):
+        raise ValueError("captured page set does not match the requested source pages")
+    unit_ids = {unit.unit_id for unit in units}
+    if any(record.get("unit_id") not in unit_ids for records in records_by_page.values() for record in records):
+        raise ValueError("capture map refers to a unit absent from captured units")
+    if any(
+        source_ref.page_index not in page_indices
+        for unit in units
+        for source_ref in unit.source_refs
+    ):
+        raise ValueError("captured unit refers to a source page outside the requested selection")
+
+
+def _write_content_review_queue(units: list[TranslationUnit], store: StateStore, run_id: str, path: Path) -> None:
+    """Keep source/target pairs inspectable even when rendering is blocked."""
+    quality = {row["unit_id"]: row for row in store.quality_reports(run_id)}
+    with path.open("w", encoding="utf-8") as stream:
+        for unit in units:
+            row = quality.get(unit.unit_id, {})
+            result = store.result(run_id, unit.unit_id)
+            report = row.get("quality")
+            stream.write(json.dumps({
+                "unit_id": unit.unit_id,
+                "source_hash": unit.source_hash,
+                "source_pages": sorted({ref.page_index + 1 for ref in unit.source_refs}),
+                "section_path": list(unit.section_path),
+                "source_text": unit.source_text,
+                "translated_text": result.draft.translated_text if result and result.draft else None,
+                "state": row.get("state", "not_started"),
+                "result_hash": report.get("result_hash") if report else None,
+                "issues": report.get("issues", []) if report else [],
+                "meaning_equivalent_human_review": None,
+                "unchanged_elements_human_review": None,
+                "review_notes": "",
+            }, ensure_ascii=False) + "\n")
+
+
 def run_smoke_document(
     source: Path,
     page_indices: tuple[int, ...],
@@ -558,8 +605,7 @@ def run_smoke_document(
             if line.strip():
                 record = json.loads(line)
                 records_by_page[record["page_index"]].append(record)
-        if set(records_by_page) != set(page_indices):
-            raise ValueError("captured page set does not match the frozen smoke page set")
+        validate_capture_identity(source, page_indices, all_units, records_by_page)
     else:
         layout = _load_layout_model()
         all_units = []
@@ -609,13 +655,21 @@ def run_smoke_document(
         report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
         return report
 
-    summary = run_units(all_units, config, runs_root)
+    store = StateStore(runs_root / config.run_id / "state.sqlite")
+    review_queue_path = output_dir / "content-review.jsonl"
+    try:
+        summary = run_units(all_units, config, runs_root)
+    except ProviderAttemptsExhausted as exc:
+        _write_content_review_queue(all_units, store, config.run_id, review_queue_path)
+        report = {**base_report, "status": "provider_attempts_exhausted", "error": str(exc), "run_summary": store.summary(config.run_id), "content_review_jsonl": review_queue_path.name}
+        report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        return report
+    _write_content_review_queue(all_units, store, config.run_id, review_queue_path)
     if summary.get("states") != {"accepted": len(all_units)}:
-        report = {**base_report, "status": "quality_gate_blocked", "run_summary": summary}
+        report = {**base_report, "status": "quality_gate_blocked", "run_summary": summary, "content_review_jsonl": review_queue_path.name}
         report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
         return report
 
-    store = StateStore(runs_root / config.run_id / "state.sqlite")
     translated_by_unit = {}
     for unit in all_units:
         result = store.result(config.run_id, unit.unit_id)
@@ -634,21 +688,33 @@ def run_smoke_document(
 
     mono_pages: list[Path] = []
     dual_pages: list[Path] = []
-    if layout is None:
-        layout = _load_layout_model()
-    for page_index in page_indices:
-        page_dir = output_dir / f"page-{page_index + 1:04d}"
-        translator = _injection_translator(records_by_page[page_index], translated_by_fragment)
-        result = _run_babeldoc_page(source, page_index, page_dir, translator, layout=layout)
-        if translator.errors or translator.remaining:
-            raise RuntimeError(
-                f"BabelDOC injection mismatch on page {page_index + 1}: "
-                f"errors={translator.errors}, remaining={translator.remaining}"
-            )
-        if not result.mono_pdf_path or not result.dual_pdf_path:
-            raise RuntimeError(f"BabelDOC did not render both outputs for page {page_index + 1}")
-        mono_pages.append(result.mono_pdf_path)
-        dual_pages.append(result.dual_pdf_path)
+    try:
+        if layout is None:
+            layout = _load_layout_model()
+        for page_index in page_indices:
+            page_dir = output_dir / f"page-{page_index + 1:04d}"
+            translator = _injection_translator(records_by_page[page_index], translated_by_fragment)
+            result = _run_babeldoc_page(source, page_index, page_dir, translator, layout=layout)
+            if translator.errors or translator.remaining:
+                raise RuntimeError(
+                    f"BabelDOC injection mismatch on page {page_index + 1}: "
+                    f"errors={translator.errors}, remaining={translator.remaining}"
+                )
+            if not result.mono_pdf_path or not result.dual_pdf_path:
+                raise RuntimeError(f"BabelDOC did not render both outputs for page {page_index + 1}")
+            mono_pages.append(result.mono_pdf_path)
+            dual_pages.append(result.dual_pdf_path)
+    except (RuntimeError, MemoryError, OSError) as exc:
+        report = {
+            **base_report,
+            "status": "render_failed",
+            "render_error": str(exc),
+            "run_summary": summary,
+            "content_review_jsonl": review_queue_path.name,
+            "api_calls": summary.get("provider_attempts", 0),
+        }
+        report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        return report
 
     mono_output = output_dir / f"{source.stem}.{sample_name}.{config.provider}.zh.mono.pdf"
     dual_output = output_dir / f"{source.stem}.{sample_name}.{config.provider}.zh.dual.pdf"
@@ -684,6 +750,7 @@ def run_smoke_document(
         "dual_pdf": dual_output.name,
         "aligned_jsonl": aligned_path.name,
         "capture_map_jsonl": capture_map_path.name,
+        "content_review_jsonl": review_queue_path.name,
     }
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     return report
