@@ -10,6 +10,7 @@ from pdf_translation.source_mapping import (
     terminal_immutable_suffix,
     map_placeholder_capture_fragment,
     map_single_line_mixed_native_prose,
+    map_complete_semantic_unit_native_spans,
     map_plain_capture_fragment,
     normalized_pdf_text,
     plan_single_line_fragment_insertions,
@@ -127,6 +128,31 @@ def test_real_single_line_native_mapping_preserves_inline_formula_and_variable()
             map_single_line_mixed_native_prose(
                 document[41], {**record, "marker_map": {"first": "<b1>", "second": "<b2>"}},
             )
+
+
+def test_real_complete_section22_paragraph_maps_six_spans_around_footnote():
+    source = Path("pdf/dm.pdf")
+    capture = Path("output/pdf/v0.7-deepseek-validation/dm-297196f2cad5/445c49a3/capture-map.jsonl")
+    expected_hash = "297196f2cad5ab23cf4855f815fd69e7b7b9ee9c31255f743b668416677ad24e"
+    if not source.is_file() or not capture.is_file() or hashlib.sha256(source.read_bytes()).hexdigest() != expected_hash:
+        pytest.skip("registered PDF and capture fixtures are unavailable or have changed")
+    import json
+
+    records = [json.loads(line) for line in capture.read_text(encoding="utf-8").splitlines() if line.strip()]
+    group = tuple(sorted(
+        (record for record in records if record["unit_id"] == "bdg-ee80a27960959266"),
+        key=lambda item: item["group_index"],
+    ))
+    with pymupdf.open(source) as document:
+        mapping = map_complete_semantic_unit_native_spans(document[41], group)
+        assert mapping.line_count == 3
+        assert [segment.text for segment in mapping.segments] == [
+            "A", "probability distribution", "assigns probabilities to different outcomes.",
+            "There are", "different ways to represent probability distributions depending on whether they",
+            "involve discrete or continuous outcomes.",
+        ]
+        with pytest.raises(SourcePreservingUnsupported, match="incomplete semantic group"):
+            map_complete_semantic_unit_native_spans(document[41], group[:1])
 
 
 def test_single_line_planner_uses_saved_target_and_native_geometry():

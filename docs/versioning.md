@@ -29,5 +29,6 @@ Snapshot mapping:
 | `v0.7.0-rc.7` | Trace complete glyph slices per PDF text operation, handle coalesced traces, and retain line-break evidence in mixed-text matching | release candidate |
 | `v0.7.0-rc.8` | Exactly map one high-confidence mixed PDF line to native prose spans while leaving its inline formula and variable glyphs unchanged | release candidate |
 | `v0.7.0-rc.9` | Interleave Chinese operations with unchanged source formula/variable operations; prove visual and copied-text order on one real page | release candidate |
+| `v0.7.0-rc.10` | Replace the full 2.2 opening semantic paragraph in three Chinese lines while retaining its original footnote marker and all outside content | release candidate |
 
-Intermediate v0.6 rc.3 and rc.4 were experimental local run revisions, not Git snapshots. The `v` prefix is a Git tag convention. Python packaging normalizes candidate suffixes, so tag `v0.7.0-rc.9` is stored as package version `0.7.0rc9`.
+Intermediate v0.6 rc.3 and rc.4 were experimental local run revisions, not Git snapshots. The `v` prefix is a Git tag convention. Python packaging normalizes candidate suffixes, so tag `v0.7.0-rc.10` is stored as package version `0.7.0rc10`.

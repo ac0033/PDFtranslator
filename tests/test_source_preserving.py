@@ -164,6 +164,16 @@ def test_interleaved_reading_order_rejects_original_anchor_before_chinese():
         _assert_interleaved_reading_order(page, (item,), ("甲", "1"))
 
 
+def test_interleaved_reading_order_accepts_repeated_chinese_phrase_occurrences():
+    font = Path("C:/Windows/Fonts/simfang.ttf")
+    first = TargetText("甲", (10, 100), (9, 90, 20, 110), font, "zh-fangsong", 10)
+    second = TargetText("甲", (30, 100), (29, 90, 40, 110), font, "zh-fangsong", 10)
+    page = SimpleNamespace(get_textbox=lambda _rect: "甲1甲")
+    _assert_interleaved_reading_order(page, (first, second), ("甲", "1", "甲"))
+    with pytest.raises(ValueError, match="each Chinese phrase occurrence"):
+        _assert_interleaved_reading_order(page, (first, second), ("甲", "1"))
+
+
 def test_source_page_copy_replaces_only_one_text_operation(tmp_path: Path):
     font = Path("C:/Windows/Fonts/simfang.ttf")
     if not font.is_file():
@@ -278,4 +288,40 @@ def test_interleaved_chinese_preserves_number_between_source_operations(tmp_path
     with pymupdf.open(source) as before, pymupdf.open(target) as after:
         text = after[0].get_textbox(pymupdf.Rect(45, 65, 155, 90))
         assert text.index("甲") < text.index("1") < text.index("乙")
+        assert before[0].search_for("1") == after[0].search_for("1")
+
+
+def test_interleaved_chinese_allows_consecutive_emptied_operations_without_font_reset(tmp_path: Path):
+    font = Path("C:/Windows/Fonts/simfang.ttf")
+    if not font.is_file():
+        pytest.skip("Chinese font fixture is unavailable")
+    source = tmp_path / "source.pdf"
+    target = tmp_path / "target.pdf"
+    document = pymupdf.open()
+    page = document.new_page(width=400, height=400)
+    page.insert_font(fontname="helv")
+    content_xref = document.get_new_xref()
+    document.update_object(content_xref, "<<>>")
+    document.update_stream(
+        content_xref,
+        b"BT\n/helv 12 Tf\n1 0 0 1 50 320 Tm [(Hello)]TJ\n"
+        b"1 0 0 1 100 320 Tm [(world)]TJ\n"
+        b"/helv 12 Tf\n1 0 0 1 180 320 Tm [(1)]TJ\nET\n",
+    )
+    page.set_contents(content_xref)
+    document.save(source)
+    document.close()
+    result = write_source_preserving_page(
+        source, 0, target,
+        (ExactSourceSegment("Hello", (45, 65, 85, 90)), ExactSourceSegment("world", (95, 65, 145, 90))),
+        (
+            TargetText("甲", (50, 80), (49, 65, 75, 85), font, "zh-fangsong", 12),
+            TargetText("乙", (100, 80), (99, 65, 125, 85), font, "zh-fangsong", 12),
+        ),
+        interleaved_reading_order=("甲", "乙"),
+    )
+    assert result["reading_order_in_source_stream"]
+    with pymupdf.open(source) as before, pymupdf.open(target) as after:
+        text = after[0].get_textbox(pymupdf.Rect(45, 65, 195, 90))
+        assert text.index("甲") < text.index("乙") < text.index("1")
         assert before[0].search_for("1") == after[0].search_for("1")

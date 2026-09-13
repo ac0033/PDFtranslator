@@ -238,6 +238,66 @@ def map_single_line_mixed_native_prose(page: pymupdf.Page, record: dict) -> Plai
     return PlainFragmentMapping(record["fragment_id"], tuple(segments), 1, confidence)
 
 
+def map_complete_semantic_unit_native_spans(
+    page: pymupdf.Page, records: tuple[dict, ...]
+) -> PlainFragmentMapping:
+    """Split a complete unit's exactly located prose into source font spans.
+
+    This makes multi-font first lines editable as separate whole PDF operations
+    while keeping a footnote between spans in its original source operation.
+    It never manufactures source text from the translated target.
+    """
+    if not records or len({record.get("unit_id") for record in records}) != 1 or not records[0].get("unit_id"):
+        raise SourcePreservingUnsupported("native-span mapping requires one complete semantic unit")
+    if sorted(record.get("group_index") for record in records) != list(range(len(records))) or any(
+        record.get("group_size") != len(records) for record in records
+    ):
+        raise SourcePreservingUnsupported("native-span mapping received an incomplete semantic group")
+    segments = []
+    for record in records:
+        mapping = (
+            map_placeholder_capture_fragment(page, record)
+            if record.get("marker_map") else map_plain_capture_fragment(page, record)
+        )
+        for coarse in editable_segments(mapping):
+            coarse_rect = _located_segments(page, (coarse,))[0]
+            spans = [
+                span for block in page.get_text("dict")["blocks"]
+                for line in block.get("lines", [])
+                for span in line["spans"]
+                if span["text"].strip()
+                and coarse_rect.contains((pymupdf.Rect(span["bbox"]).tl + pymupdf.Rect(span["bbox"]).br) / 2)
+            ]
+            if not spans or normalized_pdf_text("".join(span["text"] for span in spans)) != normalized_pdf_text(coarse.text):
+                raise SourcePreservingUnsupported("native PDF spans do not exactly cover captured unit prose")
+            for span in spans:
+                prose = span["text"].strip()
+                if any(hint in span["font"].casefold() for hint in FORMULA_FONT_HINTS) or any(
+                    character.isdigit() or character in IMMUTABLE_SYMBOLS for character in prose
+                ):
+                    raise SourcePreservingUnsupported("unit prose span contains an immutable formula or symbol")
+                bbox = pymupdf.Rect(span["bbox"])
+                segments.append(ExactSourceSegment(
+                    prose,
+                    (
+                        bbox.x0 - LINE_CLIP_MARGIN_PT,
+                        bbox.y0 - LINE_CLIP_MARGIN_PT,
+                        bbox.x1 + LINE_CLIP_MARGIN_PT,
+                        bbox.y1 + LINE_CLIP_MARGIN_PT,
+                    ),
+                ))
+    if not segments:
+        raise SourcePreservingUnsupported("semantic unit has no exactly located native prose spans")
+    rects = _located_segments(page, tuple(segments))
+    if any(a.intersects(b) for index, a in enumerate(rects) for b in rects[index + 1:]):
+        raise SourcePreservingUnsupported("native PDF prose spans overlap")
+    centers = sorted((rect.y0 + rect.y1) / 2 for rect in rects)
+    line_count = 1 + sum(current - previous > 3.0 for previous, current in zip(centers, centers[1:]))
+    return PlainFragmentMapping(records[0]["unit_id"], tuple(segments), line_count, min(
+        float(record.get("bbox_confidence", 0.0)) for record in records
+    ))
+
+
 def plan_single_line_fragment_insertions(
     page: pymupdf.Page,
     records: tuple[dict, ...],

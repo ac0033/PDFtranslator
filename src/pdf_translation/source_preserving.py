@@ -239,7 +239,10 @@ def _inline_each_removed_operation(
         if next_show is None:
             raise SourcePreservingUnsupported("original operation after interleaved Chinese is missing")
         gap = stream[target.end():next_show.start()]
-        if re.search(rb"(?<!\S)ET(?!\S)", gap) or not re.search(rb"/[A-Za-z0-9_-]+\s+[0-9.]+\s+Tf", gap):
+        if re.search(rb"(?<!\S)ET(?!\S)", gap):
+            raise SourcePreservingUnsupported("interleaved Chinese crosses an original text-object boundary")
+        reset = re.search(rb"/[A-Za-z0-9_-]+\s+[0-9.]+\s+Tf", gap)
+        if not reset and not (next_show in targets and next_show.group(4) == b""):
             raise SourcePreservingUnsupported("next original text operation lacks a safe explicit font reset")
     generated = _generated_text_operations(output, page, source_stream_xref, insertions)
     pieces = []
@@ -324,8 +327,10 @@ def _assert_interleaved_reading_order(
     insertions: tuple[TargetText, ...],
     expected_tokens: tuple[str, ...],
 ) -> None:
-    if not expected_tokens or any(sum(token == item.text for token in expected_tokens) != 1 for item in insertions):
-        raise ValueError("reading-order tokens must contain each Chinese phrase exactly once")
+    phrase_counts = Counter(item.text for item in insertions)
+    token_counts = Counter(expected_tokens)
+    if not expected_tokens or any(token_counts[text] != count for text, count in phrase_counts.items()):
+        raise ValueError("reading-order tokens must contain each Chinese phrase occurrence")
     rects = [pymupdf.Rect(item.allowed_rect) for item in insertions]
     region = pymupdf.Rect(
         min(rect.x0 for rect in rects) - 1,
