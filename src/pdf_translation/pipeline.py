@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import math
+import json
 from pathlib import Path
 from uuid import uuid4
 
@@ -24,6 +25,7 @@ class ProviderAttemptsExhausted(RuntimeError):
 
 
 DEFAULT_TRANSLATION_STYLE = "忠实保留否定、量词、条件和概率程度；采用自然教材中文；不扩写。"
+SOURCE_LITERAL_PROMPT_REVISION = "source-literals-v1"
 
 
 def output_token_limit(unit: TranslationUnit, config: RunConfig) -> int:
@@ -59,7 +61,8 @@ def _priced_usage(usage: Usage, config: RunConfig, estimated_input: int, estimat
 def estimated_input_token_ceiling(request: TranslationRequest) -> int:
     """Conservative byte-based ceiling until the selected model counter is wired."""
     context_bytes = sum(len(item.content.encode("utf-8")) for item in request.context.items)
-    return len(request.unit.source_text.encode("utf-8")) + context_bytes + 512
+    literal_bytes = len(json.dumps(request.unit.protected_literal_hints, ensure_ascii=False).encode("utf-8"))
+    return len(request.unit.source_text.encode("utf-8")) + context_bytes + literal_bytes + 512
 
 
 def estimate_units(units: list[TranslationUnit], config: RunConfig) -> dict:
@@ -120,7 +123,7 @@ def make_request(unit: TranslationUnit, config: RunConfig, packet: ContextPacket
     max_output_tokens = max_output_tokens_override or output_token_limit(unit, config)
     if max_output_tokens > config.max_output_tokens:
         raise ValueError("per-unit max_output_tokens exceeds configured maximum")
-    model = ModelSpec(provider=config.provider, model_id=config.model_id, reasoning_effort=config.reasoning_effort, max_output_tokens=max_output_tokens, prompt_revision=config.prompt_revision, adapter_revision=config.adapter_revision, pricing_revision=config.pricing_revision)
+    model = ModelSpec(provider=config.provider, model_id=config.model_id, reasoning_effort=config.reasoning_effort, max_output_tokens=max_output_tokens, prompt_revision=f"{config.prompt_revision}+{SOURCE_LITERAL_PROMPT_REVISION}", adapter_revision=config.adapter_revision, pricing_revision=config.pricing_revision)
     cache_key = stable_hash({"unit": unit, "context": packet, "model": model})
     return TranslationRequest(request_id=str(uuid4()), unit=unit, context=packet, model=model, cache_key=cache_key)
 

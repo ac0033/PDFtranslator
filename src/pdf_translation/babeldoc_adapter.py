@@ -16,6 +16,7 @@ from .config import RunConfig
 from .document_context import enrich_pdf_units_with_context
 from .hashing import sha256_bytes, sha256_file, stable_hash
 from .pipeline import ProviderAttemptsExhausted, estimate_units, run_units
+from .protected_literals import enrich_units_with_protected_literals
 from .schemas import ArtifactRef, ProtectedSpan, SourceRef, TranslationUnit
 from .semantic_layout import group_semantic_fragments, layout_marker, plain_fragment_text, split_layout_translation
 from .storage import StateStore
@@ -467,6 +468,7 @@ def extract_page_units(source: Path, page_index: int, capture_dir: Path, layout=
             record["group_index"] = group_index
             record["group_size"] = len(group)
             record["group_marker_map"] = group_marker_map
+    units = enrich_units_with_protected_literals(source, units, {page_index: records})
     return units, records
 
 
@@ -565,6 +567,11 @@ def _write_content_review_queue(units: list[TranslationUnit], store: StateStore,
                 "source_pages": sorted({ref.page_index + 1 for ref in unit.source_refs}),
                 "section_path": list(unit.section_path),
                 "source_text": unit.source_text,
+                "protected_literal_hints": unit.protected_literal_hints,
+                "unresolved_formula_markers": [
+                    span.marker for span in unit.protected
+                    if span.kind == "formula" and span.marker not in unit.protected_literal_hints
+                ],
                 "translated_text": result.draft.translated_text if result and result.draft else None,
                 "state": row.get("state", "not_started"),
                 "result_hash": report.get("result_hash") if report else None,
@@ -606,6 +613,7 @@ def run_smoke_document(
                 record = json.loads(line)
                 records_by_page[record["page_index"]].append(record)
         validate_capture_identity(source, page_indices, all_units, records_by_page)
+        all_units = enrich_units_with_protected_literals(source, all_units, records_by_page)
     else:
         layout = _load_layout_model()
         all_units = []
@@ -638,6 +646,11 @@ def run_smoke_document(
         "grouped_fragment_count": sum(record["group_size"] > 1 for records in records_by_page.values() for record in records),
         "layout_boundary_markers": sum(record["layout_marker"] is not None for records in records_by_page.values() for record in records),
         "protected_occurrences": sum(len(record["marker_map"]) for records in records_by_page.values() for record in records),
+        "verified_protected_literal_hints": sum(len(unit.protected_literal_hints) for unit in all_units),
+        "unresolved_formula_markers": sum(
+            span.kind == "formula" and span.marker not in unit.protected_literal_hints
+            for unit in all_units for span in unit.protected
+        ),
         "low_bbox_matches": sum(record["bbox_confidence"] < 0.45 for records in records_by_page.values() for record in records),
         "estimated_input_tokens_ceiling": estimate["estimated_input_tokens_ceiling"],
         "reserved_output_tokens": estimate["reserved_output_tokens"],

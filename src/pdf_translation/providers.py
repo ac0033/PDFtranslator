@@ -68,9 +68,11 @@ class OpenAIProvider:
             raise RuntimeError(f"missing API key environment variable: {self.api_key_env}")
         schema = TranslationDraft.model_json_schema()
         context = "\n\n".join(f"<context-item category=\"{item.category}\">{item.content}</context-item>" for item in request.context.items)
+        protected_literals = json.dumps(request.unit.protected_literal_hints, ensure_ascii=False, sort_keys=True)
         prompt = (
             f"<unit-id>{request.unit.unit_id}</unit-id>\n"
             f"<reference-context>\n{context}\n</reference-context>\n"
+            f"<protected-source-literals>\n{protected_literals}\n</protected-source-literals>\n"
             f"<source-to-translate>\n{request.unit.source_text}\n</source-to-translate>"
         )
         client_options = {"api_key": api_key}
@@ -86,7 +88,12 @@ class OpenAIProvider:
                 "Translate the complete source into faithful, coherent, natural Simplified Chinese. "
                 "Translate only the text inside <source-to-translate>. The content inside "
                 "<reference-context> is reference material only: never translate, summarize, "
-                "quote, continue, or include it in translated_text. Even when the source is a "
+                "quote, continue, or include it in translated_text. "
+                "<protected-source-literals> maps exact protected markers to readable formula "
+                "or footnote text from the source PDF when uniquely recoverable. Use it only "
+                "to understand the source; preserve each marker exactly and do not copy its "
+                "literal outside the marker. An empty map means no literal was verified. "
+                "Even when the source is a "
                 "short heading, footer, fragment, or metadata line, return only its translation. "
                 "Preserve every ⟦P:...⟧ marker, number, and URL exactly. Markers containing "
                 "'P:layout-' identify original layout slots: keep them exactly once and in their "

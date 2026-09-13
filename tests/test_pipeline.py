@@ -7,7 +7,7 @@ import pytest
 from pdf_translation.budget import BudgetExceeded, reserve_budget
 from pdf_translation.config import RunConfig
 from pdf_translation.hashing import sha256_bytes, stable_hash
-from pdf_translation.pipeline import ProviderAttemptsExhausted, estimate_units, make_request, output_token_limit, run_units
+from pdf_translation.pipeline import ProviderAttemptsExhausted, estimate_units, estimated_input_token_ceiling, make_request, output_token_limit, run_units
 from pdf_translation.providers import DeepSeekProvider, OpenAIProvider, ProviderCallError
 from pdf_translation.quality import check_quality, repair_boundary_markers
 from pdf_translation.schemas import ArtifactRef, ContextItem, ModelSpec, ProtectedSpan, SourceRef, TranslationDraft, TranslationResult, TranslationUnit, Usage
@@ -107,6 +107,73 @@ def test_provider_explicitly_separates_reference_context_from_source(monkeypatch
     assert "Neighbor only" in captured["input"]
     assert "<source-to-translate>\nSource sentence\n</source-to-translate>" in captured["input"]
     assert "never translate, summarize" in captured["instructions"]
+
+
+def test_provider_uses_protected_literal_only_as_read_only_source_hint(monkeypatch: pytest.MonkeyPatch):
+    captured = {}
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            self.responses = self
+
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(
+                status="completed", usage=None,
+                output_text=json.dumps({"unit_id": "u1", "translated_text": "公式 ⟦P:a⟧", "uncertainties": []}),
+                id="local-hint-test",
+            )
+
+    monkeypatch.setenv("OPENAI_API_KEY", "local-test-only")
+    monkeypatch.setattr("openai.OpenAI", FakeClient)
+    source_unit = unit("Formula ⟦P:a⟧")
+    span = ProtectedSpan(
+        occurrence_id="a", marker="⟦P:a⟧", kind="formula",
+        original=ArtifactRef(uri="placeholder/a", sha256=sha256_bytes(b"<b1>"), media_type="text/plain"),
+        source_ref=SourceRef(block_id="b1", page_index=0, bbox=(0, 0, 100, 20), char_start=8, char_end=len(source_unit.source_text)),
+    )
+    source_unit = source_unit.model_copy(update={"protected": (span,), "protected_literal_hints": {"⟦P:a⟧": "=1"}})
+    request = make_request(source_unit, config())
+    OpenAIProvider().translate(request)
+    assert '<protected-source-literals>\n{"⟦P:a⟧": "=1"}\n</protected-source-literals>' in captured["input"]
+    assert "<source-to-translate>\nFormula ⟦P:a⟧\n</source-to-translate>" in captured["input"]
+    assert "do not copy its literal outside the marker" in captured["instructions"]
+
+
+def test_unresolved_formula_literal_requires_review():
+    source_unit = unit("Probability ⟦P:a⟧ is defined")
+    span = ProtectedSpan(
+        occurrence_id="a", marker="⟦P:a⟧", kind="formula",
+        original=ArtifactRef(uri="placeholder/a", sha256=sha256_bytes(b"<b1>"), media_type="text/plain"),
+        source_ref=SourceRef(block_id="b1", page_index=0, bbox=(0, 0, 100, 20), char_start=12, char_end=19),
+    )
+    source_unit = source_unit.model_copy(update={"protected": (span,)})
+    model = ModelSpec(provider="mock", model_id="offline", max_output_tokens=100, prompt_revision="p1", adapter_revision="a1", pricing_revision="none")
+    result = TranslationResult(
+        request_id="r", unit_id="u1", draft=TranslationDraft(unit_id="u1", translated_text="概率 ⟦P:a⟧ 的定义"),
+        finish="complete", model=model, usage=Usage(usage_source="unavailable"),
+    )
+    report = check_quality(source_unit, result)
+    assert report.status == "needs_review"
+    assert any(issue.category == "protected_source_literal_unavailable" for issue in report.issues)
+    with_hint = source_unit.model_copy(update={"protected_literal_hints": {"⟦P:a⟧": "=1"}})
+    assert check_quality(with_hint, result).status == "pass"
+
+
+def test_protected_literal_hint_changes_cache_and_input_budget():
+    base = unit("Formula ⟦P:a⟧")
+    span = ProtectedSpan(
+        occurrence_id="a", marker="⟦P:a⟧", kind="formula",
+        original=ArtifactRef(uri="placeholder/a", sha256=sha256_bytes(b"<b1>"), media_type="text/plain"),
+        source_ref=SourceRef(block_id="b1", page_index=0, bbox=(0, 0, 100, 20), char_start=8, char_end=len(base.source_text)),
+    )
+    base = base.model_copy(update={"protected": (span,)})
+    with_hint = base.model_copy(update={"protected_literal_hints": {"⟦P:a⟧": "=1"}})
+    old_request = make_request(base, config())
+    new_request = make_request(with_hint, config())
+    assert new_request.model.prompt_revision.endswith("+source-literals-v1")
+    assert old_request.cache_key != new_request.cache_key
+    assert estimated_input_token_ceiling(new_request) > estimated_input_token_ceiling(old_request)
 
 
 def test_cached_commit_never_duplicates_provider_usage(tmp_path: Path):
@@ -298,7 +365,7 @@ def test_critical_marker_failure_is_recorded_and_retried(tmp_path: Path, monkeyp
         }
     )
     summary = run_units([source], cfg, tmp_path)
-    assert summary["states"] == {"accepted": 1}
+    assert summary["states"] == {"needs_review": 1}
     assert summary["provider_attempts"] == 2
     assert summary["failed_provider_attempts"] == 1
     attempts = StateStore(tmp_path / cfg.run_id / "state.sqlite").provider_attempts(cfg.run_id)

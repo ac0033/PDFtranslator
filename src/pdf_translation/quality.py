@@ -95,5 +95,14 @@ def check_quality(unit: TranslationUnit, result: TranslationResult) -> QualityRe
         add("number", "major", "number inventory changed")
     if sorted(url_inventory(unit.source_text)) != sorted(url_inventory(translated)):
         add("url", "major", "URL target inventory changed")
+    missing_literal_markers = {
+        span.marker for span in unit.protected
+        if span.kind == "formula" and span.marker not in unit.protected_literal_hints
+    }
+    if missing_literal_markers:
+        add(
+            "protected_source_literal_unavailable", "major",
+            f"{len(missing_literal_markers)} protected source literals were unavailable to the translator; review nearby meaning against the source PDF",
+        )
     status = "blocked" if any(i.severity == "critical" for i in issues) else ("needs_review" if issues else "pass")
-    return QualityReport(unit_id=unit.unit_id, result_hash=stable_hash(result), policy_revision="v0.3", status=status, issues=tuple(issues), checks_run=("completion", "protected_marker_multiset", "protected_marker_order", "layout_marker_order", "layout_boundary", "number_inventory", "url_inventory"))
+    return QualityReport(unit_id=unit.unit_id, result_hash=stable_hash(result), policy_revision="v0.4", status=status, issues=tuple(issues), checks_run=("completion", "protected_marker_multiset", "protected_marker_order", "layout_marker_order", "layout_boundary", "number_inventory", "url_inventory", "protected_source_literal_availability"))

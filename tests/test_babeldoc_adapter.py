@@ -122,3 +122,28 @@ def test_content_review_queue_keeps_a_blocked_translation_available(tmp_path: Pa
     assert row["translated_text"] == "关于概率的一句话。"
     assert row["meaning_equivalent_human_review"] is None
     assert row["state"] == "needs_review"
+
+
+def test_content_review_queue_exposes_known_and_unknown_formula_literals(tmp_path: Path):
+    source_text, protected, _ = canonicalize_babeldoc_text(
+        "P(X <b1>) and P(Y <b2>)", page_index=0, sequence=0, bbox=(0, 0, 100, 20)
+    )
+    value = TranslationUnit(
+        unit_id="u1", document_id="doc", ir_revision="test", unit_type="paragraph",
+        source_lang="en", target_lang="zh-CN", source_text=source_text,
+        source_hash=stable_hash(source_text), protected=protected,
+        protected_literal_hints={protected[0].marker: "=1"},
+    )
+
+    class FakeStore:
+        def quality_reports(self, run_id):
+            return []
+
+        def result(self, run_id, unit_id):
+            return None
+
+    output = tmp_path / "content-review.jsonl"
+    _write_content_review_queue([value], FakeStore(), "run", output)
+    row = json.loads(output.read_text(encoding="utf-8"))
+    assert row["protected_literal_hints"] == {protected[0].marker: "=1"}
+    assert row["unresolved_formula_markers"] == [protected[1].marker]

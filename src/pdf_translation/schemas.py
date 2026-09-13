@@ -77,9 +77,16 @@ class TranslationUnit(StrictModel):
     section_path: tuple[str, ...] = ()
     source_refs: tuple[SourceRef, ...] = ()
     protected: tuple[ProtectedSpan, ...] = ()
+    protected_literal_hints: dict[str, str] = Field(default_factory=dict)
     neighbor_ids: tuple[str, ...] = ()
     dependency_ids: tuple[str, ...] = ()
     risk_tags: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def literal_hints_reference_protected_markers(self) -> "TranslationUnit":
+        if not set(self.protected_literal_hints) <= {span.marker for span in self.protected}:
+            raise ValueError("protected literal hints must reference declared protected markers")
+        return self
 
 
 class ContextItem(StrictModel):
@@ -166,4 +173,3 @@ class QualityReport(StrictModel):
     status: Literal["pass", "needs_review", "blocked"]
     issues: tuple[QualityIssue, ...]
     checks_run: tuple[str, ...]
-
