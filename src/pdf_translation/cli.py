@@ -8,7 +8,7 @@ import pymupdf
 import typer
 from dotenv import load_dotenv
 
-from .babeldoc_adapter import capture_pdf_sample, run_one_page_spike, run_smoke_document, validate_capture_identity
+from .babeldoc_adapter import _write_content_review_queue, capture_pdf_sample, run_one_page_spike, run_smoke_document, validate_capture_identity
 from .ab_experiment import MAX_COMBINED_AB_BUDGET_USD, approved_execution_configs, build_blind_review, prepare_ab_manifest
 from .acceptance import NOT_DELIVERABLE, build_acceptance_report, format_summary
 from .triage import ReviewLedger
@@ -269,6 +269,32 @@ def review_pages(
 ) -> None:
     """Rebuild saved page evidence without API calls."""
     typer.echo(json.dumps(build_page_review(input, output_dir), ensure_ascii=False, indent=2))
+
+
+@app.command("refresh-review-queue")
+def refresh_review_queue(
+    capture: Annotated[Path, typer.Option("--capture", help="Capture directory holding units.jsonl and content-review.jsonl.")],
+    run_id: Annotated[str, typer.Option("--run-id")],
+    runs_root: Annotated[Path, typer.Option("--runs-root")] = Path("runs"),
+) -> None:
+    """Rewrite content-review.jsonl from the run store. No API calls.
+
+    The queue is written once, when the run renders. Every later fix lands in
+    the store, so the file on disk drifts away from the book that shipped. Run
+    this after applying curated TM entries, or whenever acceptance reports the
+    queue as stale.
+    """
+    units_path = capture / "units.jsonl"
+    if not units_path.is_file():
+        raise typer.BadParameter(f"captured units not found: {units_path}")
+    units = _load_captured_units(units_path)
+    store = StateStore(runs_root / run_id / "state.sqlite")
+    destination = capture / "content-review.jsonl"
+    before = destination.read_text(encoding="utf-8").splitlines() if destination.is_file() else []
+    _write_content_review_queue(units, store, run_id, destination)
+    after = destination.read_text(encoding="utf-8").splitlines()
+    changed = sum(1 for old, new in zip(before, after) if old != new) + abs(len(after) - len(before))
+    typer.echo(json.dumps({"path": str(destination), "units": len(after), "lines_changed": changed}, ensure_ascii=False))
 
 
 @app.command("acceptance-report")

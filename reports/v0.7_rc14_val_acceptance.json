@@ -609,19 +609,8 @@
   },
   "review_queue": {
     "path": "output\\pdf\\val-usable-babeldoc-full-r1\\content-review.jsonl",
-    "stale_units": 25,
-    "sample_stale_pages": [
-      18,
-      27,
-      43,
-      46,
-      56,
-      72,
-      84,
-      88,
-      105,
-      114
-    ],
+    "stale_units": 0,
+    "sample_stale_pages": [],
     "note": "The queue is a snapshot from render time; later fixes live in the run store. Stale entries do not affect this verdict, which was graded from the store, but the queue should be regenerated before a human reads it."
   },
   "ledger": {

@@ -7,6 +7,7 @@ No provider calls are made.
 from pathlib import Path
 import argparse
 import json
+from pdf_translation.babeldoc_adapter import _write_content_review_queue
 from pdf_translation.config import load_config
 from pdf_translation.context_router import build_context_packet, select_exact_tm
 from pdf_translation.context_store import ContextStore
@@ -53,7 +54,13 @@ def main():
         store.commit(cfg.run_id, result, report, request.cache_key, cached=True, source='curated_tm', record_usage=False)
         store.alias_cache_key(cfg.run_id, unit.unit_id, request.cache_key, result, report.status)
         applied.append((uid, report.status))
-    print(json.dumps({'applied': applied, 'skipped': skipped}, ensure_ascii=False, indent=1), flush=True)
+    # The review queue was written at render time and knows nothing about these
+    # fixes. Leaving it behind is how the delivered book and the evidence file
+    # drift apart, so refresh it here rather than relying on anyone remembering.
+    review_queue = args.capture / 'content-review.jsonl'
+    if applied and review_queue.is_file():
+        _write_content_review_queue(units, store, cfg.run_id, review_queue)
+    print(json.dumps({'applied': applied, 'skipped': skipped, 'review_queue_refreshed': bool(applied) and review_queue.is_file()}, ensure_ascii=False, indent=1), flush=True)
 
 
 if __name__ == '__main__':
