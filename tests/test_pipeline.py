@@ -171,7 +171,7 @@ def test_protected_literal_hint_changes_cache_and_input_budget():
     with_hint = base.model_copy(update={"protected_literal_hints": {"⟦P:a⟧": "=1"}})
     old_request = make_request(base, config())
     new_request = make_request(with_hint, config())
-    assert new_request.model.prompt_revision.endswith("+source-literals-v1")
+    assert new_request.model.prompt_revision.endswith("+source-literals-v1+term-lock-v2")
     assert old_request.cache_key != new_request.cache_key
     assert estimated_input_token_ceiling(new_request) > estimated_input_token_ceiling(old_request)
 
@@ -372,6 +372,64 @@ def test_critical_marker_failure_is_recorded_and_retried(tmp_path: Path, monkeyp
     assert attempts[0]["error_category"] == "quality:protected_marker"
 
 
+def test_quality_failure_retry_carries_correction_feedback(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    class LayoutRetryProvider:
+        requests = []
+
+        def translate(self, request):
+            self.requests.append(request)
+            if len(self.requests) == 1:
+                translated = "⟦P:layout-p0001-aaaa⟧直接采样 ⟦P:layout-p0001-bbbb⟧模糊测试"
+            else:
+                translated = "⟦P:layout-p0001-aaaa⟧直接采样。⟦P:layout-p0001-bbbb⟧模糊测试。"
+            return TranslationResult(
+                request_id=request.request_id,
+                unit_id=request.unit.unit_id,
+                draft=TranslationDraft(unit_id=request.unit.unit_id, translated_text=translated),
+                finish="complete",
+                provider_response_id=f"response-{len(self.requests)}",
+                model=request.model,
+                usage=Usage(input_tokens=10, output_tokens=5, usage_source="provider"),
+            )
+
+    provider = LayoutRetryProvider()
+    monkeypatch.setattr("pdf_translation.pipeline.DeepSeekProvider", lambda **_: provider)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-only")
+    text = "⟦P:layout-p0001-aaaa⟧direct sampling ⟦P:layout-p0001-bbbb⟧fuzzing"
+    protected = tuple(
+        ProtectedSpan(
+            occurrence_id=occurrence_id,
+            marker=marker,
+            kind="other",
+            original=ArtifactRef(uri="fixture/layout.txt", sha256=sha256_bytes(b"layout"), media_type="text/plain"),
+            source_ref=SourceRef(block_id="u1", page_index=0, bbox=(0, 0, 1, 1), char_start=text.index(marker), char_end=text.index(marker) + len(marker)),
+        )
+        for occurrence_id, marker in (("layout-aaaa", "⟦P:layout-p0001-aaaa⟧"), ("layout-bbbb", "⟦P:layout-p0001-bbbb⟧"))
+    )
+    source = unit(text).model_copy(update={"protected": protected, "source_hash": stable_hash(text)})
+    cfg = config("layout-feedback-retry").model_copy(
+        update={
+            "provider": "deepseek",
+            "model_id": "deepseek-flash",
+            "budget_usd": 1.0,
+            "input_usd_per_million": 1.0,
+            "output_usd_per_million": 1.0,
+            "provider_max_attempts": 2,
+        }
+    )
+    summary = run_units([source], cfg, tmp_path)
+    assert summary["states"] == {"accepted": 1}
+    assert summary["provider_attempts"] == 2
+    assert summary["failed_provider_attempts"] == 1
+    attempts = StateStore(tmp_path / cfg.run_id / "state.sqlite").provider_attempts(cfg.run_id)
+    assert attempts[0]["error_category"] == "quality:layout_boundary"
+    feedback_items = [item for item in provider.requests[1].context.items if item.item_id.startswith("retry-feedback-")]
+    assert len(feedback_items) == 1
+    assert "quality:layout_boundary" in feedback_items[0].content
+    assert "直接采样" in feedback_items[0].content
+    assert provider.requests[1].cache_key != provider.requests[0].cache_key
+
+
 def test_truncation_is_charged_then_retried_with_expanded_ceiling(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     class TruncationProvider:
         limits = []
@@ -469,3 +527,135 @@ def test_resume_expands_the_last_persisted_truncated_ceiling(tmp_path: Path, mon
     assert summary["states"] == {"accepted": 1}
     attempts = store.provider_attempts(cfg.run_id)
     assert [attempt["max_output_tokens"] for attempt in attempts] == [384, 768]
+
+def test_exhausted_symbolic_unit_resumes_without_another_paid_call(tmp_path, monkeypatch):
+    cfg = config('formula-recovery').model_copy(update={'provider': 'deepseek', 'model_id': 'deepseek-flash', 'api_key_env': 'TEST_FORMULA_KEY'})
+    monkeypatch.setenv('TEST_FORMULA_KEY', 'test-only')
+    source = unit('x=1')
+    store = StateStore(tmp_path / cfg.run_id / 'state.sqlite')
+    request = make_request(source, cfg)
+    store.begin_run(cfg.run_id, stable_hash([source]), cfg.config_hash)
+    store.prepare(cfg.run_id, source.unit_id, request.cache_key)
+    usage = Usage(input_tokens=1, output_tokens=1, cost_usd=0.001, usage_source='estimated')
+    for attempt in (1, 2):
+        store.record_provider_attempt(cfg.run_id, source.unit_id, request.request_id, attempt, 'invalid_response', usage, max_output_tokens=100, error_category='quality:protected_marker')
+    def forbidden(*args, **kwargs):
+        raise AssertionError('formula recovery must not call API')
+    monkeypatch.setattr(DeepSeekProvider, 'translate', forbidden)
+    summary = run_units([source], cfg, tmp_path)
+    assert summary['provider_attempts'] == 2
+    assert summary['cost_usd'] == 0.002
+    assert summary['states'] == {'accepted': 1}
+    assert store.result(cfg.run_id, source.unit_id).draft.translated_text == source.source_text
+
+
+def test_exact_formula_slots_do_not_require_chinese_sentence_punctuation():
+    source = unit('⟦P:layout-x⟧z ⟦P:eq⟧Wx ⟦P:plus⟧b ⟦P:layout-y⟧a ⟦P:sigma⟧(z)')
+    model = make_request(unit(), config()).model
+    result = TranslationResult(request_id='r', unit_id='u1', draft=TranslationDraft(unit_id='u1', translated_text=source.source_text), finish='complete', model=model, usage=Usage(usage_source='unavailable'))
+    assert check_quality(source, result).status == 'pass'
+    changed = result.model_copy(update={'draft': TranslationDraft(unit_id='u1', translated_text=source.source_text.replace('Wx', 'Wy'))})
+    assert check_quality(source, changed).status == 'blocked'
+
+
+def test_exhausted_unit_is_marked_and_skipped_on_rerun(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    class AlwaysBadProvider:
+        def translate(self, request):
+            return TranslationResult(
+                request_id=request.request_id,
+                unit_id=request.unit.unit_id,
+                draft=TranslationDraft(unit_id=request.unit.unit_id, translated_text="missing everything"),
+                finish="complete",
+                provider_response_id="bad",
+                model=request.model,
+                usage=Usage(input_tokens=10, output_tokens=5, usage_source="provider"),
+            )
+
+    provider = AlwaysBadProvider()
+    monkeypatch.setattr("pdf_translation.pipeline.DeepSeekProvider", lambda **_: provider)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-only")
+    cfg = config("exhaustion-skip").model_copy(
+        update={
+            "provider": "deepseek",
+            "model_id": "deepseek-flash",
+            "budget_usd": 1.0,
+            "input_usd_per_million": 1.0,
+            "output_usd_per_million": 1.0,
+            "provider_max_attempts": 2,
+        }
+    )
+    bad_text = "Before ⟦P:formula-9⟧ after"
+    marker_start = bad_text.index("⟦P:formula-9⟧")
+    protected = ProtectedSpan(
+        occurrence_id="formula-9",
+        marker="⟦P:formula-9⟧",
+        kind="formula",
+        original=ArtifactRef(uri="fixture/formula.txt", sha256=sha256_bytes(b"formula"), media_type="text/plain"),
+        source_ref=SourceRef(block_id="u1", page_index=0, bbox=(0, 0, 1, 1), char_start=marker_start, char_end=marker_start + len("⟦P:formula-9⟧")),
+    )
+    bad = unit(bad_text).model_copy(update={"protected": (protected,), "source_hash": stable_hash(bad_text)})
+    good = unit("plain prose without markers").model_copy(update={"unit_id": "u2"})
+    with pytest.raises(ProviderAttemptsExhausted) as excinfo:
+        run_units([bad, good], cfg, tmp_path)
+    assert excinfo.value.unit_id == bad.unit_id
+    store = StateStore(tmp_path / cfg.run_id / "state.sqlite")
+    store.mark_exhausted(cfg.run_id, bad.unit_id)
+    summary = run_units([bad, good], cfg, tmp_path)
+    assert summary["states"] == {"exhausted": 1, "accepted": 1}
+    assert store.state(cfg.run_id, bad.unit_id) == "exhausted"
+    attempts = store.provider_attempts(cfg.run_id)
+    assert [a["unit_id"] for a in attempts].count(bad.unit_id) == 2
+
+
+def test_retry_success_survives_rerun_without_new_attempts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    class FlakyOnceProvider:
+        calls = 0
+
+        def translate(self, request):
+            self.calls += 1
+            if self.calls == 1:
+                translated = "⟦P:layout-p0001-aaaa⟧直接采样 ⟦P:layout-p0001-bbbb⟧模糊测试"
+            else:
+                translated = "⟦P:layout-p0001-aaaa⟧直接采样。⟦P:layout-p0001-bbbb⟧模糊测试。"
+            return TranslationResult(
+                request_id=request.request_id,
+                unit_id=request.unit.unit_id,
+                draft=TranslationDraft(unit_id=request.unit.unit_id, translated_text=translated),
+                finish="complete",
+                provider_response_id=f"response-{self.calls}",
+                model=request.model,
+                usage=Usage(input_tokens=10, output_tokens=5, usage_source="provider"),
+            )
+
+    provider = FlakyOnceProvider()
+    monkeypatch.setattr("pdf_translation.pipeline.DeepSeekProvider", lambda **_: provider)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-only")
+    text = "⟦P:layout-p0001-aaaa⟧direct sampling ⟦P:layout-p0001-bbbb⟧fuzzing"
+    protected = tuple(
+        ProtectedSpan(
+            occurrence_id=occurrence_id,
+            marker=marker,
+            kind="other",
+            original=ArtifactRef(uri="fixture/layout.txt", sha256=sha256_bytes(b"layout"), media_type="text/plain"),
+            source_ref=SourceRef(block_id="u1", page_index=0, bbox=(0, 0, 1, 1), char_start=text.index(marker), char_end=text.index(marker) + len(marker)),
+        )
+        for occurrence_id, marker in (("layout-aaaa", "⟦P:layout-p0001-aaaa⟧"), ("layout-bbbb", "⟦P:layout-p0001-bbbb⟧"))
+    )
+    source = unit(text).model_copy(update={"protected": protected, "source_hash": stable_hash(text)})
+    cfg = config("retry-rerun-reuse").model_copy(
+        update={
+            "provider": "deepseek",
+            "model_id": "deepseek-flash",
+            "budget_usd": 1.0,
+            "input_usd_per_million": 1.0,
+            "output_usd_per_million": 1.0,
+            "provider_max_attempts": 3,
+        }
+    )
+    first = run_units([source], cfg, tmp_path)
+    assert first["states"] == {"accepted": 1}
+    assert first["provider_attempts"] == 2
+    second = run_units([source], cfg, tmp_path)
+    assert second["states"] == {"accepted": 1}
+    assert second["provider_attempts"] == 2
+    assert provider.calls == 2

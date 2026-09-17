@@ -1,0 +1,2785 @@
+{
+  "glossary_sha256": "6a57300c8a435b6650f310b80e249dad9fb80666da561f3be4a7d2fbcdbdc7a1",
+  "source_pdf_sha256": "1c29d0561e0051cbb265d064e0dffc16042d88a34bb5717bba8dd003967026ad",
+  "document_id": "cs224n-2019-notes03-neuralnets-1c29d0561e0051cb",
+  "approved_entries": 104,
+  "reviews": [
+    {
+      "page": 1,
+      "review_file": "page-001.translation-review.json",
+      "sha256": "eaecf17e56ea28ac2e51540c98d01f61a4556df650ae34b16727becd24b1caa8"
+    },
+    {
+      "page": 2,
+      "review_file": "page-002.translation-review.json",
+      "sha256": "fccdc8a44aec67da990f04514a45743bc7f5474dcf9b852f66e051a6341c4e27"
+    },
+    {
+      "page": 3,
+      "review_file": "page-003.translation-review.json",
+      "sha256": "11a3e7f73bb27d6a5e86c4cebc9f32ff42dbce2cd63ee632d4b45ed2bec2240a"
+    },
+    {
+      "page": 4,
+      "review_file": "page-004.translation-review.json",
+      "sha256": "4bd32cbfc58a0599f147ada82ca8a1cb15f67edcd4172c529b947f0115728aea"
+    },
+    {
+      "page": 5,
+      "review_file": "page-005.translation-review.json",
+      "sha256": "32f286e24e8d068f370030bd38316b697781913f87f82d08a175c975130c89ea"
+    },
+    {
+      "page": 6,
+      "review_file": "page-006.source-linked.translation-review.json",
+      "sha256": "6621e7999ac4574d58e8c9d8efbc424e1e37e796e64f077f53d3a5b636bfb219"
+    },
+    {
+      "page": 7,
+      "review_file": "page-007.translation-review.json",
+      "sha256": "3579e400ca195f5ab314668f443e382368c570f8f614de039e0e16bffa884f06"
+    },
+    {
+      "page": 8,
+      "review_file": "page-008.transfer.translation-review.json",
+      "sha256": "eaee5da4f0b90c878e1c1e8990e186c456d8d6a6af9150731a0788af33cf5448"
+    },
+    {
+      "page": 9,
+      "review_file": "page-009.translation-review.json",
+      "sha256": "f61d04a8e7d518d5d13ed572382488abf5b98ae4ed27e61ed0e48a6a271f90e9"
+    },
+    {
+      "page": 10,
+      "review_file": "page-010.cross-linked.translation-review.json",
+      "sha256": "906448d6990ff104bf79c30175b3a9b566fb7acf57920154d3ff0351af888335"
+    },
+    {
+      "page": 11,
+      "review_file": "page-011.dropout.translation-review.json",
+      "sha256": "e826e20783a435d061038a8c44fc667367560d8a7ebffe5da97f9b866fbc6b05"
+    },
+    {
+      "page": 12,
+      "review_file": "page-012.title.translation-review.json",
+      "sha256": "1949a6a3434b20954b5a887deb06ed9fa15c90c64920b0b532353455eea60bc0"
+    },
+    {
+      "page": 13,
+      "review_file": "page-013.cross-linked.translation-review.json",
+      "sha256": "b77587059f2401959304280c4bafbe3ba4f97bebc85fe7483a209fd06e944987"
+    },
+    {
+      "page": 14,
+      "review_file": "page-014.translation-review.json",
+      "sha256": "fcfbc4ea9a442ba3fbef32f352eb3401f9fe741150f6d8f98f4821d2e63e54a6"
+    },
+    {
+      "page": 15,
+      "review_file": "page-015.live.translation-review.json",
+      "sha256": "661a24006451efc3d97da299d2ad749440449bf5bcc3abec41027f3039b71de1"
+    },
+    {
+      "page": 16,
+      "review_file": "page-016.translation-review.json",
+      "sha256": "78d6c2bf893fc45b89338c6ab4cdf4809c782753eff479fadda52d9ee937d1c7"
+    },
+    {
+      "page": 17,
+      "review_file": "page-017.translation-review.json",
+      "sha256": "6ab1432dbc2fc9a16c5c14e9aab0ac16526a91dbd13d0f82435c5a1ecd5c9bf7"
+    },
+    {
+      "page": 18,
+      "review_file": "page-018.cross-linked.translation-review.json",
+      "sha256": "568eb37d6bc32f30c90af67a82980c26ee98e487801954f47e902e07468e9f53"
+    }
+  ],
+  "checks": [
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0018",
+      "source_term": "backpropagation",
+      "target_term": "反向传播",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0018",
+      "source_term": "neural networks",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0020",
+      "source_term": "backward propagation",
+      "target_term": "反向传播",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0020",
+      "source_term": "gradient",
+      "target_term": "梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0020",
+      "source_term": "gradient checks",
+      "target_term": "梯度检验",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0020",
+      "source_term": "max-margin loss",
+      "target_term": "最大间隔损失",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0020",
+      "source_term": "neural networks",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0020",
+      "source_term": "neuron units",
+      "target_term": "神经元单元",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0021",
+      "source_term": "AdaGrad",
+      "target_term": "AdaGrad",
+      "required_present": false,
+      "forbidden_found": [],
+      "passed": false
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0021",
+      "source_term": "Parameter Initialization",
+      "target_term": "参数初始化",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0022",
+      "source_term": "AdaGrad",
+      "target_term": "AdaGrad",
+      "required_present": false,
+      "forbidden_found": [],
+      "passed": false
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0022",
+      "source_term": "backpropagation",
+      "target_term": "反向传播",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0022",
+      "source_term": "chain rule",
+      "target_term": "链式法则",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0022",
+      "source_term": "gradient",
+      "target_term": "梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0022",
+      "source_term": "gradient checks",
+      "target_term": "梯度检验",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0022",
+      "source_term": "Gradient Descent",
+      "target_term": "梯度下降",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0022",
+      "source_term": "language model",
+      "target_term": "语言模型",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0022",
+      "source_term": "neural networks",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0022",
+      "source_term": "neuron units",
+      "target_term": "神经元单元",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0022",
+      "source_term": "Parameter Initialization",
+      "target_term": "参数初始化",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0022",
+      "source_term": "recurrent neural networks",
+      "target_term": "循环神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0023",
+      "source_term": "neural networks",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0024",
+      "source_term": "decision boundaries",
+      "target_term": "决策边界",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0024",
+      "source_term": "decision boundary",
+      "target_term": "决策边界",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0024",
+      "source_term": "linearly separable",
+      "target_term": "线性可分",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0024",
+      "source_term": "neural networks",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0024",
+      "source_term": "non-linear classifiers",
+      "target_term": "非线性分类器",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0024",
+      "source_term": "non-linear decision boundary",
+      "target_term": "非线性决策边界",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0026",
+      "source_term": "binary logistic regression",
+      "target_term": "二元逻辑回归",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0026",
+      "source_term": "input vector",
+      "target_term": "输入向量",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0026",
+      "source_term": "sigmoid",
+      "target_term": "Sigmoid",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0026",
+      "source_term": "weight vector",
+      "target_term": "权重向量",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0180",
+      "source_term": "decision boundary",
+      "target_term": "决策边界",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0180",
+      "source_term": "neural networks",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0180",
+      "source_term": "non-linear decision boundary",
+      "target_term": "非线性决策边界",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0182",
+      "source_term": "artificial neural networks",
+      "target_term": "人工神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0182",
+      "source_term": "neural networks",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0182",
+      "source_term": "organic kind",
+      "target_term": "生物神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 1,
+      "unit_id": "asset-1c29d0561e00-g0184",
+      "source_term": "neural networks",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 2,
+      "unit_id": "asset-1c29d0561e00-g0000",
+      "source_term": "backpropagation",
+      "target_term": "反向传播",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 2,
+      "unit_id": "asset-1c29d0561e00-g0000",
+      "source_term": "neural networks",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 2,
+      "unit_id": "asset-1c29d0561e00-g0042",
+      "source_term": "sigmoid",
+      "target_term": "Sigmoid",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 2,
+      "unit_id": "asset-1c29d0561e00-g0185",
+      "source_term": "input vector",
+      "target_term": "输入向量",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 2,
+      "unit_id": "asset-1c29d0561e00-g0185",
+      "source_term": "sigmoid",
+      "target_term": "Sigmoid",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 2,
+      "unit_id": "asset-1c29d0561e00-g0186",
+      "source_term": "sigmoid",
+      "target_term": "Sigmoid",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 3,
+      "unit_id": "asset-1c29d0561e00-g0001",
+      "source_term": "backpropagation",
+      "target_term": "反向传播",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 3,
+      "unit_id": "asset-1c29d0561e00-g0001",
+      "source_term": "neural networks",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 3,
+      "unit_id": "asset-1c29d0561e00-g0044",
+      "source_term": "feed-forward computation",
+      "target_term": "前馈计算",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 3,
+      "unit_id": "asset-1c29d0561e00-g0045",
+      "source_term": "input vector",
+      "target_term": "输入向量",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 3,
+      "unit_id": "asset-1c29d0561e00-g0045",
+      "source_term": "sigmoid",
+      "target_term": "Sigmoid",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 3,
+      "unit_id": "asset-1c29d0561e00-g0047",
+      "source_term": "softmax",
+      "target_term": "Softmax",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 3,
+      "unit_id": "asset-1c29d0561e00-g0047",
+      "source_term": "word vectors",
+      "target_term": "词向量",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 3,
+      "unit_id": "asset-1c29d0561e00-g0048",
+      "source_term": "activation function",
+      "target_term": "激活函数",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 3,
+      "unit_id": "asset-1c29d0561e00-g0049",
+      "source_term": "hidden layer",
+      "target_term": "隐藏层",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 3,
+      "unit_id": "asset-1c29d0561e00-g0049",
+      "source_term": "sigmoid",
+      "target_term": "Sigmoid",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 3,
+      "unit_id": "asset-1c29d0561e00-g0049",
+      "source_term": "word vector",
+      "target_term": "词向量",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 3,
+      "unit_id": "asset-1c29d0561e00-g0050",
+      "source_term": "Maximum Margin Objective Function",
+      "target_term": "最大间隔目标函数",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 3,
+      "unit_id": "asset-1c29d0561e00-g0050",
+      "source_term": "objective function",
+      "target_term": "目标函数",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 3,
+      "unit_id": "asset-1c29d0561e00-g0051",
+      "source_term": "neural networks",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 3,
+      "unit_id": "asset-1c29d0561e00-g0187",
+      "source_term": "feed-forward computation",
+      "target_term": "前馈计算",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 3,
+      "unit_id": "asset-1c29d0561e00-g0187",
+      "source_term": "hidden layer",
+      "target_term": "隐藏层",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 3,
+      "unit_id": "asset-1c29d0561e00-g0187",
+      "source_term": "neural network",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 3,
+      "unit_id": "asset-1c29d0561e00-g0187",
+      "source_term": "sigmoid",
+      "target_term": "Sigmoid",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 3,
+      "unit_id": "asset-1c29d0561e00-g0187",
+      "source_term": "word vector",
+      "target_term": "词向量",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 3,
+      "unit_id": "asset-1c29d0561e00-g0189",
+      "source_term": "feed-forward network",
+      "target_term": "前馈网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 4,
+      "unit_id": "asset-1c29d0561e00-g0002",
+      "source_term": "backpropagation",
+      "target_term": "反向传播",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 4,
+      "unit_id": "asset-1c29d0561e00-g0002",
+      "source_term": "neural networks",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 4,
+      "unit_id": "asset-1c29d0561e00-g0053",
+      "source_term": "objective function",
+      "target_term": "目标函数",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 4,
+      "unit_id": "asset-1c29d0561e00-g0055",
+      "source_term": "Support Vector Machines",
+      "target_term": "支持向量机",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 4,
+      "unit_id": "asset-1c29d0561e00-g0057",
+      "source_term": "backpropagation",
+      "target_term": "反向传播",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 4,
+      "unit_id": "asset-1c29d0561e00-g0058",
+      "source_term": "gradient",
+      "target_term": "梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 4,
+      "unit_id": "asset-1c29d0561e00-g0058",
+      "source_term": "Gradient Descent",
+      "target_term": "梯度下降",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 4,
+      "unit_id": "asset-1c29d0561e00-g0059",
+      "source_term": "backpropagation",
+      "target_term": "反向传播",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 4,
+      "unit_id": "asset-1c29d0561e00-g0059",
+      "source_term": "chain rule",
+      "target_term": "链式法则",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 4,
+      "unit_id": "asset-1c29d0561e00-g0059",
+      "source_term": "feed-forward computation",
+      "target_term": "前馈计算",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 4,
+      "unit_id": "asset-1c29d0561e00-g0190",
+      "source_term": "max-margin objective function",
+      "target_term": "最大间隔目标函数",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 4,
+      "unit_id": "asset-1c29d0561e00-g0190",
+      "source_term": "objective function",
+      "target_term": "目标函数",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 4,
+      "unit_id": "asset-1c29d0561e00-g0190",
+      "source_term": "Support Vector Machines",
+      "target_term": "支持向量机",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 4,
+      "unit_id": "asset-1c29d0561e00-g0191",
+      "source_term": "neural network",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 5,
+      "unit_id": "asset-1c29d0561e00-g0003",
+      "source_term": "backpropagation",
+      "target_term": "反向传播",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 5,
+      "unit_id": "asset-1c29d0561e00-g0003",
+      "source_term": "neural networks",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 5,
+      "unit_id": "asset-1c29d0561e00-g0060",
+      "source_term": "hidden layer",
+      "target_term": "隐藏层",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 5,
+      "unit_id": "asset-1c29d0561e00-g0060",
+      "source_term": "neural network",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 5,
+      "unit_id": "asset-1c29d0561e00-g0061",
+      "source_term": "neural network",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 5,
+      "unit_id": "asset-1c29d0561e00-g0062",
+      "source_term": "neural network",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 5,
+      "unit_id": "asset-1c29d0561e00-g0063",
+      "source_term": "output layers",
+      "target_term": "输出层",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 5,
+      "unit_id": "asset-1c29d0561e00-g0065",
+      "source_term": "hidden layer",
+      "target_term": "隐藏层",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 5,
+      "unit_id": "asset-1c29d0561e00-g0065",
+      "source_term": "input layer",
+      "target_term": "输入层",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 5,
+      "unit_id": "asset-1c29d0561e00-g0066",
+      "source_term": "transfer matrix",
+      "target_term": "变换矩阵",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 5,
+      "unit_id": "asset-1c29d0561e00-g0067",
+      "source_term": "backpropagation",
+      "target_term": "反向传播",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 5,
+      "unit_id": "asset-1c29d0561e00-g0067",
+      "source_term": "max-margin loss",
+      "target_term": "最大间隔损失",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 5,
+      "unit_id": "asset-1c29d0561e00-g0192",
+      "source_term": "backpropagation",
+      "target_term": "反向传播",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 5,
+      "unit_id": "asset-1c29d0561e00-g0193",
+      "source_term": "neural network",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 5,
+      "unit_id": "asset-1c29d0561e00-g0194",
+      "source_term": "neural network",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 5,
+      "unit_id": "asset-1c29d0561e00-g0196",
+      "source_term": "input layer",
+      "target_term": "输入层",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 5,
+      "unit_id": "asset-1c29d0561e00-g0197",
+      "source_term": "transfer matrix",
+      "target_term": "变换矩阵",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 6,
+      "unit_id": "asset-1c29d0561e00-g0070",
+      "source_term": "gradient",
+      "target_term": "梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 6,
+      "unit_id": "asset-1c29d0561e00-g0071",
+      "source_term": "backpropagation",
+      "target_term": "反向传播",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 6,
+      "unit_id": "asset-1c29d0561e00-g0073",
+      "source_term": "gradient",
+      "target_term": "梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 6,
+      "unit_id": "asset-1c29d0561e00-g0073",
+      "source_term": "local gradient",
+      "target_term": "局部梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 6,
+      "unit_id": "asset-1c29d0561e00-g0076",
+      "source_term": "gradient",
+      "target_term": "梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 6,
+      "unit_id": "asset-1c29d0561e00-g0076",
+      "source_term": "local gradient",
+      "target_term": "局部梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 6,
+      "unit_id": "asset-1c29d0561e00-g0079",
+      "source_term": "gradient",
+      "target_term": "梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 6,
+      "unit_id": "asset-1c29d0561e00-g0004",
+      "source_term": "backpropagation",
+      "target_term": "反向传播",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 6,
+      "unit_id": "asset-1c29d0561e00-g0004",
+      "source_term": "neural networks",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 7,
+      "unit_id": "asset-1c29d0561e00-g0005",
+      "source_term": "backpropagation",
+      "target_term": "反向传播",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 7,
+      "unit_id": "asset-1c29d0561e00-g0005",
+      "source_term": "neural networks",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 7,
+      "unit_id": "asset-1c29d0561e00-g0081",
+      "source_term": "chain rule",
+      "target_term": "链式法则",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 7,
+      "unit_id": "asset-1c29d0561e00-g0082",
+      "source_term": "bias terms",
+      "target_term": "偏置项",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 7,
+      "unit_id": "asset-1c29d0561e00-g0082",
+      "source_term": "bias updates",
+      "target_term": "偏置更新",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 7,
+      "unit_id": "asset-1c29d0561e00-g0082",
+      "source_term": "gradient",
+      "target_term": "梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 7,
+      "unit_id": "asset-1c29d0561e00-g0090",
+      "source_term": "gradient",
+      "target_term": "梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 7,
+      "unit_id": "asset-1c29d0561e00-g0090",
+      "source_term": "local gradient",
+      "target_term": "局部梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 8,
+      "unit_id": "asset-1c29d0561e00-g0006",
+      "source_term": "backpropagation",
+      "target_term": "反向传播",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 8,
+      "unit_id": "asset-1c29d0561e00-g0006",
+      "source_term": "neural networks",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 8,
+      "unit_id": "asset-1c29d0561e00-g0097",
+      "source_term": "backpropagation",
+      "target_term": "反向传播",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 8,
+      "unit_id": "asset-1c29d0561e00-g0097",
+      "source_term": "vectorized",
+      "target_term": "向量化",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 8,
+      "unit_id": "asset-1c29d0561e00-g0098",
+      "source_term": "bias vectors",
+      "target_term": "偏置向量",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 8,
+      "unit_id": "asset-1c29d0561e00-g0098",
+      "source_term": "weight matrices",
+      "target_term": "权重矩阵",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 8,
+      "unit_id": "asset-1c29d0561e00-g0099",
+      "source_term": "gradient",
+      "target_term": "梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 8,
+      "unit_id": "asset-1c29d0561e00-g0100",
+      "source_term": "gradient",
+      "target_term": "梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 8,
+      "unit_id": "asset-1c29d0561e00-g0100",
+      "source_term": "outer product",
+      "target_term": "外积",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 8,
+      "unit_id": "asset-1c29d0561e00-g0102",
+      "source_term": "element wise product",
+      "target_term": "逐元素乘积",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 8,
+      "unit_id": "asset-1c29d0561e00-g0103",
+      "source_term": "backpropagation",
+      "target_term": "反向传播",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 8,
+      "unit_id": "asset-1c29d0561e00-g0103",
+      "source_term": "vectorized",
+      "target_term": "向量化",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 8,
+      "unit_id": "asset-1c29d0561e00-g0104",
+      "source_term": "neural networks",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 8,
+      "unit_id": "asset-1c29d0561e00-g0105",
+      "source_term": "neural networks",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 8,
+      "unit_id": "asset-1c29d0561e00-g0203",
+      "source_term": "transfer matrix",
+      "target_term": "变换矩阵",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 9,
+      "unit_id": "asset-1c29d0561e00-g0007",
+      "source_term": "backpropagation",
+      "target_term": "反向传播",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 9,
+      "unit_id": "asset-1c29d0561e00-g0007",
+      "source_term": "neural networks",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 9,
+      "unit_id": "asset-1c29d0561e00-g0100",
+      "source_term": "neural networks",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 9,
+      "unit_id": "asset-1c29d0561e00-g0101",
+      "source_term": "gradient",
+      "target_term": "梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 9,
+      "unit_id": "asset-1c29d0561e00-g0101",
+      "source_term": "gradient check",
+      "target_term": "梯度检验",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 9,
+      "unit_id": "asset-1c29d0561e00-g0102",
+      "source_term": "centered difference formula",
+      "target_term": "中心差分公式",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 9,
+      "unit_id": "asset-1c29d0561e00-g0102",
+      "source_term": "derivative",
+      "target_term": "导数",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 9,
+      "unit_id": "asset-1c29d0561e00-g0102",
+      "source_term": "gradient",
+      "target_term": "梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 9,
+      "unit_id": "asset-1c29d0561e00-g0102",
+      "source_term": "loss function",
+      "target_term": "损失函数",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 9,
+      "unit_id": "asset-1c29d0561e00-g0102",
+      "source_term": "neural network",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 9,
+      "unit_id": "asset-1c29d0561e00-g0102",
+      "source_term": "numerical gradient",
+      "target_term": "数值梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 9,
+      "unit_id": "asset-1c29d0561e00-g0102",
+      "source_term": "parameter vector",
+      "target_term": "参数向量",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 9,
+      "unit_id": "asset-1c29d0561e00-g0104",
+      "source_term": "derivative",
+      "target_term": "导数",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 9,
+      "unit_id": "asset-1c29d0561e00-g0104",
+      "source_term": "gradient",
+      "target_term": "梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 9,
+      "unit_id": "asset-1c29d0561e00-g0104",
+      "source_term": "numerical gradient",
+      "target_term": "数值梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 9,
+      "unit_id": "asset-1c29d0561e00-g0105",
+      "source_term": "centered difference formula",
+      "target_term": "中心差分公式",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 9,
+      "unit_id": "asset-1c29d0561e00-g0105",
+      "source_term": "derivative",
+      "target_term": "导数",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 9,
+      "unit_id": "asset-1c29d0561e00-g0105",
+      "source_term": "gradient",
+      "target_term": "梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 9,
+      "unit_id": "asset-1c29d0561e00-g0105",
+      "source_term": "numerical gradient",
+      "target_term": "数值梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 9,
+      "unit_id": "asset-1c29d0561e00-g0106",
+      "source_term": "analytic gradients",
+      "target_term": "解析梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 9,
+      "unit_id": "asset-1c29d0561e00-g0106",
+      "source_term": "back-propagation",
+      "target_term": "反向传播",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 9,
+      "unit_id": "asset-1c29d0561e00-g0106",
+      "source_term": "gradient",
+      "target_term": "梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 9,
+      "unit_id": "asset-1c29d0561e00-g0106",
+      "source_term": "gradient check",
+      "target_term": "梯度检验",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 9,
+      "unit_id": "asset-1c29d0561e00-g0106",
+      "source_term": "neural networks",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 9,
+      "unit_id": "asset-1c29d0561e00-g0200",
+      "source_term": "analytical gradients",
+      "target_term": "解析梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 9,
+      "unit_id": "asset-1c29d0561e00-g0200",
+      "source_term": "gradient",
+      "target_term": "梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 9,
+      "unit_id": "asset-1c29d0561e00-g0200",
+      "source_term": "gradient checks",
+      "target_term": "梯度检验",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 9,
+      "unit_id": "asset-1c29d0561e00-g0200",
+      "source_term": "numerical gradients",
+      "target_term": "数值梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 10,
+      "unit_id": "asset-1c29d0561e00-g0008",
+      "source_term": "backpropagation",
+      "target_term": "反向传播",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 10,
+      "unit_id": "asset-1c29d0561e00-g0008",
+      "source_term": "neural networks",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 10,
+      "unit_id": "asset-1c29d0561e00-g0106",
+      "source_term": "analytic gradients",
+      "target_term": "解析梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 10,
+      "unit_id": "asset-1c29d0561e00-g0106",
+      "source_term": "back-propagation",
+      "target_term": "反向传播",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 10,
+      "unit_id": "asset-1c29d0561e00-g0106",
+      "source_term": "gradient",
+      "target_term": "梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 10,
+      "unit_id": "asset-1c29d0561e00-g0106",
+      "source_term": "gradient check",
+      "target_term": "梯度检验",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 10,
+      "unit_id": "asset-1c29d0561e00-g0106",
+      "source_term": "neural networks",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 11,
+      "unit_id": "asset-1c29d0561e00-g0009",
+      "source_term": "backpropagation",
+      "target_term": "反向传播",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 11,
+      "unit_id": "asset-1c29d0561e00-g0009",
+      "source_term": "neural networks",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 11,
+      "unit_id": "asset-1c29d0561e00-g0117",
+      "source_term": "regularization",
+      "target_term": "正则化",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 11,
+      "unit_id": "asset-1c29d0561e00-g0118",
+      "source_term": "loss function",
+      "target_term": "损失函数",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 11,
+      "unit_id": "asset-1c29d0561e00-g0118",
+      "source_term": "neural networks",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 11,
+      "unit_id": "asset-1c29d0561e00-g0118",
+      "source_term": "overfitting",
+      "target_term": "过拟合",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 11,
+      "unit_id": "asset-1c29d0561e00-g0118",
+      "source_term": "regularization",
+      "target_term": "正则化",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 11,
+      "unit_id": "asset-1c29d0561e00-g0118",
+      "source_term": "regularization penalty",
+      "target_term": "正则化惩罚项",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 11,
+      "unit_id": "asset-1c29d0561e00-g0119",
+      "source_term": "bias terms",
+      "target_term": "偏置项",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 11,
+      "unit_id": "asset-1c29d0561e00-g0119",
+      "source_term": "cost function",
+      "target_term": "成本函数",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 11,
+      "unit_id": "asset-1c29d0561e00-g0119",
+      "source_term": "Frobenius norm",
+      "target_term": "Frobenius 范数",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 11,
+      "unit_id": "asset-1c29d0561e00-g0119",
+      "source_term": "hyper-parameter",
+      "target_term": "超参数",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 11,
+      "unit_id": "asset-1c29d0561e00-g0119",
+      "source_term": "hyperparameter",
+      "target_term": "超参数",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 11,
+      "unit_id": "asset-1c29d0561e00-g0119",
+      "source_term": "hyperparameter-tuning",
+      "target_term": "超参数调优",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 11,
+      "unit_id": "asset-1c29d0561e00-g0119",
+      "source_term": "overfitting",
+      "target_term": "过拟合",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 11,
+      "unit_id": "asset-1c29d0561e00-g0119",
+      "source_term": "regularization",
+      "target_term": "正则化",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 11,
+      "unit_id": "asset-1c29d0561e00-g0119",
+      "source_term": "regularization term",
+      "target_term": "正则化项",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 11,
+      "unit_id": "asset-1c29d0561e00-g0119",
+      "source_term": "weight matrix",
+      "target_term": "权重矩阵",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 11,
+      "unit_id": "asset-1c29d0561e00-g0120",
+      "source_term": "dropout",
+      "target_term": "随机失活",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 11,
+      "unit_id": "asset-1c29d0561e00-g0120",
+      "source_term": "regularization",
+      "target_term": "正则化",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 11,
+      "unit_id": "asset-1c29d0561e00-g0206",
+      "source_term": "Frobenius norm",
+      "target_term": "Frobenius 范数",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 12,
+      "unit_id": "asset-1c29d0561e00-g0010",
+      "source_term": "backpropagation",
+      "target_term": "反向传播",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 12,
+      "unit_id": "asset-1c29d0561e00-g0010",
+      "source_term": "neural networks",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 12,
+      "unit_id": "asset-1c29d0561e00-g0121",
+      "source_term": "dropout",
+      "target_term": "随机失活",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 12,
+      "unit_id": "asset-1c29d0561e00-g0122",
+      "source_term": "dropout",
+      "target_term": "随机失活",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 12,
+      "unit_id": "asset-1c29d0561e00-g0122",
+      "source_term": "neural networks",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 12,
+      "unit_id": "asset-1c29d0561e00-g0122",
+      "source_term": "overfitting",
+      "target_term": "过拟合",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 12,
+      "unit_id": "asset-1c29d0561e00-g0122",
+      "source_term": "regularization",
+      "target_term": "正则化",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 12,
+      "unit_id": "asset-1c29d0561e00-g0123",
+      "source_term": "back-propagation",
+      "target_term": "反向传播",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 12,
+      "unit_id": "asset-1c29d0561e00-g0123",
+      "source_term": "dropout",
+      "target_term": "随机失活",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 12,
+      "unit_id": "asset-1c29d0561e00-g0124",
+      "source_term": "neuron units",
+      "target_term": "神经元单元",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 12,
+      "unit_id": "asset-1c29d0561e00-g0125",
+      "source_term": "activation functions",
+      "target_term": "激活函数",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 12,
+      "unit_id": "asset-1c29d0561e00-g0125",
+      "source_term": "neural networks",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 12,
+      "unit_id": "asset-1c29d0561e00-g0125",
+      "source_term": "sigmoidal",
+      "target_term": "Sigmoid",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 12,
+      "unit_id": "asset-1c29d0561e00-g0126",
+      "source_term": "gradient",
+      "target_term": "梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 12,
+      "unit_id": "asset-1c29d0561e00-g0126",
+      "source_term": "sigmoidal",
+      "target_term": "Sigmoid",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 12,
+      "unit_id": "asset-1c29d0561e00-g0127",
+      "source_term": "activation function",
+      "target_term": "激活函数",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 12,
+      "unit_id": "asset-1c29d0561e00-g0127",
+      "source_term": "sigmoid",
+      "target_term": "Sigmoid",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 12,
+      "unit_id": "asset-1c29d0561e00-g0207",
+      "source_term": "dropout",
+      "target_term": "随机失活",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 12,
+      "unit_id": "asset-1c29d0561e00-g0207",
+      "source_term": "neural network",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 12,
+      "unit_id": "asset-1c29d0561e00-g0208",
+      "source_term": "sigmoid",
+      "target_term": "Sigmoid",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 13,
+      "unit_id": "asset-1c29d0561e00-g0011",
+      "source_term": "backpropagation",
+      "target_term": "反向传播",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 13,
+      "unit_id": "asset-1c29d0561e00-g0011",
+      "source_term": "neural networks",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 13,
+      "unit_id": "asset-1c29d0561e00-g0124",
+      "source_term": "gradient",
+      "target_term": "梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 13,
+      "unit_id": "asset-1c29d0561e00-g0125",
+      "source_term": "sigmoid",
+      "target_term": "Sigmoid",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 13,
+      "unit_id": "asset-1c29d0561e00-g0128",
+      "source_term": "gradient",
+      "target_term": "梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 13,
+      "unit_id": "asset-1c29d0561e00-g0132",
+      "source_term": "derivative",
+      "target_term": "导数",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 13,
+      "unit_id": "asset-1c29d0561e00-g0132",
+      "source_term": "piecewise functional form",
+      "target_term": "分段函数形式",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 13,
+      "unit_id": "asset-1c29d0561e00-g0134",
+      "source_term": "hard clipped functions",
+      "target_term": "硬截断函数",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 13,
+      "unit_id": "asset-1c29d0561e00-g0134",
+      "source_term": "soft sign",
+      "target_term": "软符号",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 13,
+      "unit_id": "asset-1c29d0561e00-g0136",
+      "source_term": "derivative",
+      "target_term": "导数",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 13,
+      "unit_id": "asset-1c29d0561e00-g0137",
+      "source_term": "signum function",
+      "target_term": "符号函数",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 13,
+      "unit_id": "asset-1c29d0561e00-g0207",
+      "source_term": "soft sign",
+      "target_term": "软符号",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 14,
+      "unit_id": "asset-1c29d0561e00-g0012",
+      "source_term": "backpropagation",
+      "target_term": "反向传播",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 14,
+      "unit_id": "asset-1c29d0561e00-g0012",
+      "source_term": "neural networks",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 14,
+      "unit_id": "asset-1c29d0561e00-g0138",
+      "source_term": "Rectified Linear Unit",
+      "target_term": "整流线性单元",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 14,
+      "unit_id": "asset-1c29d0561e00-g0139",
+      "source_term": "derivative",
+      "target_term": "导数",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 14,
+      "unit_id": "asset-1c29d0561e00-g0139",
+      "source_term": "piecewise function",
+      "target_term": "分段函数",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 14,
+      "unit_id": "asset-1c29d0561e00-g0140",
+      "source_term": "Leaky ReLU",
+      "target_term": "带泄漏ReLU",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 14,
+      "unit_id": "asset-1c29d0561e00-g0141",
+      "source_term": "derivative",
+      "target_term": "导数",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 14,
+      "unit_id": "asset-1c29d0561e00-g0143",
+      "source_term": "Data Preprocessing",
+      "target_term": "数据预处理",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 14,
+      "unit_id": "asset-1c29d0561e00-g0145",
+      "source_term": "feature vector",
+      "target_term": "特征向量",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 14,
+      "unit_id": "asset-1c29d0561e00-g0145",
+      "source_term": "Mean Subtraction",
+      "target_term": "均值中心化",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 14,
+      "unit_id": "asset-1c29d0561e00-g0146",
+      "source_term": "Mean Subtraction",
+      "target_term": "均值中心化",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 14,
+      "unit_id": "asset-1c29d0561e00-g0146",
+      "source_term": "Normalization",
+      "target_term": "归一化",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 14,
+      "unit_id": "asset-1c29d0561e00-g0146",
+      "source_term": "standard deviation",
+      "target_term": "标准差",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 14,
+      "unit_id": "asset-1c29d0561e00-g0209",
+      "source_term": "Leaky ReLU",
+      "target_term": "带泄漏ReLU",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 15,
+      "unit_id": "asset-1c29d0561e00-g0013",
+      "source_term": "backpropagation",
+      "target_term": "反向传播",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 15,
+      "unit_id": "asset-1c29d0561e00-g0013",
+      "source_term": "neural networks",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 15,
+      "unit_id": "asset-1c29d0561e00-g0152",
+      "source_term": "covariance matrix",
+      "target_term": "协方差矩阵",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 15,
+      "unit_id": "asset-1c29d0561e00-g0152",
+      "source_term": "identity covariance matrix",
+      "target_term": "单位协方差矩阵",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 15,
+      "unit_id": "asset-1c29d0561e00-g0152",
+      "source_term": "Normalization",
+      "target_term": "归一化",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 15,
+      "unit_id": "asset-1c29d0561e00-g0152",
+      "source_term": "singular value",
+      "target_term": "奇异值",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 15,
+      "unit_id": "asset-1c29d0561e00-g0152",
+      "source_term": "Singular Value Decomposition",
+      "target_term": "奇异值分解",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 15,
+      "unit_id": "asset-1c29d0561e00-g0152",
+      "source_term": "Whitening",
+      "target_term": "白化",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 15,
+      "unit_id": "asset-1c29d0561e00-g0153",
+      "source_term": "Parameter Initialization",
+      "target_term": "参数初始化",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 15,
+      "unit_id": "asset-1c29d0561e00-g0154",
+      "source_term": "deep feedforward neural networks",
+      "target_term": "深度前馈神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 15,
+      "unit_id": "asset-1c29d0561e00-g0154",
+      "source_term": "neural network",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 15,
+      "unit_id": "asset-1c29d0561e00-g0154",
+      "source_term": "neural networks",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 15,
+      "unit_id": "asset-1c29d0561e00-g0154",
+      "source_term": "sigmoid",
+      "target_term": "Sigmoid",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 15,
+      "unit_id": "asset-1c29d0561e00-g0154",
+      "source_term": "uniform distribution",
+      "target_term": "均匀分布",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 15,
+      "unit_id": "asset-1c29d0561e00-g0156",
+      "source_term": "backpropagation",
+      "target_term": "反向传播",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 15,
+      "unit_id": "asset-1c29d0561e00-g0156",
+      "source_term": "fan-in",
+      "target_term": "扇入",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 15,
+      "unit_id": "asset-1c29d0561e00-g0156",
+      "source_term": "fan-out",
+      "target_term": "扇出",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 15,
+      "unit_id": "asset-1c29d0561e00-g0156",
+      "source_term": "gradient",
+      "target_term": "梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 15,
+      "unit_id": "asset-1c29d0561e00-g0156",
+      "source_term": "Parameter Initialization",
+      "target_term": "参数初始化",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 15,
+      "unit_id": "asset-1c29d0561e00-g0158",
+      "source_term": "gradient",
+      "target_term": "梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 15,
+      "unit_id": "asset-1c29d0561e00-g0158",
+      "source_term": "Gradient Descent",
+      "target_term": "梯度下降",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 15,
+      "unit_id": "asset-1c29d0561e00-g0158",
+      "source_term": "learning rate",
+      "target_term": "学习率",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 15,
+      "unit_id": "asset-1c29d0561e00-g0159",
+      "source_term": "learning rate",
+      "target_term": "学习率",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 15,
+      "unit_id": "asset-1c29d0561e00-g0159",
+      "source_term": "loss function",
+      "target_term": "损失函数",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 16,
+      "unit_id": "asset-1c29d0561e00-g0014",
+      "source_term": "backpropagation",
+      "target_term": "反向传播",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 16,
+      "unit_id": "asset-1c29d0561e00-g0014",
+      "source_term": "neural networks",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 16,
+      "unit_id": "asset-1c29d0561e00-g0154",
+      "source_term": "learning rate",
+      "target_term": "学习率",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 16,
+      "unit_id": "asset-1c29d0561e00-g0154",
+      "source_term": "loss function",
+      "target_term": "损失函数",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 16,
+      "unit_id": "asset-1c29d0561e00-g0155",
+      "source_term": "learning rate",
+      "target_term": "学习率",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 16,
+      "unit_id": "asset-1c29d0561e00-g0156",
+      "source_term": "hyperparameter",
+      "target_term": "超参数",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 16,
+      "unit_id": "asset-1c29d0561e00-g0156",
+      "source_term": "learning rate",
+      "target_term": "学习率",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 16,
+      "unit_id": "asset-1c29d0561e00-g0157",
+      "source_term": "fan-in",
+      "target_term": "扇入",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 16,
+      "unit_id": "asset-1c29d0561e00-g0157",
+      "source_term": "learning rate",
+      "target_term": "学习率",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 16,
+      "unit_id": "asset-1c29d0561e00-g0158",
+      "source_term": "annealing",
+      "target_term": "退火",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 16,
+      "unit_id": "asset-1c29d0561e00-g0158",
+      "source_term": "learning rate",
+      "target_term": "学习率",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 16,
+      "unit_id": "asset-1c29d0561e00-g0159",
+      "source_term": "Exponential decay",
+      "target_term": "指数衰减",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 16,
+      "unit_id": "asset-1c29d0561e00-g0159",
+      "source_term": "hyperparameter",
+      "target_term": "超参数",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 16,
+      "unit_id": "asset-1c29d0561e00-g0159",
+      "source_term": "learning rate",
+      "target_term": "学习率",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 16,
+      "unit_id": "asset-1c29d0561e00-g0160",
+      "source_term": "adaptive gradient descent",
+      "target_term": "自适应梯度下降",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 16,
+      "unit_id": "asset-1c29d0561e00-g0160",
+      "source_term": "gradient",
+      "target_term": "梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 16,
+      "unit_id": "asset-1c29d0561e00-g0160",
+      "source_term": "Gradient Descent",
+      "target_term": "梯度下降",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 16,
+      "unit_id": "asset-1c29d0561e00-g0160",
+      "source_term": "learning rate",
+      "target_term": "学习率",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 16,
+      "unit_id": "asset-1c29d0561e00-g0161",
+      "source_term": "Momentum",
+      "target_term": "动量",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 16,
+      "unit_id": "asset-1c29d0561e00-g0162",
+      "source_term": "gradient",
+      "target_term": "梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 16,
+      "unit_id": "asset-1c29d0561e00-g0162",
+      "source_term": "Gradient Descent",
+      "target_term": "梯度下降",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 16,
+      "unit_id": "asset-1c29d0561e00-g0162",
+      "source_term": "Momentum",
+      "target_term": "动量",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 16,
+      "unit_id": "asset-1c29d0561e00-g0210",
+      "source_term": "learning rate",
+      "target_term": "学习率",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 17,
+      "unit_id": "asset-1c29d0561e00-g0015",
+      "source_term": "backpropagation",
+      "target_term": "反向传播",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 17,
+      "unit_id": "asset-1c29d0561e00-g0015",
+      "source_term": "neural networks",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 17,
+      "unit_id": "asset-1c29d0561e00-g0162",
+      "source_term": "gradient",
+      "target_term": "梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 17,
+      "unit_id": "asset-1c29d0561e00-g0162",
+      "source_term": "Gradient Descent",
+      "target_term": "梯度下降",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 17,
+      "unit_id": "asset-1c29d0561e00-g0162",
+      "source_term": "Momentum",
+      "target_term": "动量",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 17,
+      "unit_id": "asset-1c29d0561e00-g0164",
+      "source_term": "Adaptive Optimization Methods",
+      "target_term": "自适应优化方法",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 17,
+      "unit_id": "asset-1c29d0561e00-g0165",
+      "source_term": "AdaGrad",
+      "target_term": "AdaGrad",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 17,
+      "unit_id": "asset-1c29d0561e00-g0165",
+      "source_term": "gradient",
+      "target_term": "梯度",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 17,
+      "unit_id": "asset-1c29d0561e00-g0165",
+      "source_term": "Gradient Descent",
+      "target_term": "梯度下降",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 17,
+      "unit_id": "asset-1c29d0561e00-g0165",
+      "source_term": "learning rate",
+      "target_term": "学习率",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 17,
+      "unit_id": "asset-1c29d0561e00-g0165",
+      "source_term": "stochastic gradient descent",
+      "target_term": "随机梯度下降",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 17,
+      "unit_id": "asset-1c29d0561e00-g0167",
+      "source_term": "learning rate",
+      "target_term": "学习率",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 17,
+      "unit_id": "asset-1c29d0561e00-g0167",
+      "source_term": "RMS",
+      "target_term": "均方根",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 17,
+      "unit_id": "asset-1c29d0561e00-g0169",
+      "source_term": "Adam",
+      "target_term": "Adam",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 17,
+      "unit_id": "asset-1c29d0561e00-g0169",
+      "source_term": "RMSProp",
+      "target_term": "RMSProp",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 18,
+      "unit_id": "asset-1c29d0561e00-g0016",
+      "source_term": "backpropagation",
+      "target_term": "反向传播",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 18,
+      "unit_id": "asset-1c29d0561e00-g0016",
+      "source_term": "neural networks",
+      "target_term": "神经网络",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 18,
+      "unit_id": "review-source-77ca328a8b9b4f9b",
+      "source_term": "AdaGrad",
+      "target_term": "AdaGrad",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 18,
+      "unit_id": "review-source-77ca328a8b9b4f9b",
+      "source_term": "Adam",
+      "target_term": "Adam",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 18,
+      "unit_id": "review-source-77ca328a8b9b4f9b",
+      "source_term": "moving average",
+      "target_term": "移动平均",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    },
+    {
+      "page": 18,
+      "unit_id": "review-source-77ca328a8b9b4f9b",
+      "source_term": "RMSProp",
+      "target_term": "RMSProp",
+      "required_present": true,
+      "forbidden_found": [],
+      "passed": true
+    }
+  ],
+  "passed": false,
+  "scope": "All approved glossary term/unit pairs in reviewed records; target occurrence checking does not establish occurrence alignment or discover unknown terms.",
+  "entire_document_formal_use_ready": false
+}

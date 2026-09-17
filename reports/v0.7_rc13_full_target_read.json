@@ -1,0 +1,230 @@
+{
+  "status": "full_current_target_read_completed",
+  "pages": [
+    {
+      "page": 1,
+      "review_file": "output\\pdf\\v0.7-rc13\\native-assets-sample\\page-001.translation-review.json",
+      "review_sha256": "eaecf17e56ea28ac2e51540c98d01f61a4556df650ae34b16727becd24b1caa8",
+      "records_read": 18,
+      "target_read_complete": true
+    },
+    {
+      "page": 2,
+      "review_file": "output\\pdf\\v0.7-rc13\\native-assets-sample\\page-002.translation-review.json",
+      "review_sha256": "fccdc8a44aec67da990f04514a45743bc7f5474dcf9b852f66e051a6341c4e27",
+      "records_read": 12,
+      "target_read_complete": true
+    },
+    {
+      "page": 3,
+      "review_file": "output\\pdf\\v0.7-rc13\\native-assets-sample\\page-003.translation-review.json",
+      "review_sha256": "11a3e7f73bb27d6a5e86c4cebc9f32ff42dbce2cd63ee632d4b45ed2bec2240a",
+      "records_read": 12,
+      "target_read_complete": true
+    },
+    {
+      "page": 4,
+      "review_file": "output\\pdf\\v0.7-rc13\\native-assets-sample\\page-004.translation-review.json",
+      "review_sha256": "4bd32cbfc58a0599f147ada82ca8a1cb15f67edcd4172c529b947f0115728aea",
+      "records_read": 11,
+      "target_read_complete": true
+    },
+    {
+      "page": 5,
+      "review_file": "output\\pdf\\v0.7-rc13\\native-assets-sample\\page-005.translation-review.json",
+      "review_sha256": "32f286e24e8d068f370030bd38316b697781913f87f82d08a175c975130c89ea",
+      "records_read": 16,
+      "target_read_complete": true
+    },
+    {
+      "page": 6,
+      "review_file": "output\\pdf\\v0.7-rc13\\native-assets-sample\\page-006.source-linked.translation-review.json",
+      "review_sha256": "6621e7999ac4574d58e8c9d8efbc424e1e37e796e64f077f53d3a5b636bfb219",
+      "records_read": 12,
+      "target_read_complete": true
+    },
+    {
+      "page": 7,
+      "review_file": "output\\pdf\\v0.7-rc13\\native-assets-sample\\page-007.translation-review.json",
+      "review_sha256": "3579e400ca195f5ab314668f443e382368c570f8f614de039e0e16bffa884f06",
+      "records_read": 15,
+      "target_read_complete": true
+    },
+    {
+      "page": 8,
+      "review_file": "output\\pdf\\v0.7-rc13\\native-assets-sample\\page-008.transfer.translation-review.json",
+      "review_sha256": "eaee5da4f0b90c878e1c1e8990e186c456d8d6a6af9150731a0788af33cf5448",
+      "records_read": 12,
+      "target_read_complete": true
+    },
+    {
+      "page": 9,
+      "review_file": "output\\pdf\\v0.7-rc13\\native-assets-sample\\page-009.translation-review.json",
+      "review_sha256": "f61d04a8e7d518d5d13ed572382488abf5b98ae4ed27e61ed0e48a6a271f90e9",
+      "records_read": 9,
+      "target_read_complete": true
+    },
+    {
+      "page": 10,
+      "review_file": "output\\pdf\\v0.7-rc13\\native-assets-sample\\page-010.cross-linked.translation-review.json",
+      "review_sha256": "906448d6990ff104bf79c30175b3a9b566fb7acf57920154d3ff0351af888335",
+      "records_read": 3,
+      "target_read_complete": true
+    },
+    {
+      "page": 11,
+      "review_file": "output\\pdf\\v0.7-rc13\\native-assets-sample\\page-011.dropout.translation-review.json",
+      "review_sha256": "e826e20783a435d061038a8c44fc667367560d8a7ebffe5da97f9b866fbc6b05",
+      "records_read": 6,
+      "target_read_complete": true
+    },
+    {
+      "page": 12,
+      "review_file": "output\\pdf\\v0.7-rc13\\native-assets-sample\\page-012.title.translation-review.json",
+      "review_sha256": "1949a6a3434b20954b5a887deb06ed9fa15c90c64920b0b532353455eea60bc0",
+      "records_read": 11,
+      "target_read_complete": true
+    },
+    {
+      "page": 13,
+      "review_file": "output\\pdf\\v0.7-rc13\\native-assets-sample\\page-013.cross-linked.translation-review.json",
+      "review_sha256": "b77587059f2401959304280c4bafbe3ba4f97bebc85fe7483a209fd06e944987",
+      "records_read": 14,
+      "target_read_complete": true
+    },
+    {
+      "page": 14,
+      "review_file": "output\\pdf\\v0.7-rc13\\native-assets-sample\\page-014.translation-review.json",
+      "review_sha256": "fcfbc4ea9a442ba3fbef32f352eb3401f9fe741150f6d8f98f4821d2e63e54a6",
+      "records_read": 11,
+      "target_read_complete": true
+    },
+    {
+      "page": 15,
+      "review_file": "output\\pdf\\v0.7-rc13\\native-assets-sample\\page-015.live.translation-review.json",
+      "review_sha256": "661a24006451efc3d97da299d2ad749440449bf5bcc3abec41027f3039b71de1",
+      "records_read": 8,
+      "target_read_complete": true
+    },
+    {
+      "page": 16,
+      "review_file": "output\\pdf\\v0.7-rc13\\native-assets-sample\\page-016.translation-review.json",
+      "review_sha256": "78d6c2bf893fc45b89338c6ab4cdf4809c782753eff479fadda52d9ee937d1c7",
+      "records_read": 11,
+      "target_read_complete": true
+    },
+    {
+      "page": 17,
+      "review_file": "output\\pdf\\v0.7-rc13\\native-assets-sample\\page-017.translation-review.json",
+      "review_sha256": "6ab1432dbc2fc9a16c5c14e9aab0ac16526a91dbd13d0f82435c5a1ecd5c9bf7",
+      "records_read": 11,
+      "target_read_complete": true
+    },
+    {
+      "page": 18,
+      "review_file": "output\\pdf\\v0.7-rc13\\native-assets-sample\\page-018.cross-linked.translation-review.json",
+      "review_sha256": "568eb37d6bc32f30c90af67a82980c26ee98e487801954f47e902e07468e9f53",
+      "records_read": 3,
+      "target_read_complete": true
+    }
+  ],
+  "records_read": 195,
+  "scope": "Current target text read in full for coherence and professional terms. Existing source/visual reviews remain separately required; not a new full source-to-target review.",
+  "suspected_parentheses": {
+    "page5": "Closing parenthesis inside retained Figure6 asset, not missing.",
+    "page6": "Closing parenthesis inside equation asset, not missing."
+  },
+  "new_terms": [
+    {
+      "term_id": "ml-fullread-dc453b2d9520",
+      "source_term": "natural language processing",
+      "target_term": "自然语言处理",
+      "sense": "本讲义原文专业概念，经当前完整段落与译文复核。",
+      "scope": {
+        "kind": "document",
+        "value": "cs224n-2019-notes03-neuralnets-1c29d0561e0051cb"
+      },
+      "source_ids": [
+        "asset-1c29d0561e00-g0000",
+        "asset-1c29d0561e00-g0001",
+        "asset-1c29d0561e00-g0002",
+        "asset-1c29d0561e00-g0003",
+        "asset-1c29d0561e00-g0004",
+        "asset-1c29d0561e00-g0005",
+        "asset-1c29d0561e00-g0006",
+        "asset-1c29d0561e00-g0007",
+        "asset-1c29d0561e00-g0008",
+        "asset-1c29d0561e00-g0009",
+        "asset-1c29d0561e00-g0010",
+        "asset-1c29d0561e00-g0011",
+        "asset-1c29d0561e00-g0012",
+        "asset-1c29d0561e00-g0013",
+        "asset-1c29d0561e00-g0014",
+        "asset-1c29d0561e00-g0015",
+        "asset-1c29d0561e00-g0016",
+        "asset-1c29d0561e00-g0017"
+      ],
+      "version": "1",
+      "status": "approved",
+      "exceptions": [],
+      "forbidden_target_terms": [],
+      "accepted_target_variants": []
+    },
+    {
+      "term_id": "ml-fullread-12f294ad9dd1",
+      "source_term": "named entity recognition",
+      "target_term": "命名实体识别",
+      "sense": "本讲义原文专业概念，经当前完整段落与译文复核。 NER原文抽取连写namedentity；完整写法及此明确别名指同一概念，不推断任意粘连词。",
+      "scope": {
+        "kind": "document",
+        "value": "cs224n-2019-notes03-neuralnets-1c29d0561e0051cb"
+      },
+      "source_ids": [
+        "asset-1c29d0561e00-g0045"
+      ],
+      "version": "1",
+      "status": "approved",
+      "exceptions": [],
+      "forbidden_target_terms": [],
+      "accepted_target_variants": []
+    },
+    {
+      "term_id": "ml-fullread-d040e456f589",
+      "source_term": "namedentity recognition",
+      "target_term": "命名实体识别",
+      "sense": "本讲义原文专业概念，经当前完整段落与译文复核。 NER原文抽取连写namedentity；完整写法及此明确别名指同一概念，不推断任意粘连词。",
+      "scope": {
+        "kind": "document",
+        "value": "cs224n-2019-notes03-neuralnets-1c29d0561e0051cb"
+      },
+      "source_ids": [
+        "asset-1c29d0561e00-g0045"
+      ],
+      "version": "1",
+      "status": "approved",
+      "exceptions": [],
+      "forbidden_target_terms": [],
+      "accepted_target_variants": []
+    },
+    {
+      "term_id": "ml-fullread-9227471d19eb",
+      "source_term": "geometric margins",
+      "target_term": "几何间隔",
+      "sense": "本讲义原文专业概念，经当前完整段落与译文复核。",
+      "scope": {
+        "kind": "document",
+        "value": "cs224n-2019-notes03-neuralnets-1c29d0561e0051cb"
+      },
+      "source_ids": [
+        "asset-1c29d0561e00-g0055"
+      ],
+      "version": "1",
+      "status": "approved",
+      "exceptions": [],
+      "forbidden_target_terms": [],
+      "accepted_target_variants": []
+    }
+  ],
+  "pdf_changed": false,
+  "formal_use_ready": false
+}

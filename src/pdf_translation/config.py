@@ -33,6 +33,7 @@ class RunConfig(StrictModel):
     output_token_policy: Literal["fixed", "adaptive-v1"] = "fixed"
     context_engine: Literal["v0-fixed", "v1"] = "v0-fixed"
     context_db: str | None = None
+    join_cross_page_words: bool = False
 
     @property
     def config_hash(self) -> str:

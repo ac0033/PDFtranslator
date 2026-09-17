@@ -1,0 +1,380 @@
+{
+  "status": "reviewed_additional_technical_concepts",
+  "previous_entries": 62,
+  "added_entries": 42,
+  "current_entries": 104,
+  "added": [
+    {
+      "source_term": "regularization",
+      "target_term": "正则化",
+      "source_pages": [
+        11,
+        12
+      ],
+      "matched_records": 5
+    },
+    {
+      "source_term": "regularization penalty",
+      "target_term": "正则化惩罚项",
+      "source_pages": [
+        11
+      ],
+      "matched_records": 1
+    },
+    {
+      "source_term": "overfitting",
+      "target_term": "过拟合",
+      "source_pages": [
+        11,
+        12
+      ],
+      "matched_records": 3
+    },
+    {
+      "source_term": "activation function",
+      "target_term": "激活函数",
+      "source_pages": [
+        3,
+        12
+      ],
+      "matched_records": 2
+    },
+    {
+      "source_term": "activation functions",
+      "target_term": "激活函数",
+      "source_pages": [
+        12
+      ],
+      "matched_records": 1
+    },
+    {
+      "source_term": "decision boundary",
+      "target_term": "决策边界",
+      "source_pages": [
+        1
+      ],
+      "matched_records": 2
+    },
+    {
+      "source_term": "decision boundaries",
+      "target_term": "决策边界",
+      "source_pages": [
+        1
+      ],
+      "matched_records": 1
+    },
+    {
+      "source_term": "Support Vector Machines",
+      "target_term": "支持向量机",
+      "source_pages": [
+        4
+      ],
+      "matched_records": 2
+    },
+    {
+      "source_term": "feed-forward network",
+      "target_term": "前馈网络",
+      "source_pages": [
+        3
+      ],
+      "matched_records": 1
+    },
+    {
+      "source_term": "feed-forward computation",
+      "target_term": "前馈计算",
+      "source_pages": [
+        3,
+        4
+      ],
+      "matched_records": 3
+    },
+    {
+      "source_term": "deep feedforward neural networks",
+      "target_term": "深度前馈神经网络",
+      "source_pages": [
+        15
+      ],
+      "matched_records": 1
+    },
+    {
+      "source_term": "Maximum Margin Objective Function",
+      "target_term": "最大间隔目标函数",
+      "source_pages": [
+        3
+      ],
+      "matched_records": 1
+    },
+    {
+      "source_term": "max-margin objective function",
+      "target_term": "最大间隔目标函数",
+      "source_pages": [
+        4
+      ],
+      "matched_records": 1
+    },
+    {
+      "source_term": "input layer",
+      "target_term": "输入层",
+      "source_pages": [
+        5
+      ],
+      "matched_records": 2
+    },
+    {
+      "source_term": "output layers",
+      "target_term": "输出层",
+      "source_pages": [
+        5
+      ],
+      "matched_records": 1
+    },
+    {
+      "source_term": "hyperparameter",
+      "target_term": "超参数",
+      "source_pages": [
+        11,
+        16
+      ],
+      "matched_records": 3
+    },
+    {
+      "source_term": "hyper-parameter",
+      "target_term": "超参数",
+      "source_pages": [
+        11
+      ],
+      "matched_records": 1
+    },
+    {
+      "source_term": "hyperparameter-tuning",
+      "target_term": "超参数调优",
+      "source_pages": [
+        11
+      ],
+      "matched_records": 1
+    },
+    {
+      "source_term": "feature vector",
+      "target_term": "特征向量",
+      "source_pages": [
+        14
+      ],
+      "matched_records": 1
+    },
+    {
+      "source_term": "weight vector",
+      "target_term": "权重向量",
+      "source_pages": [
+        1
+      ],
+      "matched_records": 1
+    },
+    {
+      "source_term": "weight matrix",
+      "target_term": "权重矩阵",
+      "source_pages": [
+        11
+      ],
+      "matched_records": 1
+    },
+    {
+      "source_term": "input vector",
+      "target_term": "输入向量",
+      "source_pages": [
+        1,
+        2,
+        3
+      ],
+      "matched_records": 3
+    },
+    {
+      "source_term": "parameter vector",
+      "target_term": "参数向量",
+      "source_pages": [
+        9
+      ],
+      "matched_records": 1
+    },
+    {
+      "source_term": "uniform distribution",
+      "target_term": "均匀分布",
+      "source_pages": [
+        15
+      ],
+      "matched_records": 1
+    },
+    {
+      "source_term": "standard deviation",
+      "target_term": "标准差",
+      "source_pages": [
+        14
+      ],
+      "matched_records": 1
+    },
+    {
+      "source_term": "annealing",
+      "target_term": "退火",
+      "source_pages": [
+        16
+      ],
+      "matched_records": 1
+    },
+    {
+      "source_term": "Exponential decay",
+      "target_term": "指数衰减",
+      "source_pages": [
+        16
+      ],
+      "matched_records": 1
+    },
+    {
+      "source_term": "Momentum",
+      "target_term": "动量",
+      "source_pages": [
+        16,
+        17
+      ],
+      "matched_records": 3
+    },
+    {
+      "source_term": "Adaptive Optimization Methods",
+      "target_term": "自适应优化方法",
+      "source_pages": [
+        17
+      ],
+      "matched_records": 1
+    },
+    {
+      "source_term": "adaptive gradient descent",
+      "target_term": "自适应梯度下降",
+      "source_pages": [
+        16
+      ],
+      "matched_records": 1
+    },
+    {
+      "source_term": "analytic gradients",
+      "target_term": "解析梯度",
+      "source_pages": [
+        9,
+        10
+      ],
+      "matched_records": 2
+    },
+    {
+      "source_term": "numerical gradients",
+      "target_term": "数值梯度",
+      "source_pages": [
+        9
+      ],
+      "matched_records": 1
+    },
+    {
+      "source_term": "back-propagation",
+      "target_term": "反向传播",
+      "source_pages": [
+        9,
+        10,
+        12
+      ],
+      "matched_records": 3
+    },
+    {
+      "source_term": "piecewise function",
+      "target_term": "分段函数",
+      "source_pages": [
+        14
+      ],
+      "matched_records": 1
+    },
+    {
+      "source_term": "piecewise functional form",
+      "target_term": "分段函数形式",
+      "source_pages": [
+        13
+      ],
+      "matched_records": 1
+    },
+    {
+      "source_term": "hard clipped functions",
+      "target_term": "硬截断函数",
+      "source_pages": [
+        13
+      ],
+      "matched_records": 1
+    },
+    {
+      "source_term": "moving average",
+      "target_term": "移动平均",
+      "source_pages": [
+        18
+      ],
+      "matched_records": 1
+    },
+    {
+      "source_term": "AdaGrad",
+      "target_term": "AdaGrad",
+      "source_pages": [
+        1,
+        17,
+        18
+      ],
+      "matched_records": 4
+    },
+    {
+      "source_term": "RMSProp",
+      "target_term": "RMSProp",
+      "source_pages": [
+        17,
+        18
+      ],
+      "matched_records": 2
+    },
+    {
+      "source_term": "Adam",
+      "target_term": "Adam",
+      "source_pages": [
+        17,
+        18
+      ],
+      "matched_records": 2
+    },
+    {
+      "source_term": "neural network",
+      "target_term": "神经网络",
+      "source_pages": [
+        3,
+        4,
+        5,
+        9,
+        12,
+        15
+      ],
+      "matched_records": 10
+    },
+    {
+      "source_term": "regularization term",
+      "target_term": "正则化项",
+      "source_pages": [
+        11
+      ],
+      "matched_records": 1
+    }
+  ],
+  "reference": "https://developers.google.com/machine-learning/glossary/fundamentals?hl=zh-cn",
+  "reference_scope": "General terminology reference, not an assertion every added phrase occurs on that page. Each entry retains actual document context evidence.",
+  "candidate_list_read": 727,
+  "candidate_discovery_complete": false,
+  "remaining": "Assign explicit dispositions to each candidate and check source concepts outside the candidate extractor.",
+  "pdf_changed": false,
+  "new_api_calls": 0,
+  "approved_term_checks": 298,
+  "approved_term_checks_passed": true,
+  "regression_tests_passed": 67,
+  "regression_seconds": 1.39,
+  "case_variant_resolution": {
+    "term": "AdaGrad",
+    "allowed_variant": "Adagrad",
+    "reason": "Exact source uses Adagrad on page1 and AdaGrad on pages17/18; same named algorithm."
+  }
+}

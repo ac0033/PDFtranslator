@@ -74,6 +74,14 @@ class StateStore:
             elif row["cache_key"] != cache_key:
                 con.execute("UPDATE tasks SET cache_key=?,state='prepared',result_json=NULL,quality_json=NULL,updated_at=CURRENT_TIMESTAMP WHERE run_id=? AND unit_id=?", (cache_key,run_id,unit_id))
 
+    def mark_exhausted(self, run_id: str, unit_id: str) -> None:
+        """Pin a unit whose provider attempts are exhausted so reruns skip it."""
+        with self.connect() as con:
+            con.execute(
+                "UPDATE tasks SET state='exhausted', updated_at=CURRENT_TIMESTAMP WHERE run_id=? AND unit_id=?",
+                (run_id, unit_id),
+            )
+
     def state(self, run_id: str, unit_id: str) -> str | None:
         with self.connect() as con:
             row = con.execute("SELECT state FROM tasks WHERE run_id=? AND unit_id=?", (run_id,unit_id)).fetchone()
@@ -154,6 +162,13 @@ class StateStore:
             if record_usage:
                 ledger_source = source or ("local_cache" if cached else result.usage.usage_source)
                 con.execute("INSERT INTO ledger(run_id,unit_id,cost_usd,input_tokens,output_tokens,source) VALUES(?,?,?,?,?,?)", (run_id,result.unit_id,ledger_cost,ledger_input,ledger_output,ledger_source))
+
+    def alias_cache_key(self, run_id: str, unit_id: str, base_cache_key: str, result: TranslationResult, report_status: str) -> None:
+        """Point a unit back at its first-attempt request key after a retry-modified request succeeded."""
+        with self.connect() as con:
+            if report_status == "pass":
+                con.execute("INSERT OR REPLACE INTO cache(cache_key,result_json) VALUES(?,?)", (base_cache_key, result.model_dump_json()))
+            con.execute("UPDATE tasks SET cache_key=? WHERE run_id=? AND unit_id=?", (base_cache_key, run_id, unit_id))
 
     def spent(self, run_id: str) -> float:
         with self.connect() as con:

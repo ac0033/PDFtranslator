@@ -159,3 +159,14 @@ def test_dangling_layout_boundary_and_reordered_markers_are_rejected():
                 {"fragment_id": "continuation", "layout_marker": second_marker},
             ],
         )
+
+
+def test_layout_boundary_accepts_toc_entries_ending_in_page_numbers():
+    first_marker = layout_marker("toc-body")
+    second_marker = layout_marker("toc-appendix")
+    toc = f"{first_marker}12 运行时监控 323\n12.1 运行设计域监控 323\n12.5 练习 351{second_marker}附录"
+    assert layout_boundaries_are_natural(toc) is True
+    mid_sentence_digit = f"{first_marker}取值为 3{second_marker}乘以 2 得到结果。"
+    assert layout_boundaries_are_natural(mid_sentence_digit) is True
+    dangling = f"{first_marker}概率分布为结果分配概率{second_marker}的表示方式。"
+    assert layout_boundaries_are_natural(dangling) is False

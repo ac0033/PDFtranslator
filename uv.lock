@@ -827,7 +827,7 @@ wheels = [
 
 [[package]]
 name = "pdf-translation"
-version = "0.7.0rc10"
+version = "0.7.0rc13"
 source = { editable = "." }
 dependencies = [
     { name = "babeldoc" },

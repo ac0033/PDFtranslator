@@ -1,0 +1,51 @@
+{
+  "status": "page15_live_verification_passed_full_document_pending",
+  "objective_complete": false,
+  "regression": {
+    "passed": 304,
+    "elapsed_seconds": 66.13,
+    "log": "tmp/pdfs/rc13-native/final-pending-api-regression.log"
+  },
+  "reviewed_source_pages": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18
+  ],
+  "assembly_fidelity_passed": true,
+  "new_native_api_calls": 33,
+  "missing_evidence": [
+    "Real API execution of revised terminology locking and native workflow",
+    "Semantic and visual review of its actual output",
+    "Complete terminology coverage adjudication"
+  ],
+  "blocker": null,
+  "requested_scope": {
+    "source": "Public Stanford cs224n-2019-notes03-neuralnets.pdf",
+    "source_page": 15,
+    "complete_units": 8,
+    "includes": "Complete cross-page content, routed neighboring context and relevant approved glossary",
+    "destination": "https://api.deepseek.com",
+    "model": "deepseek-flash",
+    "proposed_budget_cap_usd": 0.1,
+    "configured_rate_estimate_usd": 0.0100095
+  },
+  "resume": "Obtain explicit confirmation for the requested scope; set the approved capped budget, prepare a fresh identity, execute real API validation, inspect actual terminology evidence and page rendering, then continue remaining full-document acceptance. Do not treat automated goal continuation as consent.",
+  "formal_use_ready": false,
+  "user_approval_received": true,
+  "live_verification": "output\\pdf\\v0.7-rc13\\native-live-page15-r4\\page-015.acceptance.json"
+}

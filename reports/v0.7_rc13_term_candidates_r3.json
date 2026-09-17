@@ -1,0 +1,187 @@
+{
+  "candidate_count": 747,
+  "previous_candidate_count": 727,
+  "new_candidates": [
+    {
+      "source_term": "language processing",
+      "occurrence_count": 18,
+      "source_ids": [
+        "asset-1c29d0561e00-g0000",
+        "asset-1c29d0561e00-g0001",
+        "asset-1c29d0561e00-g0002",
+        "asset-1c29d0561e00-g0003",
+        "asset-1c29d0561e00-g0004",
+        "asset-1c29d0561e00-g0005",
+        "asset-1c29d0561e00-g0006",
+        "asset-1c29d0561e00-g0007",
+        "asset-1c29d0561e00-g0008",
+        "asset-1c29d0561e00-g0009",
+        "asset-1c29d0561e00-g0010",
+        "asset-1c29d0561e00-g0011",
+        "asset-1c29d0561e00-g0012",
+        "asset-1c29d0561e00-g0013",
+        "asset-1c29d0561e00-g0014",
+        "asset-1c29d0561e00-g0015",
+        "asset-1c29d0561e00-g0016",
+        "asset-1c29d0561e00-g0017"
+      ]
+    },
+    {
+      "source_term": "natural language processing",
+      "occurrence_count": 18,
+      "source_ids": [
+        "asset-1c29d0561e00-g0000",
+        "asset-1c29d0561e00-g0001",
+        "asset-1c29d0561e00-g0002",
+        "asset-1c29d0561e00-g0003",
+        "asset-1c29d0561e00-g0004",
+        "asset-1c29d0561e00-g0005",
+        "asset-1c29d0561e00-g0006",
+        "asset-1c29d0561e00-g0007",
+        "asset-1c29d0561e00-g0008",
+        "asset-1c29d0561e00-g0009",
+        "asset-1c29d0561e00-g0010",
+        "asset-1c29d0561e00-g0011",
+        "asset-1c29d0561e00-g0012",
+        "asset-1c29d0561e00-g0013",
+        "asset-1c29d0561e00-g0014",
+        "asset-1c29d0561e00-g0015",
+        "asset-1c29d0561e00-g0016",
+        "asset-1c29d0561e00-g0017"
+      ]
+    },
+    {
+      "source_term": "Maximum Margin",
+      "occurrence_count": 2,
+      "source_ids": [
+        "asset-1c29d0561e00-g0050",
+        "asset-1c29d0561e00-g0051"
+      ]
+    },
+    {
+      "source_term": "Support Vector Machines",
+      "occurrence_count": 2,
+      "source_ids": [
+        "asset-1c29d0561e00-g0055",
+        "asset-1c29d0561e00-g0190"
+      ]
+    },
+    {
+      "source_term": "Vector Machines",
+      "occurrence_count": 2,
+      "source_ids": [
+        "asset-1c29d0561e00-g0055",
+        "asset-1c29d0561e00-g0190"
+      ]
+    },
+    {
+      "source_term": "Exponential decay",
+      "occurrence_count": 1,
+      "source_ids": [
+        "asset-1c29d0561e00-g0164"
+      ]
+    },
+    {
+      "source_term": "following namedentity recognition",
+      "occurrence_count": 1,
+      "source_ids": [
+        "asset-1c29d0561e00-g0045"
+      ]
+    },
+    {
+      "source_term": "geometric margins",
+      "occurrence_count": 1,
+      "source_ids": [
+        "asset-1c29d0561e00-g0055"
+      ]
+    },
+    {
+      "source_term": "identity covariance",
+      "occurrence_count": 1,
+      "source_ids": [
+        "asset-1c29d0561e00-g0152"
+      ]
+    },
+    {
+      "source_term": "Like most machine",
+      "occurrence_count": 1,
+      "source_ids": [
+        "asset-1c29d0561e00-g0051"
+      ]
+    },
+    {
+      "source_term": "many machine",
+      "occurrence_count": 1,
+      "source_ids": [
+        "asset-1c29d0561e00-g0118"
+      ]
+    },
+    {
+      "source_term": "most machine",
+      "occurrence_count": 1,
+      "source_ids": [
+        "asset-1c29d0561e00-g0051"
+      ]
+    },
+    {
+      "source_term": "moving average",
+      "occurrence_count": 1,
+      "source_ids": [
+        "asset-1c29d0561e00-g0177"
+      ]
+    },
+    {
+      "source_term": "namedentity recognition",
+      "occurrence_count": 1,
+      "source_ids": [
+        "asset-1c29d0561e00-g0045"
+      ]
+    },
+    {
+      "source_term": "positive margin",
+      "occurrence_count": 1,
+      "source_ids": [
+        "asset-1c29d0561e00-g0054"
+      ]
+    },
+    {
+      "source_term": "respective standard deviation",
+      "occurrence_count": 1,
+      "source_ids": [
+        "asset-1c29d0561e00-g0151"
+      ]
+    },
+    {
+      "source_term": "some positive margin",
+      "occurrence_count": 1,
+      "source_ids": [
+        "asset-1c29d0561e00-g0054"
+      ]
+    },
+    {
+      "source_term": "some probability",
+      "occurrence_count": 1,
+      "source_ids": [
+        "asset-1c29d0561e00-g0122"
+      ]
+    },
+    {
+      "source_term": "standard deviation",
+      "occurrence_count": 1,
+      "source_ids": [
+        "asset-1c29d0561e00-g0151"
+      ]
+    },
+    {
+      "source_term": "their respective standard deviation",
+      "occurrence_count": 1,
+      "source_ids": [
+        "asset-1c29d0561e00-g0151"
+      ]
+    }
+  ],
+  "input_units_sha256": "164c39895aa44cea1a075f113c30ea66e20396fe576219ff31da7084b2076cd7",
+  "candidate_discovery_complete": false,
+  "automatic_approval": false,
+  "note": "Candidate recall expanded across multiple technical noun families. Candidates require contextual review, not automatic approval."
+}

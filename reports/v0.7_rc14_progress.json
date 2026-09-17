@@ -1,0 +1,465 @@
+{
+  "updated_at": "2026-09-15T13:59:22.035553+08:00",
+  "status": "work_in_progress",
+  "software_version": "0.7.0rc13",
+  "published": false,
+  "translation_started": false,
+  "api_calls": 0,
+  "source_sha256": "67487b3a9ad267de201088f752cb3cb1e88b3d282b6c93301853d87cf465adf5",
+  "source_glyph_mapping_pages_passed": 442,
+  "old_translation_replay": {
+    "pages_passed": 18,
+    "evidence": "output/pdf/v0.7-rc14-rigid/all18-r4/report.json"
+  },
+  "synthetic_page_probe": {
+    "scope": "independent page snapshots across successive implementations; not final single-revision acceptance or translation",
+    "pages_checked": 35,
+    "pages_with_pass_record": 34,
+    "failed_pages": [
+      381
+    ],
+    "pages": [
+      {
+        "page": 1,
+        "passed": true,
+        "overflows": [],
+        "seconds": 0.09299999999348074,
+        "evidence": "output/pdf/v0.7-rc14-val-stress-r1/report.json"
+      },
+      {
+        "page": 4,
+        "passed": true,
+        "overflows": [],
+        "seconds": 0.46899999998277053,
+        "evidence": "output/pdf/v0.7-rc14-val-stress-r1/report.json"
+      },
+      {
+        "page": 17,
+        "passed": true,
+        "overflows": [],
+        "seconds": 0.375,
+        "evidence": "output/pdf/v0.7-rc14-val-stress-r1/report.json"
+      },
+      {
+        "page": 26,
+        "passed": true,
+        "overflows": [],
+        "seconds": 1.3280000000377186,
+        "evidence": "output/pdf/v0.7-rc14-val-stress-r1/report.json"
+      },
+      {
+        "page": 42,
+        "passed": true,
+        "overflows": [],
+        "seconds": 1.625,
+        "evidence": "output/pdf/v0.7-rc14-val-stress-r1/report.json"
+      },
+      {
+        "page": 51,
+        "passed": true,
+        "overflows": [],
+        "seconds": 1.4219999999622814,
+        "evidence": "output/pdf/v0.7-rc14-val-stress-r1/report.json"
+      },
+      {
+        "page": 63,
+        "passed": true,
+        "overflows": [],
+        "seconds": 7.578000000037719,
+        "evidence": "output/pdf/v0.7-rc14-val-stress-r1/report.json"
+      },
+      {
+        "page": 64,
+        "passed": true,
+        "overflows": [],
+        "seconds": 25.98499999998603,
+        "evidence": "output/pdf/v0.7-rc14-val-stress-r1/report.json"
+      },
+      {
+        "page": 81,
+        "passed": true,
+        "overflows": [],
+        "seconds": 1.0459999999729916,
+        "evidence": "output/pdf/v0.7-rc14-val-stress-r1/report.json"
+      },
+      {
+        "page": 90,
+        "passed": true,
+        "overflows": [],
+        "seconds": 6.547000000020489,
+        "evidence": "output/pdf/v0.7-rc14-val-stress-r1/report.json"
+      },
+      {
+        "page": 92,
+        "passed": true,
+        "overflows": [],
+        "seconds": 4.01600000000326,
+        "evidence": "output/pdf/v0.7-rc14-val-stress-r1/report.json"
+      },
+      {
+        "page": 101,
+        "passed": true,
+        "overflows": [],
+        "seconds": 1.5619999999762513,
+        "evidence": "output/pdf/v0.7-rc14-val-stress-r1/report.json"
+      },
+      {
+        "page": 106,
+        "passed": true,
+        "overflows": [],
+        "seconds": 1.875,
+        "evidence": "output/pdf/v0.7-rc14-val-stress-r1/report.json"
+      },
+      {
+        "page": 121,
+        "passed": true,
+        "overflows": [],
+        "seconds": 3.7339999999967404,
+        "evidence": "output/pdf/v0.7-rc14-val-stress-r1/report.json"
+      },
+      {
+        "page": 141,
+        "passed": true,
+        "overflows": [],
+        "seconds": 2.469000000040978,
+        "evidence": "output/pdf/v0.7-rc14-val-stress-r1/report.json"
+      },
+      {
+        "page": 161,
+        "passed": true,
+        "overflows": [],
+        "seconds": 4.077999999979511,
+        "evidence": "output/pdf/v0.7-rc14-val-stress-r1/report.json"
+      },
+      {
+        "page": 181,
+        "passed": true,
+        "overflows": [],
+        "seconds": 3.797000000020489,
+        "evidence": "output/pdf/v0.7-rc14-val-stress-r2-page181/report.json"
+      },
+      {
+        "page": 201,
+        "passed": true,
+        "overflows": [],
+        "seconds": 3.85999999998603,
+        "evidence": "output/pdf/v0.7-rc14-val-stress-r1/report.json"
+      },
+      {
+        "page": 221,
+        "passed": true,
+        "overflows": [],
+        "seconds": 12.28100000001723,
+        "evidence": "output/pdf/v0.7-rc14-val-stress-r1/report.json"
+      },
+      {
+        "page": 241,
+        "passed": true,
+        "overflows": [],
+        "seconds": 4.51600000000326,
+        "evidence": "output/pdf/v0.7-rc14-val-stress-r1/report.json"
+      },
+      {
+        "page": 261,
+        "passed": true,
+        "overflows": [],
+        "seconds": 1.4060000000172295,
+        "evidence": "output/pdf/v0.7-rc14-val-stress-r1/report.json"
+      },
+      {
+        "page": 281,
+        "passed": true,
+        "overflows": [],
+        "seconds": 3.655999999959022,
+        "evidence": "output/pdf/v0.7-rc14-val-stress-r1/report.json"
+      },
+      {
+        "page": 301,
+        "passed": true,
+        "overflows": [],
+        "seconds": 10.203000000037719,
+        "evidence": "output/pdf/v0.7-rc14-val-stress-r1/report.json"
+      },
+      {
+        "page": 312,
+        "passed": true,
+        "overflows": [],
+        "seconds": 1.9689999999827705,
+        "evidence": "output/pdf/v0.7-rc14-val-stress-r1/report.json"
+      },
+      {
+        "page": 321,
+        "passed": true,
+        "overflows": [],
+        "seconds": 1.5160000000032596,
+        "evidence": "output/pdf/v0.7-rc14-val-stress-r1/report.json"
+      },
+      {
+        "page": 341,
+        "passed": true,
+        "overflows": [],
+        "seconds": 82.14100000000326,
+        "evidence": "output/pdf/v0.7-rc14-val-stress-r5/report.json"
+      },
+      {
+        "page": 361,
+        "passed": true,
+        "overflows": [],
+        "seconds": 5.561999999976251,
+        "evidence": "output/pdf/v0.7-rc14-val-stress-r5/report.json"
+      },
+      {
+        "page": 381,
+        "passed": false,
+        "overflows": [
+          {
+            "unit_id": "asset-2076cc61b4d2-g0004-flow01",
+            "intersects_retained_glyphs": [
+              1016
+            ]
+          },
+          {
+            "unit_id": "asset-2076cc61b4d2-g0006-flow03",
+            "intersects_retained_glyphs": [
+              1338,
+              1345,
+              1346,
+              1347,
+              1348,
+              1349,
+              1350,
+              1351
+            ]
+          },
+          {
+            "unit_id": "asset-2076cc61b4d2-g0006-flow05",
+            "intersects_retained_glyphs": [
+              1472
+            ]
+          },
+          {
+            "unit_id": "asset-2076cc61b4d2-g0006-flow06",
+            "intersects_retained_glyphs": [
+              1483,
+              1484,
+              1485,
+              1486,
+              1508,
+              1509,
+              1510,
+              1511,
+              1512,
+              1513,
+              1514,
+              1515,
+              1516,
+              1517,
+              1518,
+              1519,
+              1520,
+              1521,
+              1522,
+              1523,
+              1524,
+              1525,
+              1526,
+              1527,
+              1528,
+              1529,
+              1530,
+              1557,
+              1558,
+              1559,
+              1560,
+              1561,
+              1562
+            ]
+          },
+          {
+            "unit_id": "asset-2076cc61b4d2-g0006-flow08",
+            "intersects_retained_glyphs": [
+              1490,
+              1491,
+              1538,
+              1541
+            ]
+          },
+          {
+            "unit_id": "asset-2076cc61b4d2-g0006-flow09",
+            "intersects_retained_glyphs": [
+              1568
+            ]
+          },
+          {
+            "unit_id": "asset-2076cc61b4d2-g0013-flow02",
+            "intersects_retained_glyphs": [
+              1188,
+              1189,
+              1190
+            ]
+          }
+        ],
+        "seconds": 4.60899999999674,
+        "evidence": "output/pdf/v0.7-rc14-val-stress-r5/report.json"
+      },
+      {
+        "page": 401,
+        "passed": true,
+        "overflows": [],
+        "seconds": 0.6100000000442378,
+        "evidence": "output/pdf/v0.7-rc14-val-stress-r5/report.json"
+      },
+      {
+        "page": 421,
+        "passed": true,
+        "overflows": [],
+        "seconds": 2.264999999955762,
+        "evidence": "output/pdf/v0.7-rc14-val-stress-r5/report.json"
+      },
+      {
+        "page": 429,
+        "passed": true,
+        "overflows": [],
+        "seconds": 6.10899999999674,
+        "evidence": "output/pdf/v0.7-rc14-val-stress-r5/report.json"
+      },
+      {
+        "page": 432,
+        "passed": true,
+        "overflows": [],
+        "seconds": 5.610000000044238,
+        "evidence": "output/pdf/v0.7-rc14-val-stress-r5/report.json"
+      },
+      {
+        "page": 435,
+        "passed": true,
+        "overflows": [],
+        "seconds": 2.625,
+        "evidence": "output/pdf/v0.7-rc14-val-stress-r5/report.json"
+      },
+      {
+        "page": 438,
+        "passed": true,
+        "overflows": [],
+        "seconds": 11.921999999962281,
+        "evidence": "output/pdf/v0.7-rc14-val-stress-r5/report.json"
+      },
+      {
+        "page": 442,
+        "passed": true,
+        "overflows": [],
+        "seconds": 0.10899999999674037,
+        "evidence": "output/pdf/v0.7-rc14-val-stress-r5/report.json"
+      }
+    ]
+  },
+  "remaining": [
+    "Complete all 442 pages of the running offline scan, classify and fix every failure; replay with current implementation",
+    "Inline fractions and mixed prose/formula intervals, remaining clipping/collision/overflow cases",
+    "Translate-page annotation rectangles and destination coordinates after reflow; preserve original navigation in assembly",
+    "Rotated prose labels and full source/translation coverage, cross-page checks",
+    "Final current-code test suite and actual render/visual verification",
+    "Publish verified release, then actual val translation with Chinese and bilingual outputs",
+    "Shaded example containers currently connect internal objects into one rigid group; check and fix contraction spacing inside containers"
+  ],
+  "latest_work": {
+    "page381_saved_pdf_test": "passed; tests/test_native_figure_labels.py::test_aircraft_equations_labels_and_accents_render_together",
+    "navigation_roundtrip": "reports/v0.7_rc14_navigation_roundtrip.json",
+    "bilingual_navigation_tests": "tests/test_pdf_navigation.py, 2 passed",
+    "formula_function_probes": "output/pdf/v0.7-rc14-val-functions-r1/report.json",
+    "actual_ink_probe": "output/pdf/v0.7-rc14-val-inkbounds-r1/report.json",
+    "all_pages_scan": {
+      "report": "output\\pdf\\v0.7-rc14-val-all-pages-r1\\report.json",
+      "session_id": 76389,
+      "status": "running; verified with write_stdin",
+      "last_completed_page": 138,
+      "failed_pages": [
+        44,
+        45,
+        47,
+        48,
+        49,
+        50,
+        55,
+        57,
+        62,
+        72,
+        73,
+        74,
+        78,
+        82,
+        83,
+        86,
+        87,
+        91,
+        94,
+        97,
+        113,
+        120,
+        125,
+        128,
+        132,
+        135,
+        136,
+        138
+      ],
+      "scope": "Snapshot from scan start. Later fixes require replay."
+    },
+    "mixed_inline": {
+      "pages": "94 passed saved-PDF fidelity test; 72 remains a collision case",
+      "evidence": "output/pdf/v0.7-rc14-val-mixed-inline-r1/report.json",
+      "test": "tests/test_native_mixed_inline.py: 1 passed"
+    },
+    "current_full_tests": {
+      "status": "433 passed before later rounding, delimiter, and equation-label changes",
+      "evidence": "reports/v0.7_rc14_container_full.xml"
+    },
+    "composite_fraction": {
+      "source_page": 47,
+      "saved_pdf_test": "tests/test_native_composite_assets.py: passed",
+      "scope": "Synthetic text; source glyph pixels and fraction rule copied once, no duplicate or missing drawing",
+      "remaining": "Broader regression running; other composite cases and shaded-container internal reflow still need checks"
+    },
+    "composite_regression": {
+      "session_id": 14756,
+      "status": "finished: 64 passed",
+      "junit": "reports/v0.7_rc14_composite_tests.xml"
+    },
+    "ordinary_word_number": {
+      "status": "value next to numeral now remains translatable, numeral stays original",
+      "test": "tests/test_native_figure_labels.py::test_regular_word_value_beside_digit_is_translated_but_digit_stays_native: passed"
+    },
+    "container_reflow": {
+      "status": "real page 47 saved PDF verified with synthetic shortening",
+      "evidence": "output\\pdf\\v0.7-rc14-container-r4\\proof.json",
+      "height_delta_pt": -50,
+      "scope": "opaque light rectangle; original borders and formula glyphs move separately; background style and geometry checked independently; source formula pixels exact",
+      "remaining": "other containers and final whole-document replay still required"
+    },
+    "atomic_pdf_publication": {
+      "status": "included in 433 passing suite; saved inventory failure injection verifies no output PDF or staging residue",
+      "implementation": "src/pdf_translation/native_asset_layout.py"
+    },
+    "full_page_scan": {
+      "status": "finished",
+      "checked": 442,
+      "passed": 348,
+      "failed": 94,
+      "evidence": "output/pdf/v0.7-rc14-val-all-pages-r1/report.json",
+      "scope": "older implementation; failure inventory, not current acceptance"
+    },
+    "failed_pages_replay": {
+      "session_id": 60625,
+      "evidence": "output/pdf/v0.7-rc14-val-failures-r3/report.json",
+      "scope": "snapshot before the latest three fixes; do not restart while live"
+    },
+    "delimiter_regression": {
+      "session_id": 85808,
+      "status": "running",
+      "evidence": "reports/v0.7_rc14_delimiters_tests.xml",
+      "source_pages": "44,62,144 layout-only passed; saved PDF regression running; 136/138 equation labels extracted but pages have other unresolved errors"
+    }
+  },
+  "active_policy": "AGENTS.md: usable full Chinese and bilingual first, optimized pair second; minor defects do not block translation",
+  "active_plan": "docs/v0.7_rc14_current_status.md"
+}

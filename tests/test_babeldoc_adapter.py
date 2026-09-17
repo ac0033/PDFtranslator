@@ -147,3 +147,15 @@ def test_content_review_queue_exposes_known_and_unknown_formula_literals(tmp_pat
     row = json.loads(output.read_text(encoding="utf-8"))
     assert row["protected_literal_hints"] == {protected[0].marker: "=1"}
     assert row["unresolved_formula_markers"] == [protected[1].marker]
+
+
+def test_page_is_verifiably_empty_distinguishes_blank_and_content_pages(tmp_path: Path):
+    source = tmp_path / "empty-check.pdf"
+    document = pymupdf.open()
+    document.new_page()
+    text_page = document.new_page()
+    text_page.insert_text((72, 72), "not empty")
+    document.save(source)
+    document.close()
+    assert babeldoc_adapter._page_is_verifiably_empty(source, 0) is True
+    assert babeldoc_adapter._page_is_verifiably_empty(source, 1) is False

@@ -1,0 +1,9 @@
+{
+  "blocking_condition": "Automatic approval review requires specific authorization for sending page15 source plus translated drafts to DeepSeek for semantic review",
+  "consecutive_goal_turns": 0,
+  "prepared_cases": 4,
+  "new_api_calls": 12,
+  "review_output_present": true,
+  "user_confirmation_received": true,
+  "status": "resolved_by_explicit_user_approval"
+}

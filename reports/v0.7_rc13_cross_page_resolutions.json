@@ -1,0 +1,51 @@
+{
+  "resolutions": [
+    {
+      "pages": [
+        9,
+        10
+      ],
+      "resolution": "missing source_pages restored from matching full source, translation and identical saved page allocations",
+      "page_flow": {
+        "unit_id": "asset-1c29d0561e00-g0106",
+        "parts": [
+          {
+            "page": 9,
+            "unit_id": "asset-1c29d0561e00-g0106-p009",
+            "translated_text": "现在，你可能自然会问，如果这种方法如此精确，为什么我们不使用它来计算所有网络梯度，而要应用反向传播呢？正如之前所暗示的，简单的答案是效率低下——回想一下，每次我们想要计算关于某个元素的梯度时，需要通过网络进行两次前向传播，这在计算上开销很大。"
+          },
+          {
+            "page": 10,
+            "unit_id": "asset-1c29d0561e00-g0106-p010",
+            "translated_text": "此外，许多大规模神经网络可能包含数百万个参数，而每个参数计算两次传播显然不是最优的。而且，在诸如 SGD 这样的优化技术中，我们必须在数千次迭代中每次迭代都计算一次梯度，因此显然这种方法很快就会变得难以处理。正是这种低效性，使我们只用梯度检验来验证解析梯度的正确性，而解析梯度的计算要快得多。梯度检验的标准实现如下所示："
+          }
+        ],
+        "content_preserved": true
+      }
+    },
+    {
+      "pages": [
+        15,
+        16
+      ],
+      "resolution": "deferred parent record synchronized to accepted page16 text; actual page15 has no prose from this parent",
+      "pdf_changed": false
+    },
+    {
+      "pages": [
+        17,
+        18
+      ],
+      "resolution": "legacy ordinal ID collision separated using source identity; fixed code parent linked to continuation",
+      "code_lines_verified": [
+        "m = beta1*m + (1-beta1)*dx",
+        "v = beta2*v + (1-beta2)*(dx**2)",
+        "x += - learning_rate * m / (np.sqrt(v) + eps)"
+      ],
+      "pdf_changed": false
+    }
+  ],
+  "merged_pdf_sha256": "d27c8aab2c33b79dd00b40b6d81d94bf187e9daceca14ab993f802169e8b8911",
+  "scope": "Three previously flagged metadata conflicts resolved against saved PDF and page evidence; no PDF bytes modified.",
+  "entire_document_formal_use_ready": false
+}

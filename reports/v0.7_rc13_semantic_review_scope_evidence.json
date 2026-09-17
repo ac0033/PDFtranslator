@@ -1,0 +1,54 @@
+{
+  "purpose": "Evidence for review of the same page15 source and its actual DeepSeek-generated translation, not an outbound call.",
+  "prior_explicit_user_approval": "User approved sending page15 eight complete text units, cross-page content, related context and glossary to DeepSeek official API under USD0.10; then confirmed recharge and continuation.",
+  "proposed_destination": "https://api.deepseek.com",
+  "proposed_scope": "Two of those same approved source units, each paired with earlier and revised text already returned by DeepSeek; four review cases. No additional PDF pages, private documents or credentials in payload.",
+  "cases": [
+    {
+      "case_id": "b17f70a5535b9fcd",
+      "unit_id": "asset-1c29d0561e00-g0152",
+      "source_identical_to_previously_authorized_input": true,
+      "source_hash": "21f6f2bf6c1d840db61f8db725fceeb70fd2e7db8cdc346c391e325e55acf6db",
+      "translation_provider_response_id": "e176a338-1065-4cd5-8e47-892719e4628d",
+      "translation_origin_provider": "deepseek",
+      "source_result_file": "output\\pdf\\v0.7-rc13\\native-live-page15\\translation-results.json",
+      "source_result_file_sha256": "a1cd00808edc21219878edd363979f1731717de1de538524114c370822c3f37d",
+      "kind": "earlier_draft"
+    },
+    {
+      "case_id": "d8fe2d57976a64a8",
+      "unit_id": "asset-1c29d0561e00-g0154",
+      "source_identical_to_previously_authorized_input": true,
+      "source_hash": "726c7925918e61110ef06a35b5cf5e176fe62dd6831b11676bc90838deb4b55d",
+      "translation_provider_response_id": "94e99096-9c4b-4e34-b852-67ec44bebfdd",
+      "translation_origin_provider": "deepseek",
+      "source_result_file": "output\\pdf\\v0.7-rc13\\native-live-page15\\translation-results.json",
+      "source_result_file_sha256": "a1cd00808edc21219878edd363979f1731717de1de538524114c370822c3f37d",
+      "kind": "earlier_draft"
+    },
+    {
+      "case_id": "17047fe06fbd5618",
+      "unit_id": "asset-1c29d0561e00-g0152",
+      "source_identical_to_previously_authorized_input": true,
+      "source_hash": "21f6f2bf6c1d840db61f8db725fceeb70fd2e7db8cdc346c391e325e55acf6db",
+      "translation_provider_response_id": "542c2cf2-cc90-4655-8627-406f9cb82acd",
+      "translation_origin_provider": "deepseek",
+      "source_result_file": "output\\pdf\\v0.7-rc13\\native-live-page15-r4\\translation-results.json",
+      "source_result_file_sha256": "20aaa31c175d81db7baa37c0a07b3db32888547555cd04eaf017e59159f461c8",
+      "kind": "reviewed_draft"
+    },
+    {
+      "case_id": "30320c19a6e3de9d",
+      "unit_id": "asset-1c29d0561e00-g0154",
+      "source_identical_to_previously_authorized_input": true,
+      "source_hash": "726c7925918e61110ef06a35b5cf5e176fe62dd6831b11676bc90838deb4b55d",
+      "translation_provider_response_id": "cb876836-9766-4c41-a158-59e4f5a20497",
+      "translation_origin_provider": "deepseek",
+      "source_result_file": "output\\pdf\\v0.7-rc13\\native-live-page15-r4\\translation-results.json",
+      "source_result_file_sha256": "20aaa31c175d81db7baa37c0a07b3db32888547555cd04eaf017e59159f461c8",
+      "kind": "reviewed_draft"
+    }
+  ],
+  "api_calls": 0,
+  "auto_review_status": "Semantic review outbound attempt rejected pending scope clarification; no network request made by this preparation."
+}

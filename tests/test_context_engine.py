@@ -99,7 +99,9 @@ def test_v1_pipeline_recomputes_when_context_snapshot_changes(tmp_path: Path):
     run_units([value], cfg, tmp_path / "runs")
     second_key = state.task_cache_key("v1", "u1")
     assert first_key != second_key
-    assert state.summary("v1")["states"] == {"accepted": 1}
+    # The mock does not obey the newly approved Chinese term; the gate must block it.
+    assert state.summary("v1")["states"] == {"blocked": 1}
+    assert any(issue["category"] == "terminology" for report in state.quality_reports("v1") for issue in report["quality"]["issues"])
 
 
 def test_v1_exact_confirmed_tm_is_reused_without_provider_text(tmp_path: Path):
@@ -121,3 +123,34 @@ def test_v1_exact_confirmed_tm_is_reused_without_provider_text(tmp_path: Path):
     assert result.draft is not None
     assert result.draft.translated_text == "选择一个策略。"
     assert result.provider_response_id is None
+
+
+def test_neighbor_excerpts_use_preceding_tail_and_following_head():
+    from pdf_translation.schemas import SourceRef
+    values = [unit("before", "OLD " * 150 + "Relevant tail."), unit("current", "Current paragraph."), unit("after", "Relevant head. " + "LATER " * 150)]
+    for index, value in enumerate(values):
+        values[index] = value.model_copy(update={"source_refs": (SourceRef(block_id=value.unit_id, page_index=0, bbox=(50, 100 * index, 350, 100 * index + 20), char_start=0, char_end=len(value.source_text)),)})
+    current = values[1].model_copy(update={"neighbor_ids": ("after", "before")})
+    packet, _ = build_context_packet(current, [], [], [], {u.unit_id: u for u in values}, token_budget=1000)
+    assert packet.items[0].content.endswith("Relevant tail.")
+    assert packet.items[0].selection_reason == "preceding tail"
+    assert packet.items[1].content.startswith("Following source excerpt: Relevant head.")
+
+
+def test_review_feedback_binds_source_content_not_only_unit_id():
+    original=unit('u1','Original complete paragraph.')
+    feedback=StyleRule(rule_id='review-u1',content='Review grammar.',scope=Scope(kind='unit',value='u1'),version='r1',expected_source_hash=stable_hash(original.source_text))
+    packet,_=build_context_packet(original,[],[feedback],[],{'u1':original},token_budget=2000)
+    assert any(i.item_id=='style:review-u1' for i in packet.items)
+    # Deliberately retain the stale source_hash field: inspect actual text anyway.
+    changed=original.model_copy(update={'source_text':'A different paragraph reuses this ordinal.'})
+    with pytest.raises(ValueError,match='no longer matches source'):
+        build_context_packet(changed,[],[feedback],[],{'u1':changed},token_budget=2000)
+    another=unit('u2','Another paragraph.')
+    packet,_=build_context_packet(another,[],[feedback],[],{'u2':another},token_budget=2000)
+    assert not any(i.item_id=='style:review-u1' for i in packet.items)
+
+
+def test_source_bound_feedback_cannot_be_document_wide():
+    with pytest.raises(ValueError,match='requires unit scope'):
+        StyleRule(rule_id='bad',content='Specific feedback.',scope=Scope(kind='document',value='doc'),version='r1',expected_source_hash=stable_hash('one paragraph'))

@@ -26,6 +26,8 @@ class GlossaryEntry(StrictModel):
     version: str
     status: Literal["candidate", "approved", "deprecated"] = "candidate"
     exceptions: tuple[str, ...] = ()
+    forbidden_target_terms: tuple[str, ...] = ()
+    accepted_target_variants: tuple[str, ...] = ()
 
     @model_validator(mode="after")
     def approved_entry_has_evidence(self) -> "GlossaryEntry":
@@ -41,6 +43,13 @@ class StyleRule(StrictModel):
     priority: int = 100
     version: str
     status: Literal["candidate", "approved", "deprecated"] = "approved"
+    expected_source_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def source_binding_has_unit_scope(self) -> "StyleRule":
+        if self.expected_source_hash is not None and self.scope.kind != "unit":
+            raise ValueError("source-bound feedback requires unit scope")
+        return self
 
 
 class SemanticEntry(StrictModel):

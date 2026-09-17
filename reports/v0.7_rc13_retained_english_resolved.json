@@ -1,0 +1,1292 @@
+{
+  "source_pdf_sha256": "1c29d0561e0051cbb265d064e0dffc16042d88a34bb5717bba8dd003967026ad",
+  "reviewed_pages": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18
+  ],
+  "retained_token_occurrences": 97,
+  "unresolved_occurrences": 0,
+  "records": [
+    {
+      "source_page": 1,
+      "unit_id": "asset-1c29d0561e00-g0021",
+      "token": "Xavier",
+      "target_span": [
+        0,
+        6
+      ],
+      "category": "author_name",
+      "review_file": "page-001.translation-review.json",
+      "review_sha256": "eaecf17e56ea28ac2e51540c98d01f61a4556df650ae34b16727becd24b1caa8",
+      "excerpt": "Xavier参数初始化。学习率。Adagrad。"
+    },
+    {
+      "source_page": 1,
+      "unit_id": "asset-1c29d0561e00-g0021",
+      "token": "Adagrad",
+      "target_span": [
+        16,
+        23
+      ],
+      "category": "algorithm_name",
+      "review_file": "page-001.translation-review.json",
+      "review_sha256": "eaecf17e56ea28ac2e51540c98d01f61a4556df650ae34b16727becd24b1caa8",
+      "excerpt": "Xavier参数初始化。学习率。Adagrad。"
+    },
+    {
+      "source_page": 1,
+      "unit_id": "asset-1c29d0561e00-g0022",
+      "token": "Xavier",
+      "target_span": [
+        147,
+        153
+      ],
+      "category": "author_name",
+      "review_file": "page-001.translation-review.json",
+      "review_sha256": "eaecf17e56ea28ac2e51540c98d01f61a4556df650ae34b16727becd24b1caa8",
+      "excerpt": "，涉及：神经元单元（非线性）、梯度检验、Xavier参数初始化、学习率、Adagrad等。最后，我们将说明使用循环神经网络"
+    },
+    {
+      "source_page": 1,
+      "unit_id": "asset-1c29d0561e00-g0022",
+      "token": "Adagrad",
+      "target_span": [
+        163,
+        170
+      ],
+      "category": "algorithm_name",
+      "review_file": "page-001.translation-review.json",
+      "review_sha256": "eaecf17e56ea28ac2e51540c98d01f61a4556df650ae34b16727becd24b1caa8",
+      "excerpt": "度检验、Xavier参数初始化、学习率、Adagrad等。最后，我们将说明使用循环神经网络作为语言模型的动机。"
+    },
+    {
+      "source_page": 1,
+      "unit_id": "asset-1c29d0561e00-g0026",
+      "token": "sigmoid",
+      "target_span": [
+        71,
+        78
+      ],
+      "category": "approved_disciplinary_name",
+      "review_file": "page-001.translation-review.json",
+      "review_sha256": "eaecf17e56ea28ac2e51540c98d01f61a4556df650ae34b16727becd24b1caa8",
+      "excerpt": "也称为权重）。神经元最流行的选择之一是“sigmoid”或“二元逻辑回归”单元。该单元接受一个n维输入向量 ，并产生标量激活"
+    },
+    {
+      "source_page": 1,
+      "unit_id": "asset-1c29d0561e00-g0178",
+      "token": "Christopher",
+      "target_span": [
+        6,
+        17
+      ],
+      "category": "author_name",
+      "review_file": "page-001.translation-review.json",
+      "review_sha256": "eaecf17e56ea28ac2e51540c98d01f61a4556df650ae34b16727becd24b1caa8",
+      "excerpt": " 课程讲师：Christopher Manning、Richard Socher"
+    },
+    {
+      "source_page": 1,
+      "unit_id": "asset-1c29d0561e00-g0178",
+      "token": "Manning",
+      "target_span": [
+        18,
+        25
+      ],
+      "category": "author_name",
+      "review_file": "page-001.translation-review.json",
+      "review_sha256": "eaecf17e56ea28ac2e51540c98d01f61a4556df650ae34b16727becd24b1caa8",
+      "excerpt": " 课程讲师：Christopher Manning、Richard Socher"
+    },
+    {
+      "source_page": 1,
+      "unit_id": "asset-1c29d0561e00-g0178",
+      "token": "Richard",
+      "target_span": [
+        26,
+        33
+      ],
+      "category": "author_name",
+      "review_file": "page-001.translation-review.json",
+      "review_sha256": "eaecf17e56ea28ac2e51540c98d01f61a4556df650ae34b16727becd24b1caa8",
+      "excerpt": "Christopher Manning、Richard Socher"
+    },
+    {
+      "source_page": 1,
+      "unit_id": "asset-1c29d0561e00-g0178",
+      "token": "Socher",
+      "target_span": [
+        34,
+        40
+      ],
+      "category": "author_name",
+      "review_file": "page-001.translation-review.json",
+      "review_sha256": "eaecf17e56ea28ac2e51540c98d01f61a4556df650ae34b16727becd24b1caa8",
+      "excerpt": "her Manning、Richard Socher"
+    },
+    {
+      "source_page": 1,
+      "unit_id": "asset-1c29d0561e00-g0179",
+      "token": "Rohit",
+      "target_span": [
+        4,
+        9
+      ],
+      "category": "author_name",
+      "review_file": "page-001.translation-review.json",
+      "review_sha256": "eaecf17e56ea28ac2e51540c98d01f61a4556df650ae34b16727becd24b1caa8",
+      "excerpt": " 作者：Rohit Mundra、Amani Peddada、Richard Soche"
+    },
+    {
+      "source_page": 1,
+      "unit_id": "asset-1c29d0561e00-g0179",
+      "token": "Mundra",
+      "target_span": [
+        10,
+        16
+      ],
+      "category": "author_name",
+      "review_file": "page-001.translation-review.json",
+      "review_sha256": "eaecf17e56ea28ac2e51540c98d01f61a4556df650ae34b16727becd24b1caa8",
+      "excerpt": " 作者：Rohit Mundra、Amani Peddada、Richard Socher、Qiaoj"
+    },
+    {
+      "source_page": 1,
+      "unit_id": "asset-1c29d0561e00-g0179",
+      "token": "Amani",
+      "target_span": [
+        17,
+        22
+      ],
+      "category": "author_name",
+      "review_file": "page-001.translation-review.json",
+      "review_sha256": "eaecf17e56ea28ac2e51540c98d01f61a4556df650ae34b16727becd24b1caa8",
+      "excerpt": " 作者：Rohit Mundra、Amani Peddada、Richard Socher、Qiaojing Ya"
+    },
+    {
+      "source_page": 1,
+      "unit_id": "asset-1c29d0561e00-g0179",
+      "token": "Peddada",
+      "target_span": [
+        23,
+        30
+      ],
+      "category": "author_name",
+      "review_file": "page-001.translation-review.json",
+      "review_sha256": "eaecf17e56ea28ac2e51540c98d01f61a4556df650ae34b16727becd24b1caa8",
+      "excerpt": "：Rohit Mundra、Amani Peddada、Richard Socher、Qiaojing Yan"
+    },
+    {
+      "source_page": 1,
+      "unit_id": "asset-1c29d0561e00-g0179",
+      "token": "Richard",
+      "target_span": [
+        31,
+        38
+      ],
+      "category": "author_name",
+      "review_file": "page-001.translation-review.json",
+      "review_sha256": "eaecf17e56ea28ac2e51540c98d01f61a4556df650ae34b16727becd24b1caa8",
+      "excerpt": "undra、Amani Peddada、Richard Socher、Qiaojing Yan"
+    },
+    {
+      "source_page": 1,
+      "unit_id": "asset-1c29d0561e00-g0179",
+      "token": "Socher",
+      "target_span": [
+        39,
+        45
+      ],
+      "category": "author_name",
+      "review_file": "page-001.translation-review.json",
+      "review_sha256": "eaecf17e56ea28ac2e51540c98d01f61a4556df650ae34b16727becd24b1caa8",
+      "excerpt": "ani Peddada、Richard Socher、Qiaojing Yan"
+    },
+    {
+      "source_page": 1,
+      "unit_id": "asset-1c29d0561e00-g0179",
+      "token": "Qiaojing",
+      "target_span": [
+        46,
+        54
+      ],
+      "category": "author_name",
+      "review_file": "page-001.translation-review.json",
+      "review_sha256": "eaecf17e56ea28ac2e51540c98d01f61a4556df650ae34b16727becd24b1caa8",
+      "excerpt": "dada、Richard Socher、Qiaojing Yan"
+    },
+    {
+      "source_page": 1,
+      "unit_id": "asset-1c29d0561e00-g0179",
+      "token": "Yan",
+      "target_span": [
+        55,
+        58
+      ],
+      "category": "author_name",
+      "review_file": "page-001.translation-review.json",
+      "review_sha256": "eaecf17e56ea28ac2e51540c98d01f61a4556df650ae34b16727becd24b1caa8",
+      "excerpt": "ard Socher、Qiaojing Yan"
+    },
+    {
+      "source_page": 2,
+      "unit_id": "asset-1c29d0561e00-g0042",
+      "token": "Sigmoid",
+      "target_span": [
+        4,
+        11
+      ],
+      "category": "approved_disciplinary_name",
+      "review_file": "page-002.translation-review.json",
+      "review_sha256": "fccdc8a44aec67da990f04514a45743bc7f5474dcf9b852f66e051a6341c4e27",
+      "excerpt": " 于是，Sigmoid 函数的激活值可以写成： "
+    },
+    {
+      "source_page": 2,
+      "unit_id": "asset-1c29d0561e00-g0185",
+      "token": "Sigmoid",
+      "target_span": [
+        9,
+        16
+      ],
+      "category": "approved_disciplinary_name",
+      "review_file": "page-002.translation-review.json",
+      "review_sha256": "fccdc8a44aec67da990f04514a45743bc7f5474dcf9b852f66e051a6341c4e27",
+      "excerpt": "图 ：此图展示了 Sigmoid 神经元中，输入向量 如何先经过缩放、求和、加上偏置，再传递给将数值压"
+    },
+    {
+      "source_page": 2,
+      "unit_id": "asset-1c29d0561e00-g0185",
+      "token": "Sigmoid",
+      "target_span": [
+        59,
+        66
+      ],
+      "category": "approved_disciplinary_name",
+      "review_file": "page-002.translation-review.json",
+      "review_sha256": "fccdc8a44aec67da990f04514a45743bc7f5474dcf9b852f66e051a6341c4e27",
+      "excerpt": "上偏置，再传递给将数值压缩到有限范围的 Sigmoid 函数。"
+    },
+    {
+      "source_page": 2,
+      "unit_id": "asset-1c29d0561e00-g0186",
+      "token": "Sigmoid",
+      "target_span": [
+        16,
+        23
+      ],
+      "category": "approved_disciplinary_name",
+      "review_file": "page-002.translation-review.json",
+      "review_sha256": "fccdc8a44aec67da990f04514a45743bc7f5474dcf9b852f66e051a6341c4e27",
+      "excerpt": "图 ：此图展示了右侧堆叠的多个 Sigmoid 单元，它们都接收相同的输入 。"
+    },
+    {
+      "source_page": 3,
+      "unit_id": "asset-1c29d0561e00-g0045",
+      "token": "Sigmoid",
+      "target_span": [
+        25,
+        32
+      ],
+      "category": "approved_disciplinary_name",
+      "review_file": "page-003.translation-review.json",
+      "review_sha256": "11a3e7f73bb27d6a5e86c4cebc9f32ff42dbce2cd63ee632d4b45ed2bec2240a",
+      "excerpt": "，我们已经看到，输入向量 可以送入一层 Sigmoid 单元，产生激活值 。但这样做的直观依据是什么？下面以自然语言处理（N"
+    },
+    {
+      "source_page": 3,
+      "unit_id": "asset-1c29d0561e00-g0045",
+      "token": "NLP",
+      "target_span": [
+        66,
+        69
+      ],
+      "category": "disciplinary_acronym",
+      "review_file": "page-003.translation-review.json",
+      "review_sha256": "11a3e7f73bb27d6a5e86c4cebc9f32ff42dbce2cd63ee632d4b45ed2bec2240a",
+      "excerpt": "做的直观依据是什么？下面以自然语言处理（NLP）中的命名实体识别（NER）问题为例："
+    },
+    {
+      "source_page": 3,
+      "unit_id": "asset-1c29d0561e00-g0045",
+      "token": "NER",
+      "target_span": [
+        79,
+        82
+      ],
+      "category": "disciplinary_acronym",
+      "review_file": "page-003.translation-review.json",
+      "review_sha256": "11a3e7f73bb27d6a5e86c4cebc9f32ff42dbce2cd63ee632d4b45ed2bec2240a",
+      "excerpt": "自然语言处理（NLP）中的命名实体识别（NER）问题为例："
+    },
+    {
+      "source_page": 3,
+      "unit_id": "asset-1c29d0561e00-g0047",
+      "token": "Paris",
+      "target_span": [
+        12,
+        17
+      ],
+      "category": "source_language_example",
+      "review_file": "page-003.translation-review.json",
+      "review_sha256": "11a3e7f73bb27d6a5e86c4cebc9f32ff42dbce2cd63ee632d4b45ed2bec2240a",
+      "excerpt": "这里，我们要判断中心词“Paris”是否为命名实体。此时，为了进行分类，我们很可能既需要捕捉词向量窗口中"
+    },
+    {
+      "source_page": 3,
+      "unit_id": "asset-1c29d0561e00-g0047",
+      "token": "Museums",
+      "target_span": [
+        91,
+        98
+      ],
+      "category": "source_language_example",
+      "review_file": "page-003.translation-review.json",
+      "review_sha256": "11a3e7f73bb27d6a5e86c4cebc9f32ff42dbce2cd63ee632d4b45ed2bec2240a",
+      "excerpt": "例如，只有当第二个词为 时，第一个词是“Museums”才可能有意义。把输入直接送入 Softmax 函数，通常无法捕捉这样"
+    },
+    {
+      "source_page": 3,
+      "unit_id": "asset-1c29d0561e00-g0047",
+      "token": "Softmax",
+      "target_span": [
+        114,
+        121
+      ],
+      "category": "approved_disciplinary_name",
+      "review_file": "page-003.translation-review.json",
+      "review_sha256": "11a3e7f73bb27d6a5e86c4cebc9f32ff42dbce2cd63ee632d4b45ed2bec2240a",
+      "excerpt": "eums”才可能有意义。把输入直接送入 Softmax 函数，通常无法捕捉这样的非线性判断；这需要对第 节讨论的中间层进行评"
+    },
+    {
+      "source_page": 3,
+      "unit_id": "asset-1c29d0561e00-g0049",
+      "token": "Sigmoid",
+      "target_span": [
+        51,
+        58
+      ],
+      "category": "approved_disciplinary_name",
+      "review_file": "page-003.translation-review.json",
+      "review_sha256": "11a3e7f73bb27d6a5e86c4cebc9f32ff42dbce2cd63ee632d4b45ed2bec2240a",
+      "excerpt": "如上例），则输入 。如果隐藏层使用 个 Sigmoid 单元，并由激活值生成 个分数输出，则 ， ， ， 。"
+    },
+    {
+      "source_page": 3,
+      "unit_id": "asset-1c29d0561e00-g0052",
+      "token": "Museums",
+      "target_span": [
+        16,
+        23
+      ],
+      "category": "source_language_example",
+      "review_file": "page-003.translation-review.json",
+      "review_sha256": "11a3e7f73bb27d6a5e86c4cebc9f32ff42dbce2cd63ee632d4b45ed2bec2240a",
+      "excerpt": "沿用前例，将标注为“真”的窗口“Museums in Paris are amazing”的得分记为 ，将标注为“假"
+    },
+    {
+      "source_page": 3,
+      "unit_id": "asset-1c29d0561e00-g0052",
+      "token": "Paris",
+      "target_span": [
+        27,
+        32
+      ],
+      "category": "source_language_example",
+      "review_file": "page-003.translation-review.json",
+      "review_sha256": "11a3e7f73bb27d6a5e86c4cebc9f32ff42dbce2cd63ee632d4b45ed2bec2240a",
+      "excerpt": "注为“真”的窗口“Museums in Paris are amazing”的得分记为 ，将标注为“假”的窗口“Not "
+    },
+    {
+      "source_page": 3,
+      "unit_id": "asset-1c29d0561e00-g0052",
+      "token": "are",
+      "target_span": [
+        33,
+        36
+      ],
+      "category": "source_language_example",
+      "review_file": "page-003.translation-review.json",
+      "review_sha256": "11a3e7f73bb27d6a5e86c4cebc9f32ff42dbce2cd63ee632d4b45ed2bec2240a",
+      "excerpt": "窗口“Museums in Paris are amazing”的得分记为 ，将标注为“假”的窗口“Not all "
+    },
+    {
+      "source_page": 3,
+      "unit_id": "asset-1c29d0561e00-g0052",
+      "token": "amazing",
+      "target_span": [
+        37,
+        44
+      ],
+      "category": "source_language_example",
+      "review_file": "page-003.translation-review.json",
+      "review_sha256": "11a3e7f73bb27d6a5e86c4cebc9f32ff42dbce2cd63ee632d4b45ed2bec2240a",
+      "excerpt": "useums in Paris are amazing”的得分记为 ，将标注为“假”的窗口“Not all museums "
+    },
+    {
+      "source_page": 3,
+      "unit_id": "asset-1c29d0561e00-g0052",
+      "token": "Not",
+      "target_span": [
+        63,
+        66
+      ],
+      "category": "source_language_example",
+      "review_file": "page-003.translation-review.json",
+      "review_sha256": "11a3e7f73bb27d6a5e86c4cebc9f32ff42dbce2cd63ee632d4b45ed2bec2240a",
+      "excerpt": "g”的得分记为 ，将标注为“假”的窗口“Not all museums in Paris”的得分记为 （下标 表示该"
+    },
+    {
+      "source_page": 3,
+      "unit_id": "asset-1c29d0561e00-g0052",
+      "token": "all",
+      "target_span": [
+        67,
+        70
+      ],
+      "category": "source_language_example",
+      "review_file": "page-003.translation-review.json",
+      "review_sha256": "11a3e7f73bb27d6a5e86c4cebc9f32ff42dbce2cd63ee632d4b45ed2bec2240a",
+      "excerpt": "分记为 ，将标注为“假”的窗口“Not all museums in Paris”的得分记为 （下标 表示该窗口经过"
+    },
+    {
+      "source_page": 3,
+      "unit_id": "asset-1c29d0561e00-g0052",
+      "token": "museums",
+      "target_span": [
+        71,
+        78
+      ],
+      "category": "source_language_example",
+      "review_file": "page-003.translation-review.json",
+      "review_sha256": "11a3e7f73bb27d6a5e86c4cebc9f32ff42dbce2cd63ee632d4b45ed2bec2240a",
+      "excerpt": "，将标注为“假”的窗口“Not all museums in Paris”的得分记为 （下标 表示该窗口经过扰乱）。"
+    },
+    {
+      "source_page": 3,
+      "unit_id": "asset-1c29d0561e00-g0052",
+      "token": "Paris",
+      "target_span": [
+        82,
+        87
+      ],
+      "category": "source_language_example",
+      "review_file": "page-003.translation-review.json",
+      "review_sha256": "11a3e7f73bb27d6a5e86c4cebc9f32ff42dbce2cd63ee632d4b45ed2bec2240a",
+      "excerpt": "“Not all museums in Paris”的得分记为 （下标 表示该窗口经过扰乱）。"
+    },
+    {
+      "source_page": 3,
+      "unit_id": "asset-1c29d0561e00-g0187",
+      "token": "Sigmoid",
+      "target_span": [
+        53,
+        60
+      ],
+      "category": "approved_disciplinary_name",
+      "review_file": "page-003.translation-review.json",
+      "review_sha256": "11a3e7f73bb27d6a5e86c4cebc9f32ff42dbce2cd63ee632d4b45ed2bec2240a",
+      "excerpt": "作为输入，则输入 。如果隐藏层使用 个 Sigmoid 单元，并由激活值生成 个分数输出，则 ， ， ， 。逐阶段的前馈计算"
+    },
+    {
+      "source_page": 4,
+      "unit_id": "asset-1c29d0561e00-g0052",
+      "token": "Museums",
+      "target_span": [
+        16,
+        23
+      ],
+      "category": "source_language_example",
+      "review_file": "page-004.translation-review.json",
+      "review_sha256": "4bd32cbfc58a0599f147ada82ca8a1cb15f67edcd4172c529b947f0115728aea",
+      "excerpt": "沿用前例，将标注为“真”的窗口“Museums in Paris are amazing”的得分记为 ，将标注为“假"
+    },
+    {
+      "source_page": 4,
+      "unit_id": "asset-1c29d0561e00-g0052",
+      "token": "Paris",
+      "target_span": [
+        27,
+        32
+      ],
+      "category": "source_language_example",
+      "review_file": "page-004.translation-review.json",
+      "review_sha256": "4bd32cbfc58a0599f147ada82ca8a1cb15f67edcd4172c529b947f0115728aea",
+      "excerpt": "注为“真”的窗口“Museums in Paris are amazing”的得分记为 ，将标注为“假”的窗口“Not "
+    },
+    {
+      "source_page": 4,
+      "unit_id": "asset-1c29d0561e00-g0052",
+      "token": "are",
+      "target_span": [
+        33,
+        36
+      ],
+      "category": "source_language_example",
+      "review_file": "page-004.translation-review.json",
+      "review_sha256": "4bd32cbfc58a0599f147ada82ca8a1cb15f67edcd4172c529b947f0115728aea",
+      "excerpt": "窗口“Museums in Paris are amazing”的得分记为 ，将标注为“假”的窗口“Not all "
+    },
+    {
+      "source_page": 4,
+      "unit_id": "asset-1c29d0561e00-g0052",
+      "token": "amazing",
+      "target_span": [
+        37,
+        44
+      ],
+      "category": "source_language_example",
+      "review_file": "page-004.translation-review.json",
+      "review_sha256": "4bd32cbfc58a0599f147ada82ca8a1cb15f67edcd4172c529b947f0115728aea",
+      "excerpt": "useums in Paris are amazing”的得分记为 ，将标注为“假”的窗口“Not all museums "
+    },
+    {
+      "source_page": 4,
+      "unit_id": "asset-1c29d0561e00-g0052",
+      "token": "Not",
+      "target_span": [
+        63,
+        66
+      ],
+      "category": "source_language_example",
+      "review_file": "page-004.translation-review.json",
+      "review_sha256": "4bd32cbfc58a0599f147ada82ca8a1cb15f67edcd4172c529b947f0115728aea",
+      "excerpt": "g”的得分记为 ，将标注为“假”的窗口“Not all museums in Paris”的得分记为 （下标 表示该"
+    },
+    {
+      "source_page": 4,
+      "unit_id": "asset-1c29d0561e00-g0052",
+      "token": "all",
+      "target_span": [
+        67,
+        70
+      ],
+      "category": "source_language_example",
+      "review_file": "page-004.translation-review.json",
+      "review_sha256": "4bd32cbfc58a0599f147ada82ca8a1cb15f67edcd4172c529b947f0115728aea",
+      "excerpt": "分记为 ，将标注为“假”的窗口“Not all museums in Paris”的得分记为 （下标 表示该窗口经过"
+    },
+    {
+      "source_page": 4,
+      "unit_id": "asset-1c29d0561e00-g0052",
+      "token": "museums",
+      "target_span": [
+        71,
+        78
+      ],
+      "category": "source_language_example",
+      "review_file": "page-004.translation-review.json",
+      "review_sha256": "4bd32cbfc58a0599f147ada82ca8a1cb15f67edcd4172c529b947f0115728aea",
+      "excerpt": "，将标注为“假”的窗口“Not all museums in Paris”的得分记为 （下标 表示该窗口经过扰乱）。"
+    },
+    {
+      "source_page": 4,
+      "unit_id": "asset-1c29d0561e00-g0052",
+      "token": "Paris",
+      "target_span": [
+        82,
+        87
+      ],
+      "category": "source_language_example",
+      "review_file": "page-004.translation-review.json",
+      "review_sha256": "4bd32cbfc58a0599f147ada82ca8a1cb15f67edcd4172c529b947f0115728aea",
+      "excerpt": "“Not all museums in Paris”的得分记为 （下标 表示该窗口经过扰乱）。"
+    },
+    {
+      "source_page": 4,
+      "unit_id": "asset-1c29d0561e00-g0058",
+      "token": "SGD",
+      "target_span": [
+        64,
+        67
+      ],
+      "category": "disciplinary_acronym",
+      "review_file": "page-004.translation-review.json",
+      "review_sha256": "4bd32cbfc58a0599f147ada82ca8a1cb15f67edcd4172c529b947f0115728aea",
+      "excerpt": "。由于通常采用梯度下降（或随机梯度下降 SGD 等变体）更新参数，因此需要更新方程中对应参数的梯度信息： "
+    },
+    {
+      "source_page": 4,
+      "unit_id": "asset-1c29d0561e00-g0190",
+      "token": "SVM",
+      "target_span": [
+        18,
+        21
+      ],
+      "category": "disciplinary_acronym",
+      "review_file": "page-004.translation-review.json",
+      "review_sha256": "4bd32cbfc58a0599f147ada82ca8a1cb15f67edcd4172c529b947f0115728aea",
+      "excerpt": "最大间隔目标函数最常见于支持向量机（SVM）。"
+    },
+    {
+      "source_page": 8,
+      "unit_id": "asset-1c29d0561e00-g0103",
+      "token": "MATLAB",
+      "target_span": [
+        34,
+        40
+      ],
+      "category": "software_name",
+      "review_file": "page-008.transfer.translation-review.json",
+      "review_sha256": "eaee5da4f0b90c878e1c1e8990e186c456d8d6a6af9150731a0788af33cf5448",
+      "excerpt": "以及逐向量更新之后，我们必须认识到，在 MATLAB 或 Python（使用 NumPy/SciPy 包）等科学计算环境中"
+    },
+    {
+      "source_page": 8,
+      "unit_id": "asset-1c29d0561e00-g0103",
+      "token": "Python",
+      "target_span": [
+        43,
+        49
+      ],
+      "category": "software_name",
+      "review_file": "page-008.transfer.translation-review.json",
+      "review_sha256": "eaee5da4f0b90c878e1c1e8990e186c456d8d6a6af9150731a0788af33cf5448",
+      "excerpt": "，我们必须认识到，在 MATLAB 或 Python（使用 NumPy/SciPy 包）等科学计算环境中，向量化实现的运行"
+    },
+    {
+      "source_page": 8,
+      "unit_id": "asset-1c29d0561e00-g0103",
+      "token": "NumPy",
+      "target_span": [
+        53,
+        58
+      ],
+      "category": "software_name",
+      "review_file": "page-008.transfer.translation-review.json",
+      "review_sha256": "eaee5da4f0b90c878e1c1e8990e186c456d8d6a6af9150731a0788af33cf5448",
+      "excerpt": " MATLAB 或 Python（使用 NumPy/SciPy 包）等科学计算环境中，向量化实现的运行速度要快得多。因此"
+    },
+    {
+      "source_page": 8,
+      "unit_id": "asset-1c29d0561e00-g0103",
+      "token": "SciPy",
+      "target_span": [
+        59,
+        64
+      ],
+      "category": "software_name",
+      "review_file": "page-008.transfer.translation-review.json",
+      "review_sha256": "eaee5da4f0b90c878e1c1e8990e186c456d8d6a6af9150731a0788af33cf5448",
+      "excerpt": "B 或 Python（使用 NumPy/SciPy 包）等科学计算环境中，向量化实现的运行速度要快得多。因此，在实践中我"
+    },
+    {
+      "source_page": 9,
+      "unit_id": "asset-1c29d0561e00-g0106",
+      "token": "SGD",
+      "target_span": [
+        170,
+        173
+      ],
+      "category": "disciplinary_acronym",
+      "review_file": "page-009.translation-review.json",
+      "review_sha256": "f61d04a8e7d518d5d13ed572382488abf5b98ae4ed27e61ed0e48a6a271f90e9",
+      "excerpt": "算两次传播显然不是最优的。而且，在诸如 SGD 这样的优化技术中，我们必须在数千次迭代中每次迭代都计算一次梯度，因此"
+    },
+    {
+      "source_page": 10,
+      "unit_id": "asset-1c29d0561e00-g0106",
+      "token": "SGD",
+      "target_span": [
+        170,
+        173
+      ],
+      "category": "disciplinary_acronym",
+      "review_file": "page-010.cross-linked.translation-review.json",
+      "review_sha256": "906448d6990ff104bf79c30175b3a9b566fb7acf57920154d3ff0351af888335",
+      "excerpt": "算两次传播显然不是最优的。而且，在诸如 SGD 这样的优化技术中，我们必须在数千次迭代中每次迭代都计算一次梯度，因此"
+    },
+    {
+      "source_page": 11,
+      "unit_id": "asset-1c29d0561e00-g0119",
+      "token": "Frobenius",
+      "target_span": [
+        27,
+        36
+      ],
+      "category": "approved_hybrid_term",
+      "review_file": "page-011.dropout.translation-review.json",
+      "review_sha256": "e826e20783a435d061038a8c44fc667367560d8a7ebffe5da97f9b866fbc6b05",
+      "excerpt": "中， 是矩阵 （网络中第 个权重矩阵）的Frobenius范数，而 是控制正则化项相对于原始成本函数权重的超参数。由于我们试图最"
+    },
+    {
+      "source_page": 11,
+      "unit_id": "asset-1c29d0561e00-g0119",
+      "token": "Frobenius",
+      "target_span": [
+        110,
+        119
+      ],
+      "category": "approved_hybrid_term",
+      "review_file": "page-011.dropout.translation-review.json",
+      "review_sha256": "e826e20783a435d061038a8c44fc667367560d8a7ebffe5da97f9b866fbc6b05",
+      "excerpt": "本函数的同时，对过大的权重进行惩罚。由于Frobenius范数的二次性质（它计算矩阵元素的平方和），  正则化有效地降低了模型的"
+    },
+    {
+      "source_page": 11,
+      "unit_id": "asset-1c29d0561e00-g0206",
+      "token": "Frobenius",
+      "target_span": [
+        7,
+        16
+      ],
+      "category": "approved_hybrid_term",
+      "review_file": "page-011.dropout.translation-review.json",
+      "review_sha256": "e826e20783a435d061038a8c44fc667367560d8a7ebffe5da97f9b866fbc6b05",
+      "excerpt": "矩阵   的 Frobenius 范数定义如下：  "
+    },
+    {
+      "source_page": 12,
+      "unit_id": "asset-1c29d0561e00-g0122",
+      "token": "Srivastava",
+      "target_span": [
+        21,
+        31
+      ],
+      "category": "author_name",
+      "review_file": "page-012.dropout.translation-review.json",
+      "review_sha256": "13221681f2ace46072124d246cd00dfe09924dc7f770fd2cbe5704ce338203e7",
+      "excerpt": "机失活 是一种强大的正则化技术，最早由 Srivastava 等人在《Dropout: A Simple Way to Preve"
+    },
+    {
+      "source_page": 12,
+      "unit_id": "asset-1c29d0561e00-g0122",
+      "token": "Dropout",
+      "target_span": [
+        36,
+        43
+      ],
+      "category": "retained_bibliographic_title",
+      "review_file": "page-012.dropout.translation-review.json",
+      "review_sha256": "13221681f2ace46072124d246cd00dfe09924dc7f770fd2cbe5704ce338203e7",
+      "excerpt": "，最早由 Srivastava 等人在《Dropout: A Simple Way to Prevent Neural Ne"
+    },
+    {
+      "source_page": 12,
+      "unit_id": "asset-1c29d0561e00-g0122",
+      "token": "Simple",
+      "target_span": [
+        47,
+        53
+      ],
+      "category": "retained_bibliographic_title",
+      "review_file": "page-012.dropout.translation-review.json",
+      "review_sha256": "13221681f2ace46072124d246cd00dfe09924dc7f770fd2cbe5704ce338203e7",
+      "excerpt": "tava 等人在《Dropout: A Simple Way to Prevent Neural Networks fro"
+    },
+    {
+      "source_page": 12,
+      "unit_id": "asset-1c29d0561e00-g0122",
+      "token": "Way",
+      "target_span": [
+        54,
+        57
+      ],
+      "category": "retained_bibliographic_title",
+      "review_file": "page-012.dropout.translation-review.json",
+      "review_sha256": "13221681f2ace46072124d246cd00dfe09924dc7f770fd2cbe5704ce338203e7",
+      "excerpt": "在《Dropout: A Simple Way to Prevent Neural Networks from Ov"
+    },
+    {
+      "source_page": 12,
+      "unit_id": "asset-1c29d0561e00-g0122",
+      "token": "Prevent",
+      "target_span": [
+        61,
+        68
+      ],
+      "category": "retained_bibliographic_title",
+      "review_file": "page-012.dropout.translation-review.json",
+      "review_sha256": "13221681f2ace46072124d246cd00dfe09924dc7f770fd2cbe5704ce338203e7",
+      "excerpt": "ut: A Simple Way to Prevent Neural Networks from Overfitting》中"
+    },
+    {
+      "source_page": 12,
+      "unit_id": "asset-1c29d0561e00-g0122",
+      "token": "Neural",
+      "target_span": [
+        69,
+        75
+      ],
+      "category": "retained_bibliographic_title",
+      "review_file": "page-012.dropout.translation-review.json",
+      "review_sha256": "13221681f2ace46072124d246cd00dfe09924dc7f770fd2cbe5704ce338203e7",
+      "excerpt": "mple Way to Prevent Neural Networks from Overfitting》中提出。其思想简"
+    },
+    {
+      "source_page": 12,
+      "unit_id": "asset-1c29d0561e00-g0122",
+      "token": "Networks",
+      "target_span": [
+        76,
+        84
+      ],
+      "category": "retained_bibliographic_title",
+      "review_file": "page-012.dropout.translation-review.json",
+      "review_sha256": "13221681f2ace46072124d246cd00dfe09924dc7f770fd2cbe5704ce338203e7",
+      "excerpt": "y to Prevent Neural Networks from Overfitting》中提出。其思想简单却有效——在训练"
+    },
+    {
+      "source_page": 12,
+      "unit_id": "asset-1c29d0561e00-g0122",
+      "token": "from",
+      "target_span": [
+        85,
+        89
+      ],
+      "category": "retained_bibliographic_title",
+      "review_file": "page-012.dropout.translation-review.json",
+      "review_sha256": "13221681f2ace46072124d246cd00dfe09924dc7f770fd2cbe5704ce338203e7",
+      "excerpt": "ent Neural Networks from Overfitting》中提出。其思想简单却有效——在训练期间，我们"
+    },
+    {
+      "source_page": 12,
+      "unit_id": "asset-1c29d0561e00-g0122",
+      "token": "Overfitting",
+      "target_span": [
+        90,
+        101
+      ],
+      "category": "retained_bibliographic_title",
+      "review_file": "page-012.dropout.translation-review.json",
+      "review_sha256": "13221681f2ace46072124d246cd00dfe09924dc7f770fd2cbe5704ce338203e7",
+      "excerpt": "eural Networks from Overfitting》中提出。其思想简单却有效——在训练期间，我们会在每次前向/反向传播中"
+    },
+    {
+      "source_page": 12,
+      "unit_id": "asset-1c29d0561e00-g0125",
+      "token": "Sigmoid",
+      "target_span": [
+        18,
+        25
+      ],
+      "category": "approved_disciplinary_name",
+      "review_file": "page-012.dropout.translation-review.json",
+      "review_sha256": "13221681f2ace46072124d246cd00dfe09924dc7f770fd2cbe5704ce338203e7",
+      "excerpt": "到目前为止，我们讨论的神经网络都包含Sigmoid 神经元以引入非线性；然而在许多应用中，使用其他激活函数可以设计出更好"
+    },
+    {
+      "source_page": 12,
+      "unit_id": "asset-1c29d0561e00-g0126",
+      "token": "Sigmoid",
+      "target_span": [
+        32,
+        39
+      ],
+      "category": "approved_disciplinary_name",
+      "review_file": "page-012.dropout.translation-review.json",
+      "review_sha256": "13221681f2ace46072124d246cd00dfe09924dc7f770fd2cbe5704ce338203e7",
+      "excerpt": "其函数和梯度定义，这些可以替代上文讨论的Sigmoid 函数。"
+    },
+    {
+      "source_page": 12,
+      "unit_id": "asset-1c29d0561e00-g0127",
+      "token": "Sigmoid",
+      "target_span": [
+        0,
+        7
+      ],
+      "category": "approved_disciplinary_name",
+      "review_file": "page-012.dropout.translation-review.json",
+      "review_sha256": "13221681f2ace46072124d246cd00dfe09924dc7f770fd2cbe5704ce338203e7",
+      "excerpt": "Sigmoid：这是我们讨论过的默认选择；激活函数   由下式给出："
+    },
+    {
+      "source_page": 12,
+      "unit_id": "asset-1c29d0561e00-g0207",
+      "token": "Srivastava",
+      "target_span": [
+        19,
+        29
+      ],
+      "category": "author_name",
+      "review_file": "page-012.dropout.translation-review.json",
+      "review_sha256": "13221681f2ace46072124d246cd00dfe09924dc7f770fd2cbe5704ce338203e7",
+      "excerpt": "人工神经网络中的 随机失活。图片来源：Srivastava 等人。"
+    },
+    {
+      "source_page": 12,
+      "unit_id": "asset-1c29d0561e00-g0208",
+      "token": "Sigmoid",
+      "target_span": [
+        3,
+        10
+      ],
+      "category": "approved_disciplinary_name",
+      "review_file": "page-012.dropout.translation-review.json",
+      "review_sha256": "13221681f2ace46072124d246cd00dfe09924dc7f770fd2cbe5704ce338203e7",
+      "excerpt": "图 ：Sigmoid 非线性响应"
+    },
+    {
+      "source_page": 13,
+      "unit_id": "asset-1c29d0561e00-g0125",
+      "token": "Sigmoid",
+      "target_span": [
+        8,
+        15
+      ],
+      "category": "approved_disciplinary_name",
+      "review_file": "page-013.cross-linked.translation-review.json",
+      "review_sha256": "b77587059f2401959304280c4bafbe3ba4f97bebc85fe7483a209fd06e944987",
+      "excerpt": " ：  函数是 Sigmoid 函数的一种替代方案，在实践中通常收敛得更快。  与 Sigmoid "
+    },
+    {
+      "source_page": 13,
+      "unit_id": "asset-1c29d0561e00-g0125",
+      "token": "Sigmoid",
+      "target_span": [
+        42,
+        49
+      ],
+      "category": "approved_disciplinary_name",
+      "review_file": "page-013.cross-linked.translation-review.json",
+      "review_sha256": "b77587059f2401959304280c4bafbe3ba4f97bebc85fe7483a209fd06e944987",
+      "excerpt": "代方案，在实践中通常收敛得更快。  与 Sigmoid 的主要区别在于，  的输出范围是  到  ，而 Sigmoid 的范"
+    },
+    {
+      "source_page": 13,
+      "unit_id": "asset-1c29d0561e00-g0125",
+      "token": "Sigmoid",
+      "target_span": [
+        74,
+        81
+      ],
+      "category": "approved_disciplinary_name",
+      "review_file": "page-013.cross-linked.translation-review.json",
+      "review_sha256": "b77587059f2401959304280c4bafbe3ba4f97bebc85fe7483a209fd06e944987",
+      "excerpt": "别在于，  的输出范围是  到  ，而 Sigmoid 的范围是   到  。"
+    },
+    {
+      "source_page": 14,
+      "unit_id": "asset-1c29d0561e00-g0138",
+      "token": "ReLU",
+      "target_span": [
+        0,
+        4
+      ],
+      "category": "disciplinary_acronym",
+      "review_file": "page-014.translation-review.json",
+      "review_sha256": "fcfbc4ea9a442ba3fbef32f352eb3401f9fe741150f6d8f98f4821d2e63e54a6",
+      "excerpt": "ReLU：ReLU（整流线性单元）函数是一种流行的激活函数选择，因为即使对于较"
+    },
+    {
+      "source_page": 14,
+      "unit_id": "asset-1c29d0561e00-g0138",
+      "token": "ReLU",
+      "target_span": [
+        5,
+        9
+      ],
+      "category": "disciplinary_acronym",
+      "review_file": "page-014.translation-review.json",
+      "review_sha256": "fcfbc4ea9a442ba3fbef32f352eb3401f9fe741150f6d8f98f4821d2e63e54a6",
+      "excerpt": "ReLU：ReLU（整流线性单元）函数是一种流行的激活函数选择，因为即使对于较大的 值它"
+    },
+    {
+      "source_page": 14,
+      "unit_id": "asset-1c29d0561e00-g0140",
+      "token": "ReLU",
+      "target_span": [
+        3,
+        7
+      ],
+      "category": "disciplinary_acronym",
+      "review_file": "page-014.translation-review.json",
+      "review_sha256": "fcfbc4ea9a442ba3fbef32f352eb3401f9fe741150f6d8f98f4821d2e63e54a6",
+      "excerpt": "带泄漏ReLU：传统的 ReLU 单元在设计上不会对非正的   传播任何误差——带泄"
+    },
+    {
+      "source_page": 14,
+      "unit_id": "asset-1c29d0561e00-g0140",
+      "token": "ReLU",
+      "target_span": [
+        12,
+        16
+      ],
+      "category": "disciplinary_acronym",
+      "review_file": "page-014.translation-review.json",
+      "review_sha256": "fcfbc4ea9a442ba3fbef32f352eb3401f9fe741150f6d8f98f4821d2e63e54a6",
+      "excerpt": "带泄漏ReLU：传统的 ReLU 单元在设计上不会对非正的   传播任何误差——带泄漏ReLU 对此进"
+    },
+    {
+      "source_page": 14,
+      "unit_id": "asset-1c29d0561e00-g0140",
+      "token": "ReLU",
+      "target_span": [
+        43,
+        47
+      ],
+      "category": "disciplinary_acronym",
+      "review_file": "page-014.translation-review.json",
+      "review_sha256": "fcfbc4ea9a442ba3fbef32f352eb3401f9fe741150f6d8f98f4821d2e63e54a6",
+      "excerpt": "不会对非正的   传播任何误差——带泄漏ReLU 对此进行了修改，使得即使   为负时，也允许一个很小的误差向后传播："
+    },
+    {
+      "source_page": 14,
+      "unit_id": "asset-1c29d0561e00-g0208",
+      "token": "ReLU",
+      "target_span": [
+        3,
+        7
+      ],
+      "category": "disciplinary_acronym",
+      "review_file": "page-014.translation-review.json",
+      "review_sha256": "fcfbc4ea9a442ba3fbef32f352eb3401f9fe741150f6d8f98f4821d2e63e54a6",
+      "excerpt": "图 ：ReLU非线性函数的响应"
+    },
+    {
+      "source_page": 14,
+      "unit_id": "asset-1c29d0561e00-g0209",
+      "token": "ReLU",
+      "target_span": [
+        6,
+        10
+      ],
+      "category": "disciplinary_acronym",
+      "review_file": "page-014.translation-review.json",
+      "review_sha256": "fcfbc4ea9a442ba3fbef32f352eb3401f9fe741150f6d8f98f4821d2e63e54a6",
+      "excerpt": "图 ：带泄漏ReLU非线性函数的响应"
+    },
+    {
+      "source_page": 15,
+      "unit_id": "asset-1c29d0561e00-g0147",
+      "token": "SVD",
+      "target_span": [
+        99,
+        102
+      ],
+      "category": "disciplinary_acronym",
+      "review_file": "page-015.cross-linked.translation-review.json",
+      "review_sha256": "350da20b324c1283aca53b3dca66c1c9476c9a06a709397564e54439ba85f36d",
+      "excerpt": "来完成。然后我们可以对 进行奇异值分解（SVD）以得到矩阵 。接着计算 ，将 投影到由 的列所定义的基上。最后，我们"
+    },
+    {
+      "source_page": 15,
+      "unit_id": "asset-1c29d0561e00-g0149",
+      "token": "Xavier",
+      "target_span": [
+        99,
+        105
+      ],
+      "category": "author_name",
+      "review_file": "page-015.cross-linked.translation-review.json",
+      "review_sha256": "350da20b324c1283aca53b3dca66c1c9476c9a06a709397564e54439ba85f36d",
+      "excerpt": "《理解训练深度前馈神经网络的困难》 中，Xavier等人研究了不同权重和偏置初始化方案对训练动态的影响。实证结果表明，对于"
+    },
+    {
+      "source_page": 15,
+      "unit_id": "asset-1c29d0561e00-g0149",
+      "token": "Sigmoid",
+      "target_span": [
+        140,
+        147
+      ],
+      "category": "approved_disciplinary_name",
+      "review_file": "page-015.cross-linked.translation-review.json",
+      "review_sha256": "350da20b324c1283aca53b3dca66c1c9476c9a06a709397564e54439ba85f36d",
+      "excerpt": "方案对训练动态的影响。实证结果表明，对于Sigmoid和 激活单元，当矩阵 的权重按照如下均匀分布随机初始化时，可以实现更快"
+    },
+    {
+      "source_page": 16,
+      "unit_id": "asset-1c29d0561e00-g0157",
+      "token": "Ronan",
+      "target_span": [
+        43,
+        48
+      ],
+      "category": "author_name",
+      "review_file": "page-016.translation-review.json",
+      "review_sha256": "78d6c2bf893fc45b89338c6ab4cdf4809c782753eff479fadda52d9ee937d1c7",
+      "excerpt": "试图改进这种设置学习率的朴素方法。例如，Ronan Collobert 将权重  的学习率按神经元扇入(  的平方根的倒"
+    },
+    {
+      "source_page": 16,
+      "unit_id": "asset-1c29d0561e00-g0157",
+      "token": "Collobert",
+      "target_span": [
+        49,
+        58
+      ],
+      "category": "author_name",
+      "review_file": "page-016.translation-review.json",
+      "review_sha256": "78d6c2bf893fc45b89338c6ab4cdf4809c782753eff479fadda52d9ee937d1c7",
+      "excerpt": "设置学习率的朴素方法。例如，Ronan Collobert 将权重  的学习率按神经元扇入(  的平方根的倒数进行缩放（其中  "
+    },
+    {
+      "source_page": 17,
+      "unit_id": "asset-1c29d0561e00-g0165",
+      "token": "AdaGrad",
+      "target_span": [
+        0,
+        7
+      ],
+      "category": "algorithm_name",
+      "review_file": "page-017.translation-review.json",
+      "review_sha256": "6ab1432dbc2fc9a16c5c14e9aab0ac16526a91dbd13d0f82435c5a1ecd5c9bf7",
+      "excerpt": "AdaGrad 是标准随机梯度下降（SGD）的一种实现，其一个关键区别在于：不同参数"
+    },
+    {
+      "source_page": 17,
+      "unit_id": "asset-1c29d0561e00-g0165",
+      "token": "SGD",
+      "target_span": [
+        18,
+        21
+      ],
+      "category": "disciplinary_acronym",
+      "review_file": "page-017.translation-review.json",
+      "review_sha256": "6ab1432dbc2fc9a16c5c14e9aab0ac16526a91dbd13d0f82435c5a1ecd5c9bf7",
+      "excerpt": "AdaGrad 是标准随机梯度下降（SGD）的一种实现，其一个关键区别在于：不同参数可以采用不同的学习率。每个参"
+    },
+    {
+      "source_page": 17,
+      "unit_id": "asset-1c29d0561e00-g0167",
+      "token": "RMS",
+      "target_span": [
+        22,
+        25
+      ],
+      "category": "disciplinary_acronym",
+      "review_file": "page-017.translation-review.json",
+      "review_sha256": "6ab1432dbc2fc9a16c5c14e9aab0ac16526a91dbd13d0f82435c5a1ecd5c9bf7",
+      "excerpt": "一技术中，我们看到如果历史梯度的均方根（RMS）极低，则学习率非常高。该技术的一个简单实现是："
+    },
+    {
+      "source_page": 17,
+      "unit_id": "asset-1c29d0561e00-g0169",
+      "token": "RMSProp",
+      "target_span": [
+        12,
+        19
+      ],
+      "category": "algorithm_name",
+      "review_file": "page-017.translation-review.json",
+      "review_sha256": "6ab1432dbc2fc9a16c5c14e9aab0ac16526a91dbd13d0f82435c5a1ecd5c9bf7",
+      "excerpt": "其他常见的自适应方法有 RMSProp 和 Adam，其更新规则如下所示（由 Andrej Karpathy"
+    },
+    {
+      "source_page": 17,
+      "unit_id": "asset-1c29d0561e00-g0169",
+      "token": "Adam",
+      "target_span": [
+        22,
+        26
+      ],
+      "category": "algorithm_name",
+      "review_file": "page-017.translation-review.json",
+      "review_sha256": "6ab1432dbc2fc9a16c5c14e9aab0ac16526a91dbd13d0f82435c5a1ecd5c9bf7",
+      "excerpt": "常见的自适应方法有 RMSProp 和 Adam，其更新规则如下所示（由 Andrej Karpathy 提供）："
+    },
+    {
+      "source_page": 17,
+      "unit_id": "asset-1c29d0561e00-g0169",
+      "token": "Andrej",
+      "target_span": [
+        39,
+        45
+      ],
+      "category": "author_name",
+      "review_file": "page-017.translation-review.json",
+      "review_sha256": "6ab1432dbc2fc9a16c5c14e9aab0ac16526a91dbd13d0f82435c5a1ecd5c9bf7",
+      "excerpt": " 和 Adam，其更新规则如下所示（由 Andrej Karpathy 提供）："
+    },
+    {
+      "source_page": 17,
+      "unit_id": "asset-1c29d0561e00-g0169",
+      "token": "Karpathy",
+      "target_span": [
+        46,
+        54
+      ],
+      "category": "author_name",
+      "review_file": "page-017.translation-review.json",
+      "review_sha256": "6ab1432dbc2fc9a16c5c14e9aab0ac16526a91dbd13d0f82435c5a1ecd5c9bf7",
+      "excerpt": "，其更新规则如下所示（由 Andrej Karpathy 提供）："
+    },
+    {
+      "source_page": 18,
+      "unit_id": "review-source-77ca328a8b9b4f9b",
+      "token": "RMSProp",
+      "target_span": [
+        0,
+        7
+      ],
+      "category": "algorithm_name",
+      "review_file": "page-018.cross-linked.translation-review.json",
+      "review_sha256": "2275f84f9ea784a148fcdbfd87295089d452de1dbf56b4b3f94f215c3483f79e",
+      "excerpt": "RMSProp 是 AdaGrad 的一种变体，它利用了平方梯度的移动平均——特别是"
+    },
+    {
+      "source_page": 18,
+      "unit_id": "review-source-77ca328a8b9b4f9b",
+      "token": "AdaGrad",
+      "target_span": [
+        10,
+        17
+      ],
+      "category": "algorithm_name",
+      "review_file": "page-018.cross-linked.translation-review.json",
+      "review_sha256": "2275f84f9ea784a148fcdbfd87295089d452de1dbf56b4b3f94f215c3483f79e",
+      "excerpt": "RMSProp 是 AdaGrad 的一种变体，它利用了平方梯度的移动平均——特别是，与 AdaGrad"
+    },
+    {
+      "source_page": 18,
+      "unit_id": "review-source-77ca328a8b9b4f9b",
+      "token": "AdaGrad",
+      "target_span": [
+        45,
+        52
+      ],
+      "category": "algorithm_name",
+      "review_file": "page-018.cross-linked.translation-review.json",
+      "review_sha256": "2275f84f9ea784a148fcdbfd87295089d452de1dbf56b4b3f94f215c3483f79e",
+      "excerpt": "利用了平方梯度的移动平均——特别是，与 AdaGrad 不同，其更新不会单调地变小。Adam 更新规则则又是 RMSProp"
+    },
+    {
+      "source_page": 18,
+      "unit_id": "review-source-77ca328a8b9b4f9b",
+      "token": "Adam",
+      "target_span": [
+        67,
+        71
+      ],
+      "category": "algorithm_name",
+      "review_file": "page-018.cross-linked.translation-review.json",
+      "review_sha256": "2275f84f9ea784a148fcdbfd87295089d452de1dbf56b4b3f94f215c3483f79e",
+      "excerpt": "aGrad 不同，其更新不会单调地变小。Adam 更新规则则又是 RMSProp 的一种变体，但增加了类似动量的更新。"
+    },
+    {
+      "source_page": 18,
+      "unit_id": "review-source-77ca328a8b9b4f9b",
+      "token": "RMSProp",
+      "target_span": [
+        80,
+        87
+      ],
+      "category": "algorithm_name",
+      "review_file": "page-018.cross-linked.translation-review.json",
+      "review_sha256": "2275f84f9ea784a148fcdbfd87295089d452de1dbf56b4b3f94f215c3483f79e",
+      "excerpt": "会单调地变小。Adam 更新规则则又是 RMSProp 的一种变体，但增加了类似动量的更新。关于这些方法行为的更详细分析，我"
+    }
+  ],
+  "unresolved": [],
+  "terminology_acceptance_passed": true,
+  "entire_document_formal_use_ready": false,
+  "scope": "Retained English alphabetic tokens of at least three characters only. Categories support review; they do not prove all Chinese terminology correct or permit untranslated prose. No translation or API call is performed."
+}

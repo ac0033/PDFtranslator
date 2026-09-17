@@ -286,13 +286,42 @@ def split_layout_translation(text: str, records: list[dict]) -> dict[str, str]:
 
 
 def layout_boundaries_are_natural(text: str) -> bool:
-    """Require every later layout marker to follow a target sentence boundary."""
+    """Require every later layout marker to follow a target sentence boundary.
+
+    A trailing digit also counts as a hard boundary: table-of-contents and
+    index entries legitimately end in page numbers, and layout fragments never
+    split a sentence immediately after a number in this book's captures.
+    """
     matches = list(LAYOUT_MARKER.finditer(text))
     if len(matches) < 2:
         return True
     for index, match in enumerate(matches[1:], start=1):
         previous = text[matches[index - 1].end() : match.start()]
         visible = ANY_PROTECTED_MARKER.sub("", previous).strip()
-        if visible and visible[-1] not in SENTENCE_END:
+        if visible and visible[-1] not in SENTENCE_END and not visible[-1].isdigit():
+            return False
+    return True
+
+
+def is_formula_only(text: str) -> bool:
+    """Recognize short symbolic assignments, never ordinary prose or headings.
+
+    Every slot must begin with an identifier and a protected operator (or an
+    explicit relation). English connector words and long words fail closed.
+    """
+    fragments = [part.strip() for part in LAYOUT_MARKER.split(text) if part.strip()]
+    if not fragments:
+        return False
+    stopwords = {"a", "an", "as", "at", "be", "by", "do", "he", "if", "in", "is", "it", "me", "my", "no", "of", "on", "or", "so", "to", "up", "us", "we"}
+    for fragment in fragments:
+        if not re.match(r"^[A-Za-z][A-Za-z0-9_]*\s*(?:⟦P:[A-Za-z0-9_.:-]+⟧|[=<>])", fragment):
+            return False
+        visible = ANY_PROTECTED_MARKER.sub(" ", fragment)
+        words = re.findall(r"[A-Za-z]+", visible)
+        # The leading 'a' may be an activation variable, but prose connectors
+        # elsewhere must not silently disappear from the translation queue.
+        if any(len(word) > 2 or (word.lower() in stopwords and not (i == 0 and word == "a")) for i, word in enumerate(words)):
+            return False
+        if re.search(r"[^A-Za-z0-9_\s+*/=<>().,{}\[\]\-^|]", visible):
             return False
     return True

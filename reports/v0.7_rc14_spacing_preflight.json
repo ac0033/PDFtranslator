@@ -1,0 +1,1715 @@
+{
+  "source_sha256": "1c29d0561e0051cbb265d064e0dffc16042d88a34bb5717bba8dd003967026ad",
+  "api_calls": 0,
+  "pages": [
+    {
+      "page": 1,
+      "passed": false,
+      "error": "review source identities missing: ['asset-1c29d0561e00-g0026']",
+      "error_type": "ValueError"
+    },
+    {
+      "page": 2,
+      "passed": false,
+      "error": "review source identities missing: ['asset-1c29d0561e00-g0042']",
+      "error_type": "ValueError"
+    },
+    {
+      "page": 3,
+      "passed": false,
+      "overflows": [],
+      "spacing_issues": [
+        {
+          "unit_id": "asset-1c29d0561e00-g0001",
+          "shifts": [
+            [
+              36.0,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "single_line_or_empty_contraction",
+          "residual_points": 14.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0043-flow01",
+          "shifts": [
+            [
+              82.0,
+              0
+            ],
+            [
+              96.94389963150024,
+              0
+            ],
+            [
+              111.88779926300049,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "required_leading_exceeds_limit",
+          "residual_points": 12.112200736999512
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0045",
+          "shifts": [
+            [
+              175.0,
+              0
+            ],
+            [
+              189.94389963150024,
+              0
+            ],
+            [
+              204.8877992630005,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "required_leading_exceeds_limit",
+          "residual_points": 11.612200736999512
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0047-flow00",
+          "shifts": [
+            [
+              264.5,
+              0
+            ],
+            [
+              279.44389963150024,
+              0
+            ],
+            [
+              294.3877992630005,
+              0
+            ],
+            [
+              309.33169889450073,
+              0
+            ],
+            [
+              324.0,
+              0
+            ],
+            [
+              339.0,
+              0
+            ],
+            [
+              354.16339778900146,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "required_leading_exceeds_limit",
+          "residual_points": 49.836602210998535
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0049",
+          "shifts": [
+            [
+              452.0,
+              0
+            ],
+            [
+              466.5,
+              0
+            ],
+            [
+              481.5,
+              0
+            ],
+            [
+              496.5,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "required_leading_exceeds_limit",
+          "residual_points": 11.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0051",
+          "shifts": [
+            [
+              558.5,
+              0
+            ],
+            [
+              573.4438996315002,
+              0
+            ],
+            [
+              588.3877992630005,
+              0
+            ],
+            [
+              603.3316988945007,
+              0
+            ],
+            [
+              618.275598526001,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "required_leading_exceeds_limit",
+          "residual_points": 24.224401473999023
+        }
+      ],
+      "vertical_spacing": [
+        {
+          "unit_id": "asset-1c29d0561e00-g0001",
+          "shifts": [
+            [
+              36.0,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "single_line_or_empty_contraction",
+          "residual_points": 14.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0043-flow01",
+          "shifts": [
+            [
+              82.0,
+              0
+            ],
+            [
+              96.94389963150024,
+              0
+            ],
+            [
+              111.88779926300049,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "required_leading_exceeds_limit",
+          "residual_points": 12.112200736999512
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0044",
+          "shifts": [
+            [
+              154.0,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": false,
+          "reason": "no_contraction",
+          "residual_points": 0.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0045",
+          "shifts": [
+            [
+              175.0,
+              0
+            ],
+            [
+              189.94389963150024,
+              0
+            ],
+            [
+              204.8877992630005,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "required_leading_exceeds_limit",
+          "residual_points": 11.612200736999512
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0047-flow00",
+          "shifts": [
+            [
+              264.5,
+              0
+            ],
+            [
+              279.44389963150024,
+              0
+            ],
+            [
+              294.3877992630005,
+              0
+            ],
+            [
+              309.33169889450073,
+              0
+            ],
+            [
+              324.0,
+              0
+            ],
+            [
+              339.0,
+              0
+            ],
+            [
+              354.16339778900146,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "required_leading_exceeds_limit",
+          "residual_points": 49.836602210998535
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0048",
+          "shifts": [
+            [
+              438.0,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": false,
+          "reason": "no_contraction",
+          "residual_points": 0.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0049",
+          "shifts": [
+            [
+              452.0,
+              0
+            ],
+            [
+              466.5,
+              0
+            ],
+            [
+              481.5,
+              0
+            ],
+            [
+              496.5,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "required_leading_exceeds_limit",
+          "residual_points": 11.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0050",
+          "shifts": [
+            [
+              538.0,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": false,
+          "reason": "no_contraction",
+          "residual_points": 0.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0051",
+          "shifts": [
+            [
+              558.5,
+              0
+            ],
+            [
+              573.4438996315002,
+              0
+            ],
+            [
+              588.3877992630005,
+              0
+            ],
+            [
+              603.3316988945007,
+              0
+            ],
+            [
+              618.275598526001,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "required_leading_exceeds_limit",
+          "residual_points": 24.224401473999023
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0052-p003",
+          "shifts": [
+            [
+              656.5,
+              0
+            ],
+            [
+              670.5,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": false,
+          "reason": "no_contraction",
+          "residual_points": 0.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0187",
+          "shifts": [
+            [
+              253.5,
+              0
+            ],
+            [
+              267.0,
+              0
+            ],
+            [
+              281.0,
+              0
+            ],
+            [
+              295.0,
+              0
+            ],
+            [
+              309.0,
+              0
+            ],
+            [
+              323.0,
+              0
+            ],
+            [
+              337.5,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": false,
+          "reason": "no_contraction",
+          "residual_points": 5.5
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0189",
+          "shifts": [
+            [
+              542.0,
+              0
+            ],
+            [
+              556.0,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": false,
+          "reason": "no_contraction",
+          "residual_points": 6.0
+        }
+      ],
+      "translation_complete": false,
+      "formal_use_ready": false
+    },
+    {
+      "page": 4,
+      "passed": false,
+      "overflows": [],
+      "spacing_issues": [
+        {
+          "unit_id": "asset-1c29d0561e00-g0002",
+          "shifts": [
+            [
+              36.0,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "single_line_or_empty_contraction",
+          "residual_points": 14.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0053-flow00",
+          "shifts": [
+            [
+              110.0,
+              0
+            ],
+            [
+              124.94389963150024,
+              0
+            ],
+            [
+              139.8877992630005,
+              0
+            ],
+            [
+              154.5,
+              0
+            ],
+            [
+              169.5,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "required_leading_exceeds_limit",
+          "residual_points": 24.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0054",
+          "shifts": [
+            [
+              237.5,
+              0
+            ],
+            [
+              252.44389963150024,
+              0
+            ],
+            [
+              267.3877992630005,
+              0
+            ],
+            [
+              282.33169889450073,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "required_leading_exceeds_limit",
+          "residual_points": 11.168301105499268
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0055-flow01",
+          "shifts": [
+            [
+              351.5,
+              0
+            ],
+            [
+              366.44389963150024,
+              0
+            ],
+            [
+              381.3877992630005,
+              0
+            ],
+            [
+              396.33169889450073,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "required_leading_exceeds_limit",
+          "residual_points": 24.668301105499268
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0058-flow00",
+          "shifts": [
+            [
+              516.0,
+              0
+            ],
+            [
+              530.9438996315002,
+              0
+            ],
+            [
+              545.8877992630005,
+              0
+            ],
+            [
+              560.8316988945007,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "required_leading_exceeds_limit",
+          "residual_points": 25.168301105499268
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0059",
+          "shifts": [
+            [
+              630.0,
+              0
+            ],
+            [
+              644.9438996315002,
+              0
+            ],
+            [
+              659.8877992630005,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "required_leading_exceeds_limit",
+          "residual_points": 25.61220073699951
+        }
+      ],
+      "vertical_spacing": [
+        {
+          "unit_id": "asset-1c29d0561e00-g0002",
+          "shifts": [
+            [
+              36.0,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "single_line_or_empty_contraction",
+          "residual_points": 14.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0052-p004",
+          "shifts": [
+            [
+              82.0,
+              0
+            ],
+            [
+              96.0,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": false,
+          "reason": "no_contraction",
+          "residual_points": 0.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0053-flow00",
+          "shifts": [
+            [
+              110.0,
+              0
+            ],
+            [
+              124.94389963150024,
+              0
+            ],
+            [
+              139.8877992630005,
+              0
+            ],
+            [
+              154.5,
+              0
+            ],
+            [
+              169.5,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "required_leading_exceeds_limit",
+          "residual_points": 24.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0054",
+          "shifts": [
+            [
+              237.5,
+              0
+            ],
+            [
+              252.44389963150024,
+              0
+            ],
+            [
+              267.3877992630005,
+              0
+            ],
+            [
+              282.33169889450073,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "required_leading_exceeds_limit",
+          "residual_points": 11.168301105499268
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0055-flow00",
+          "shifts": [
+            [
+              307.5,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": false,
+          "reason": "no_contraction",
+          "residual_points": 0.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0055-flow01",
+          "shifts": [
+            [
+              351.5,
+              0
+            ],
+            [
+              366.44389963150024,
+              0
+            ],
+            [
+              381.3877992630005,
+              0
+            ],
+            [
+              396.33169889450073,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "required_leading_exceeds_limit",
+          "residual_points": 24.668301105499268
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0056",
+          "shifts": [
+            [
+              465.5,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": false,
+          "reason": "no_contraction",
+          "residual_points": 0.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0057",
+          "shifts": [
+            [
+              495.0,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": false,
+          "reason": "no_contraction",
+          "residual_points": 0.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0058-flow00",
+          "shifts": [
+            [
+              516.0,
+              0
+            ],
+            [
+              530.9438996315002,
+              0
+            ],
+            [
+              545.8877992630005,
+              0
+            ],
+            [
+              560.8316988945007,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "required_leading_exceeds_limit",
+          "residual_points": 25.168301105499268
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0059",
+          "shifts": [
+            [
+              630.0,
+              0
+            ],
+            [
+              644.9438996315002,
+              0
+            ],
+            [
+              659.8877992630005,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "required_leading_exceeds_limit",
+          "residual_points": 25.61220073699951
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0190",
+          "shifts": [
+            [
+              407.5,
+              0
+            ],
+            [
+              421.5,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": false,
+          "reason": "no_contraction",
+          "residual_points": 5.5
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0191",
+          "shifts": [
+            [
+              719.5,
+              0
+            ],
+            [
+              733.5,
+              0
+            ],
+            [
+              747.5,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": false,
+          "reason": "no_contraction",
+          "residual_points": 0.0
+        }
+      ],
+      "translation_complete": false,
+      "formal_use_ready": false
+    },
+    {
+      "page": 5,
+      "passed": false,
+      "overflows": [],
+      "spacing_issues": [
+        {
+          "unit_id": "asset-1c29d0561e00-g0003",
+          "shifts": [
+            [
+              36.0,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "single_line_or_empty_contraction",
+          "residual_points": 14.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0060",
+          "shifts": [
+            [
+              82.0,
+              0
+            ],
+            [
+              96.94389963150024,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "required_leading_exceeds_limit",
+          "residual_points": 13.056100368499756
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0063",
+          "shifts": [
+            [
+              175.5,
+              0
+            ],
+            [
+              190.44389963150024,
+              0
+            ],
+            [
+              209.5,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "required_leading_exceeds_limit",
+          "residual_points": 13.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0066",
+          "shifts": [
+            [
+              309.5,
+              0
+            ],
+            [
+              324.5,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "required_leading_exceeds_limit",
+          "residual_points": 12.5
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0067",
+          "shifts": [
+            [
+              359.5,
+              0
+            ],
+            [
+              374.44389963150024,
+              0
+            ],
+            [
+              393.5,
+              0
+            ],
+            [
+              412.5,
+              0
+            ],
+            [
+              431.5,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "required_leading_exceeds_limit",
+          "residual_points": 20.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0194",
+          "shifts": [
+            [
+              377.5,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "single_line_or_empty_contraction",
+          "residual_points": 10.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0195",
+          "shifts": [
+            [
+              401.5,
+              0
+            ],
+            [
+              415.5,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "required_leading_exceeds_limit",
+          "residual_points": 12.5
+        }
+      ],
+      "vertical_spacing": [
+        {
+          "unit_id": "asset-1c29d0561e00-g0003",
+          "shifts": [
+            [
+              36.0,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "single_line_or_empty_contraction",
+          "residual_points": 14.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0060",
+          "shifts": [
+            [
+              82.0,
+              0
+            ],
+            [
+              96.94389963150024,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "required_leading_exceeds_limit",
+          "residual_points": 13.056100368499756
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0061",
+          "shifts": [
+            [
+              132.0,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": false,
+          "reason": "no_contraction",
+          "residual_points": 0.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0062",
+          "shifts": [
+            [
+              153.5,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": false,
+          "reason": "no_contraction",
+          "residual_points": 0.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0063",
+          "shifts": [
+            [
+              175.5,
+              0
+            ],
+            [
+              190.44389963150024,
+              0
+            ],
+            [
+              209.5,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "required_leading_exceeds_limit",
+          "residual_points": 13.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0064",
+          "shifts": [
+            [
+              248.5,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": false,
+          "reason": "no_contraction",
+          "residual_points": 0.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0065",
+          "shifts": [
+            [
+              270.5,
+              0
+            ],
+            [
+              285.44389963150024,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": false,
+          "reason": "no_contraction",
+          "residual_points": 0.05610036849975586
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0066",
+          "shifts": [
+            [
+              309.5,
+              0
+            ],
+            [
+              324.5,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "required_leading_exceeds_limit",
+          "residual_points": 12.5
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0067",
+          "shifts": [
+            [
+              359.5,
+              0
+            ],
+            [
+              374.44389963150024,
+              0
+            ],
+            [
+              393.5,
+              0
+            ],
+            [
+              412.5,
+              0
+            ],
+            [
+              431.5,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "required_leading_exceeds_limit",
+          "residual_points": 20.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0069-inline00",
+          "shifts": [
+            [
+              508.5,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": false,
+          "reason": "no_contraction",
+          "residual_points": 0.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0069-inline01",
+          "shifts": [
+            [
+              508.5,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": false,
+          "reason": "no_contraction",
+          "residual_points": 0.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0192",
+          "shifts": [
+            [
+              348.5,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": false,
+          "reason": "no_contraction",
+          "residual_points": 0.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0193",
+          "shifts": [
+            [
+              363.5,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": false,
+          "reason": "no_contraction",
+          "residual_points": 0.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0194",
+          "shifts": [
+            [
+              377.5,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "single_line_or_empty_contraction",
+          "residual_points": 10.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0195",
+          "shifts": [
+            [
+              401.5,
+              0
+            ],
+            [
+              415.5,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "required_leading_exceeds_limit",
+          "residual_points": 12.5
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0196",
+          "shifts": [
+            [
+              446.5,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": false,
+          "reason": "no_contraction",
+          "residual_points": 0.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0197",
+          "shifts": [
+            [
+              463.5,
+              0
+            ],
+            [
+              477.0,
+              0
+            ],
+            [
+              491.0,
+              0
+            ],
+            [
+              505.0,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": false,
+          "reason": "no_contraction",
+          "residual_points": 0.0
+        }
+      ],
+      "translation_complete": false,
+      "formal_use_ready": false
+    },
+    {
+      "page": 6,
+      "passed": false,
+      "error": "review source identities missing: ['asset-1c29d0561e00-g0004', 'asset-1c29d0561e00-g0075', 'asset-1c29d0561e00-g0076', 'asset-1c29d0561e00-g0077', 'asset-1c29d0561e00-g0078', 'asset-1c29d0561e00-g0079', 'asset-1c29d0561e00-g0080', 'asset-1c29d0561e00-g0081', 'asset-1c29d0561e00-g0082', 'asset-1c29d0561e00-g0083', 'asset-1c29d0561e00-g0084', 'asset-1c29d0561e00-g0199']",
+      "error_type": "ValueError"
+    },
+    {
+      "page": 7,
+      "passed": false,
+      "overflows": [],
+      "spacing_issues": [
+        {
+          "unit_id": "asset-1c29d0561e00-g0005",
+          "shifts": [
+            [
+              36.0,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "single_line_or_empty_contraction",
+          "residual_points": 14.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0086",
+          "shifts": [
+            [
+              110.0,
+              0
+            ],
+            [
+              124.94389963150024,
+              0
+            ],
+            [
+              139.8877992630005,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "required_leading_exceeds_limit",
+          "residual_points": 25.61220073699951
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0200",
+          "shifts": [
+            [
+              345.0,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "single_line_or_empty_contraction",
+          "residual_points": 10.2080078125
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0201",
+          "shifts": [
+            [
+              708.0,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "single_line_or_empty_contraction",
+          "residual_points": 10.16497802734375
+        }
+      ],
+      "vertical_spacing": [
+        {
+          "unit_id": "asset-1c29d0561e00-g0005",
+          "shifts": [
+            [
+              36.0,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "single_line_or_empty_contraction",
+          "residual_points": 14.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0085",
+          "shifts": [
+            [
+              82.0,
+              0
+            ],
+            [
+              96.94389963150024,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": false,
+          "reason": "no_contraction",
+          "residual_points": 0.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0086",
+          "shifts": [
+            [
+              110.0,
+              0
+            ],
+            [
+              124.94389963150024,
+              0
+            ],
+            [
+              139.8877992630005,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "required_leading_exceeds_limit",
+          "residual_points": 25.61220073699951
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0087",
+          "shifts": [
+            [
+              213.5,
+              0
+            ],
+            [
+              232.5,
+              0
+            ],
+            [
+              251.5,
+              0
+            ],
+            [
+              270.5,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": false,
+          "reason": "no_contraction",
+          "residual_points": 4.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0088",
+          "shifts": [
+            [
+              322.0,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": false,
+          "reason": "no_contraction",
+          "residual_points": 0.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0089",
+          "shifts": [
+            [
+              346.0,
+              0
+            ],
+            [
+              365.0,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": false,
+          "reason": "no_contraction",
+          "residual_points": 0.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0090",
+          "shifts": [
+            [
+              383.0,
+              0
+            ],
+            [
+              402.0,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": false,
+          "reason": "no_contraction",
+          "residual_points": 0.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0091",
+          "shifts": [
+            [
+              427.0,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": false,
+          "reason": "no_contraction",
+          "residual_points": 0.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0092",
+          "shifts": [
+            [
+              453.0,
+              0
+            ],
+            [
+              472.0,
+              0
+            ],
+            [
+              487.17949533462524,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": false,
+          "reason": "no_contraction",
+          "residual_points": 7.820504665374756
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0093",
+          "shifts": [
+            [
+              516.5,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": false,
+          "reason": "no_contraction",
+          "residual_points": 0.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0094",
+          "shifts": [
+            [
+              542.5,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": false,
+          "reason": "no_contraction",
+          "residual_points": 0.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0095",
+          "shifts": [
+            [
+              568.5,
+              0
+            ],
+            [
+              587.6801147460938,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": false,
+          "reason": "no_contraction",
+          "residual_points": 10.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0096-flow00",
+          "shifts": [
+            [
+              623.5,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": false,
+          "reason": "no_contraction",
+          "residual_points": 0.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0200",
+          "shifts": [
+            [
+              345.0,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "single_line_or_empty_contraction",
+          "residual_points": 10.2080078125
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0201",
+          "shifts": [
+            [
+              708.0,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "single_line_or_empty_contraction",
+          "residual_points": 10.16497802734375
+        }
+      ],
+      "translation_complete": false,
+      "formal_use_ready": false
+    },
+    {
+      "page": 8,
+      "passed": false,
+      "error": "review source identities missing: ['asset-1c29d0561e00-g0099', 'asset-1c29d0561e00-g0202', 'asset-1c29d0561e00-g0203']",
+      "error_type": "ValueError"
+    },
+    {
+      "page": 9,
+      "passed": false,
+      "error": "review source identities missing: ['asset-1c29d0561e00-g0109', 'asset-1c29d0561e00-g0204']",
+      "error_type": "ValueError"
+    },
+    {
+      "page": 10,
+      "passed": false,
+      "overflows": [],
+      "spacing_issues": [
+        {
+          "unit_id": "asset-1c29d0561e00-g0008",
+          "shifts": [
+            [
+              36.0,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "single_line_or_empty_contraction",
+          "residual_points": 14.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0111-p010",
+          "shifts": [
+            [
+              82.0,
+              0
+            ],
+            [
+              95.5,
+              0
+            ],
+            [
+              109.0,
+              0
+            ],
+            [
+              122.5,
+              0
+            ],
+            [
+              136.0,
+              0
+            ],
+            [
+              149.5,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "required_leading_exceeds_limit",
+          "residual_points": 58.0
+        }
+      ],
+      "vertical_spacing": [
+        {
+          "unit_id": "asset-1c29d0561e00-g0008",
+          "shifts": [
+            [
+              36.0,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "single_line_or_empty_contraction",
+          "residual_points": 14.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0111-p010",
+          "shifts": [
+            [
+              82.0,
+              0
+            ],
+            [
+              95.5,
+              0
+            ],
+            [
+              109.0,
+              0
+            ],
+            [
+              122.5,
+              0
+            ],
+            [
+              136.0,
+              0
+            ],
+            [
+              149.5,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": true,
+          "reason": "required_leading_exceeds_limit",
+          "residual_points": 58.0
+        },
+        {
+          "unit_id": "asset-1c29d0561e00-g0112-flow00",
+          "shifts": [
+            [
+              239.0,
+              0
+            ]
+          ],
+          "adjusted": false,
+          "unresolved": false,
+          "reason": "no_contraction",
+          "residual_points": 0.0
+        }
+      ],
+      "translation_complete": false,
+      "formal_use_ready": false
+    },
+    {
+      "page": 11,
+      "passed": false,
+      "error": "review source identities missing: ['asset-1c29d0561e00-g0119', 'asset-1c29d0561e00-g0206']",
+      "error_type": "ValueError"
+    },
+    {
+      "page": 12,
+      "passed": false,
+      "error": "review source identities missing: ['asset-1c29d0561e00-g0128']",
+      "error_type": "ValueError"
+    },
+    {
+      "page": 13,
+      "passed": false,
+      "error": "review source identities missing: ['asset-1c29d0561e00-g0129', 'asset-1c29d0561e00-g0141']",
+      "error_type": "ValueError"
+    },
+    {
+      "page": 14,
+      "passed": false,
+      "error": "review source identities missing: ['asset-1c29d0561e00-g0144']",
+      "error_type": "ValueError"
+    },
+    {
+      "page": 15,
+      "passed": false,
+      "error": "review source identities missing: ['asset-1c29d0561e00-g0154']",
+      "error_type": "ValueError"
+    },
+    {
+      "page": 16,
+      "passed": false,
+      "error": "review source identities missing: ['asset-1c29d0561e00-g0162', 'asset-1c29d0561e00-g0165']",
+      "error_type": "ValueError"
+    },
+    {
+      "page": 17,
+      "passed": false,
+      "error": "review source identities missing: ['asset-1c29d0561e00-g0171']",
+      "error_type": "ValueError"
+    },
+    {
+      "page": 18,
+      "passed": false,
+      "error": "cross-page record has unresolved native literal",
+      "error_type": "ValueError"
+    }
+  ]
+}

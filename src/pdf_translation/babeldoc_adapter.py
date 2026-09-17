@@ -12,7 +12,9 @@ from pathlib import Path
 
 import pymupdf
 
+from .budget import BudgetExceeded
 from .config import RunConfig
+from .cross_page import join_cross_page_words, split_document_translation
 from .document_context import enrich_pdf_units_with_context
 from .hashing import sha256_bytes, sha256_file, stable_hash
 from .pipeline import ProviderAttemptsExhausted, estimate_units, run_units
@@ -26,6 +28,9 @@ PLACEHOLDER = re.compile(r"</?b[^>]+>")
 
 def _load_layout_model():
     """Load BabelDOC's ONNX model with bounded CPU-memory behavior."""
+    # Warm asset/tokenizer caches before allocating the ONNX inference session.
+    from babeldoc.assets.assets import warmup
+    warmup()
     import numpy as np
     import onnx
     import onnxruntime
@@ -489,6 +494,15 @@ def _merge_pdfs(inputs: list[Path], output: Path) -> None:
     temporary.replace(output)
 
 
+def _page_is_verifiably_empty(source: Path, page_index: int) -> bool:
+    """Confirm a page BabelDOC rejected as paragraph-less really carries no content."""
+    import pymupdf
+
+    with pymupdf.open(source) as document:
+        page = document[page_index]
+        return not page.get_text().strip() and not page.get_images() and not page.get_drawings()
+
+
 def capture_pdf_sample(
     source: Path,
     page_indices: tuple[int, ...],
@@ -502,8 +516,16 @@ def capture_pdf_sample(
     layout = _load_layout_model()
     all_units: list[TranslationUnit] = []
     records_by_page: dict[int, list[dict]] = {}
+    empty_pages: list[int] = []
     for page_index in page_indices:
-        units, records = extract_page_units(source, page_index, capture_root / f"page-{page_index + 1:04d}", layout=layout)
+        try:
+            units, records = extract_page_units(source, page_index, capture_root / f"page-{page_index + 1:04d}", layout=layout)
+        except RuntimeError as exc:
+            if "no paragraphs" in str(exc) and _page_is_verifiably_empty(source, page_index):
+                empty_pages.append(page_index + 1)
+                records_by_page[page_index] = []
+                continue
+            raise
         all_units.extend(units)
         records_by_page[page_index] = records
     if enrich_context:
@@ -520,6 +542,7 @@ def capture_pdf_sample(
         "source_file": source.name,
         "source_sha256": sha256_file(source),
         "physical_pages": [page + 1 for page in page_indices],
+        "empty_pages": empty_pages,
         "unit_count": len(all_units),
         "context_linked_units": sum(bool(unit.neighbor_ids) for unit in all_units),
         "section_scoped_units": sum(bool(unit.section_path) for unit in all_units),
@@ -593,6 +616,7 @@ def run_smoke_document(
     execute_paid: bool = False,
     reuse_capture: bool = False,
     sample_name: str = "smoke",
+    render_review_draft: bool = False,
 ) -> dict:
     """Capture, translate, quality-check and inject a frozen PDF sample."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -622,15 +646,26 @@ def run_smoke_document(
             units, records = extract_page_units(source, page_index, capture_root / f"page-{page_index + 1:04d}", layout=layout)
             all_units.extend(units)
             records_by_page[page_index] = records
-    if config.context_engine == "v1":
-        all_units = enrich_pdf_units_with_context(all_units)
-
     if not reuse_capture:
         units_path.write_text("".join(unit.model_dump_json() + "\n" for unit in all_units), encoding="utf-8")
         with capture_map_path.open("w", encoding="utf-8") as stream:
             for page_index in page_indices:
                 for record in records_by_page[page_index]:
                     stream.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+    cross_page_evidence = []
+    if config.join_cross_page_words:
+        with pymupdf.open(source) as document:
+            sizes = {i: (document[i].rect.width, document[i].rect.height) for i in page_indices}
+        all_units, records_by_page, cross_page_evidence = join_cross_page_words(all_units, records_by_page, sizes)
+        (output_dir / "semantic-preparation.json").write_text(
+            json.dumps(cross_page_evidence, ensure_ascii=False, indent=2), encoding="utf-8")
+    if config.context_engine == "v1":
+        all_units = enrich_pdf_units_with_context(all_units)
+    if config.join_cross_page_words:
+        (output_dir / "prepared-units.jsonl").write_text(
+            "".join(u.model_dump_json() + "\n" for u in all_units), encoding="utf-8")
+
 
     estimate = estimate_units(all_units, config)
     base_report = {
@@ -658,6 +693,9 @@ def run_smoke_document(
         "provider": config.provider,
         "model_id": config.model_id,
         "capture_reused": reuse_capture,
+        "cross_page_word_joins": len(cross_page_evidence),
+        "translation_units_jsonl": "prepared-units.jsonl" if config.join_cross_page_words else "units.jsonl",
+        "translation_units_sha256": sha256_file(output_dir / ("prepared-units.jsonl" if config.join_cross_page_words else "units.jsonl")),
         "context_engine": config.context_engine,
         "context_linked_units": sum(bool(unit.neighbor_ids) for unit in all_units),
         "section_scoped_units": sum(bool(unit.section_path) for unit in all_units),
@@ -670,15 +708,27 @@ def run_smoke_document(
 
     store = StateStore(runs_root / config.run_id / "state.sqlite")
     review_queue_path = output_dir / "content-review.jsonl"
+    exhausted_units: list[str] = []
     try:
-        summary = run_units(all_units, config, runs_root)
-    except ProviderAttemptsExhausted as exc:
+        while True:
+            try:
+                summary = run_units(all_units, config, runs_root)
+                break
+            except ProviderAttemptsExhausted as exc:
+                if exc.unit_id is None or exc.unit_id in exhausted_units:
+                    raise
+                store.mark_exhausted(config.run_id, exc.unit_id)
+                exhausted_units.append(exc.unit_id)
+    except (ProviderAttemptsExhausted, BudgetExceeded) as exc:
         _write_content_review_queue(all_units, store, config.run_id, review_queue_path)
-        report = {**base_report, "status": "provider_attempts_exhausted", "error": str(exc), "run_summary": store.summary(config.run_id), "content_review_jsonl": review_queue_path.name}
+        report = {**base_report, "status": "budget_exhausted" if isinstance(exc, BudgetExceeded) else "provider_attempts_exhausted", "error": str(exc), "exhausted_units": exhausted_units, "run_summary": store.summary(config.run_id), "content_review_jsonl": review_queue_path.name}
         report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
         return report
+    if exhausted_units:
+        base_report = {**base_report, "exhausted_units": exhausted_units}
     _write_content_review_queue(all_units, store, config.run_id, review_queue_path)
-    if summary.get("states") != {"accepted": len(all_units)}:
+    draft_allowed = render_review_draft and review_draft_renderable(store.quality_reports(config.run_id), len(all_units))
+    if summary.get("states") != {"accepted": len(all_units)} and not draft_allowed:
         report = {**base_report, "status": "quality_gate_blocked", "run_summary": summary, "content_review_jsonl": review_queue_path.name}
         report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
         return report
@@ -690,22 +740,34 @@ def run_smoke_document(
             raise RuntimeError(f"accepted unit has no translation result: {unit.unit_id}")
         translated_by_unit[unit.unit_id] = result.draft.translated_text
 
-    translated_by_fragment: dict[str, str] = {}
-    for page_index in page_indices:
-        records_by_unit: dict[str, list[dict]] = defaultdict(list)
-        for record in records_by_page[page_index]:
-            records_by_unit[record["unit_id"]].append(record)
-        for unit_id, group_records in records_by_unit.items():
-            ordered_group = sorted(group_records, key=lambda record: record["group_index"])
-            translated_by_fragment.update(split_layout_translation(translated_by_unit[unit_id], ordered_group))
+    translated_by_fragment = split_document_translation(translated_by_unit, records_by_page)
 
     mono_pages: list[Path] = []
     dual_pages: list[Path] = []
+    injection_reused_pages: list[int] = []
     try:
         if layout is None:
             layout = _load_layout_model()
         for page_index in page_indices:
             page_dir = output_dir / f"page-{page_index + 1:04d}"
+            if not records_by_page[page_index]:
+                if not _page_is_verifiably_empty(source, page_index):
+                    raise RuntimeError(f"page {page_index + 1} has content but no captured records")
+                page_dir.mkdir(parents=True, exist_ok=True)
+                passthrough = page_dir / f"{source.stem}.zh.mono.pdf"
+                with pymupdf.open(source) as original, pymupdf.open() as single:
+                    single.insert_pdf(original, from_page=page_index, to_page=page_index)
+                    single.save(passthrough)
+                mono_pages.append(passthrough)
+                dual_pages.append(passthrough)
+                continue
+            existing_mono = page_dir / f"{source.stem}.zh.mono.pdf"
+            existing_dual = page_dir / f"{source.stem}.zh.dual.pdf"
+            if reuse_capture and existing_mono.is_file() and existing_dual.is_file():
+                mono_pages.append(existing_mono)
+                dual_pages.append(existing_dual)
+                injection_reused_pages.append(page_index + 1)
+                continue
             translator = _injection_translator(records_by_page[page_index], translated_by_fragment)
             result = _run_babeldoc_page(source, page_index, page_dir, translator, layout=layout)
             if translator.errors or translator.remaining:
@@ -722,6 +784,7 @@ def run_smoke_document(
             **base_report,
             "status": "render_failed",
             "render_error": str(exc),
+            "injection_reused_pages": injection_reused_pages,
             "run_summary": summary,
             "content_review_jsonl": review_queue_path.name,
             "api_calls": summary.get("provider_attempts", 0),
@@ -757,7 +820,9 @@ def run_smoke_document(
             )
     report = {
         **base_report,
-        "status": "completed_with_location_review" if base_report["low_bbox_matches"] else "completed",
+        "status": "review_draft" if draft_allowed and summary.get("states") != {"accepted": len(all_units)} else ("completed_with_location_review" if base_report["low_bbox_matches"] else "completed"),
+        "review_draft": draft_allowed and summary.get("states") != {"accepted": len(all_units)},
+        "injection_reused_pages": injection_reused_pages,
         "run_summary": summary,
         "mono_pdf": mono_output.name,
         "dual_pdf": dual_output.name,
@@ -840,3 +905,13 @@ def run_one_page_spike(source: Path, page_index: int, output_dir: Path) -> dict:
     }
     (output_dir / "spike.report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     return report
+
+
+def review_draft_renderable(rows: list[dict], expected_count: int) -> bool:
+    """Only completed, structurally safe results may enter a review draft."""
+    return bool(rows) and len(rows) == expected_count and all(
+        row.get("state") in {"accepted", "needs_review"}
+        and row.get("quality") is not None
+        and not any(issue["severity"] == "critical" for issue in row["quality"].get("issues", []))
+        for row in rows
+    )

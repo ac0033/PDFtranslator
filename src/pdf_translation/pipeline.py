@@ -14,18 +14,20 @@ from .analyzer import validate_semantic_evidence
 from .hashing import stable_hash
 from .providers import DeepSeekProvider, MockProvider, OpenAIProvider, ProviderCallError
 from .quality import check_quality, repair_boundary_markers
-from .semantic_layout import restore_and_rebalance_layout_markers
+from .semantic_layout import restore_and_rebalance_layout_markers, is_formula_only
 from .schemas import ContextItem, ContextPacket, ModelSpec, TranslationDraft, TranslationRequest, TranslationResult, TranslationUnit, Usage
 from .storage import StateStore
 from .validation import validate_request, validate_result
 
 
 class ProviderAttemptsExhausted(RuntimeError):
-    pass
+    def __init__(self, message: str, unit_id: str | None = None):
+        super().__init__(message)
+        self.unit_id = unit_id
 
 
 DEFAULT_TRANSLATION_STYLE = "忠实保留否定、量词、条件和概率程度；采用自然教材中文；不扩写。"
-SOURCE_LITERAL_PROMPT_REVISION = "source-literals-v1"
+SOURCE_LITERAL_PROMPT_REVISION = "source-literals-v1+term-lock-v2"
 
 
 def output_token_limit(unit: TranslationUnit, config: RunConfig) -> int:
@@ -65,9 +67,9 @@ def estimated_input_token_ceiling(request: TranslationRequest) -> int:
     return len(request.unit.source_text.encode("utf-8")) + context_bytes + literal_bytes + 512
 
 
-def estimate_units(units: list[TranslationUnit], config: RunConfig) -> dict:
+def estimate_units(units: list[TranslationUnit], config: RunConfig, *, context_units: list[TranslationUnit] | None = None) -> dict:
     """Return a conservative, zero-call estimate for translatable units."""
-    billable_units = [unit for unit in units if unit.unit_type not in {"code", "protected"}]
+    billable_units = [unit for unit in units if unit.unit_type not in {"code", "protected"} and not is_formula_only(unit.source_text)]
     if config.context_engine == "v1":
         if not config.context_db:
             raise ValueError("V1 context_engine requires context_db")
@@ -75,7 +77,7 @@ def estimate_units(units: list[TranslationUnit], config: RunConfig) -> dict:
         glossary = context_store.glossary()
         styles = context_store.styles()
         semantics = context_store.semantics()
-        units_by_id = {unit.unit_id: unit for unit in units}
+        units_by_id = {unit.unit_id: unit for unit in [*(context_units or []), *units]}
         validate_semantic_evidence(semantics, set(units_by_id))
         glossary_snapshot_id = stable_hash([entry for entry in glossary if entry.status == "approved"])
         style_snapshot_id = stable_hash([rule for rule in styles if rule.status == "approved"])
@@ -128,10 +130,65 @@ def make_request(unit: TranslationUnit, config: RunConfig, packet: ContextPacket
     return TranslationRequest(request_id=str(uuid4()), unit=unit, context=packet, model=model, cache_key=cache_key)
 
 
-def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path) -> dict:
+_RETRY_FEEDBACK_GUIDANCE = {
+    "layout_boundary": (
+        "Each ⟦P:layout-...⟧ marker belongs to its own source fragment: place every marker immediately "
+        "before the Chinese translation of its own fragment, keep the original marker order, and use each "
+        "marker exactly once; never cluster all layout markers together. The text between two consecutive "
+        "layout markers must be a complete chunk ending with sentence-final punctuation (one of . ! ? 。 ！ ？ ； ; ： :) "
+        "or be empty; for a list of short items, end each item with sentence-final punctuation."
+    ),
+    "layout_marker_order": "Layout markers must appear in exactly the original order; do not reorder them.",
+    "protected_marker": (
+        "The translation must contain exactly the same ⟦P:...⟧ markers as the source, each the same number "
+        "of times; do not drop, add, merge, or alter any marker."
+    ),
+    "protected_marker_order": "Keep every protected marker at its semantic position and in the original order.",
+    "incomplete": "Return a complete translation of the whole source; never leave translated_text empty or partial.",
+    "terminology": "Use the required approved target terms from the glossary exactly; never use forbidden variants.",
+}
+
+
+def retry_feedback_request(request: TranslationRequest, candidate: TranslationResult, error_category: str, attempt_no: int, config: RunConfig) -> TranslationRequest:
+    """Rebuild a rejected request with explicit correction feedback for the next attempt."""
+    rejected = candidate.draft.translated_text if candidate.draft else ""
+    categories = error_category.removeprefix("quality:").split(",") if error_category.startswith("quality:") else [error_category]
+    bullets = [f"- {_RETRY_FEEDBACK_GUIDANCE.get(category, 'Return one JSON object with unit_id, translated_text and uncertainties, translating the complete source.') }" for category in categories]
+    content = (
+        f"Correction feedback: a previous translation attempt for this exact unit was rejected by automated "
+        f"checks ({error_category}). Rejected output: {rejected!r}\n"
+        "Fix every listed problem and return a corrected, complete translation of the same source:\n"
+        + "\n".join(bullets)
+    )
+    item = ContextItem(
+        item_id=f"retry-feedback-{attempt_no}",
+        category="style",
+        content=content,
+        source_ids=(),
+        revision=config.prompt_revision,
+        required=True,
+        selection_reason=f"correction feedback after rejected attempt {attempt_no}",
+    )
+    items = (*request.context.items, item)
+    packet = request.context.model_copy(update={
+        "items": items,
+        "token_count": request.context.token_count + max(1, len(content) // 4),
+        "token_count_is_estimate": True,
+        "packet_hash": stable_hash({"unit_id": request.context.unit_id, "items": items}),
+    })
+    return TranslationRequest(
+        request_id=str(uuid4()),
+        unit=request.unit,
+        context=packet,
+        model=request.model,
+        cache_key=stable_hash({"unit": request.unit, "context": packet, "model": request.model}),
+    )
+
+
+def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path, *, context_units: list[TranslationUnit] | None = None) -> dict:
     run_dir = runs_root / config.run_id
     store = StateStore(run_dir / "state.sqlite")
-    input_hash = stable_hash(units)
+    input_hash = stable_hash(units) if context_units is None else stable_hash({"units": units, "context_units": context_units})
     store.begin_run(config.run_id, input_hash, config.config_hash)
     if config.provider == "mock":
         provider = MockProvider()
@@ -154,7 +211,7 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path) 
     semantics = []
     glossary_snapshot_id = "glossary-empty"
     style_snapshot_id = "style-empty"
-    units_by_id = {unit.unit_id: unit for unit in units}
+    units_by_id = {unit.unit_id: unit for unit in [*(context_units or []), *units]}
     if config.context_engine == "v1":
         if not config.context_db:
             raise ValueError("V1 context_engine requires context_db")
@@ -178,7 +235,10 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path) 
         else:
             request = make_request(unit, config)
         validate_request(request)
+        if store.state(config.run_id, unit.unit_id) == "exhausted" and tm_entry is None:
+            continue
         store.prepare(config.run_id, unit.unit_id, request.cache_key)
+        original_cache_key = request.cache_key
         state = store.state(config.run_id, unit.unit_id)
         if state == "accepted":
             previous = store.result(config.run_id, unit.unit_id)
@@ -186,6 +246,9 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path) 
                 repaired_text, layout_repaired = restore_and_rebalance_layout_markers(
                     unit.source_text, previous.draft.translated_text
                 )
+                if not layout_repaired:
+                    store.commit(config.run_id, previous, check_quality(unit, previous, glossary), request.cache_key,
+                                 cached=True, source="accepted_quality_recheck", record_usage=False)
                 if layout_repaired:
                     repaired_result = previous.model_copy(
                         update={
@@ -194,7 +257,7 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path) 
                         }
                     )
                     validate_result(request, repaired_result)
-                    repaired_report = check_quality(unit, repaired_result)
+                    repaired_report = check_quality(unit, repaired_result, glossary)
                     store.commit(
                         config.run_id,
                         repaired_result,
@@ -214,7 +277,7 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path) 
                     repaired_draft = previous.draft.model_copy(update={"translated_text": repaired_text})
                     repaired_result = previous.model_copy(update={"request_id": request.request_id, "draft": repaired_draft})
                     validate_result(request, repaired_result)
-                    repaired_report = check_quality(unit, repaired_result)
+                    repaired_report = check_quality(unit, repaired_result, glossary)
                     store.commit(
                         config.run_id,
                         repaired_result,
@@ -234,7 +297,7 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path) 
         elif tm_entry:
             result = TranslationResult(request_id=request.request_id, unit_id=unit.unit_id, draft=TranslationDraft(unit_id=unit.unit_id, translated_text=tm_entry.target_text), finish="complete", provider_response_id=None, model=request.model, usage=Usage(input_tokens=0, output_tokens=0, cost_usd=0.0, usage_source="estimated"))
             from_cache = True
-        elif unit.unit_type in {"code", "protected"}:
+        elif (unit.unit_type in {"code", "protected"} or is_formula_only(unit.source_text)):
             result = TranslationResult(
                 request_id=request.request_id,
                 unit_id=unit.unit_id,
@@ -255,14 +318,15 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path) 
                 prior_attempts = store.provider_attempt_count(config.run_id, unit.unit_id)
                 if prior_attempts >= config.provider_max_attempts:
                     raise ProviderAttemptsExhausted(
-                        f"provider attempt limit already reached for {unit.unit_id}: {prior_attempts}/{config.provider_max_attempts}"
+                        f"provider attempt limit already reached for {unit.unit_id}: {prior_attempts}/{config.provider_max_attempts}",
+                        unit_id=unit.unit_id,
                     )
                 last_attempt = store.last_provider_attempt(config.run_id, unit.unit_id)
                 if last_attempt and str(last_attempt.get("error_category") or "").startswith("truncated:max_output_tokens"):
                     previous_limit = int(last_attempt.get("max_output_tokens") or request.model.max_output_tokens)
                     expanded_limit = expanded_output_token_limit(previous_limit, config.max_output_tokens)
                     if expanded_limit <= previous_limit:
-                        raise ProviderAttemptsExhausted(f"configured output limit exhausted for {unit.unit_id}: {previous_limit}")
+                        raise ProviderAttemptsExhausted(f"configured output limit exhausted for {unit.unit_id}: {previous_limit}", unit_id=unit.unit_id)
                     request = make_request(unit, config, request.context, max_output_tokens_override=expanded_limit)
                     validate_request(request)
                     store.prepare(config.run_id, unit.unit_id, request.cache_key)
@@ -288,12 +352,13 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path) 
                         )
                         if not exc.retryable or attempt_no >= config.provider_max_attempts:
                             raise ProviderAttemptsExhausted(
-                                f"provider attempts exhausted for {unit.unit_id}: {exc.category}"
+                                f"provider attempts exhausted for {unit.unit_id}: {exc.category}",
+                                unit_id=unit.unit_id,
                             ) from exc
                         if exc.category == "truncated:max_output_tokens":
                             expanded_limit = expanded_output_token_limit(request.model.max_output_tokens, config.max_output_tokens)
                             if expanded_limit <= request.model.max_output_tokens:
-                                raise ProviderAttemptsExhausted(f"configured output limit exhausted for {unit.unit_id}: {expanded_limit}") from exc
+                                raise ProviderAttemptsExhausted(f"configured output limit exhausted for {unit.unit_id}: {expanded_limit}", unit_id=unit.unit_id) from exc
                             request = make_request(unit, config, request.context, max_output_tokens_override=expanded_limit)
                             validate_request(request)
                             store.prepare(config.run_id, unit.unit_id, request.cache_key)
@@ -320,7 +385,8 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path) 
                             error_category=type(exc).__name__,
                         )
                         raise ProviderAttemptsExhausted(
-                            f"non-retryable provider error for {unit.unit_id}: {type(exc).__name__}"
+                            f"non-retryable provider error for {unit.unit_id}: {type(exc).__name__}",
+                            unit_id=unit.unit_id,
                         ) from exc
                     candidate = candidate.model_copy(update={"usage": _priced_usage(candidate.usage, config, estimated_input)})
                     if candidate.draft is not None:
@@ -329,7 +395,7 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path) 
                         candidate = candidate.model_copy(update={"draft": candidate.draft.model_copy(update={"translated_text": repaired_text})})
                     try:
                         validate_result(request, candidate)
-                        candidate_report = check_quality(unit, candidate)
+                        candidate_report = check_quality(unit, candidate, glossary)
                     except ValueError as exc:
                         error_category = "result_validation"
                     else:
@@ -350,8 +416,14 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path) 
                         )
                         if attempt_no >= config.provider_max_attempts:
                             raise ProviderAttemptsExhausted(
-                                f"provider attempts exhausted for {unit.unit_id}: {error_category}"
+                                f"provider attempts exhausted for {unit.unit_id}: {error_category}",
+                                unit_id=unit.unit_id,
                             )
+                        request = retry_feedback_request(request, candidate, error_category, attempt_no, config)
+                        validate_request(request)
+                        store.prepare(config.run_id, unit.unit_id, request.cache_key)
+                        estimated_input = estimated_input_token_ceiling(request)
+                        estimate = estimate_cost(estimated_input, request.model.max_output_tokens, config.input_usd_per_million, config.output_usd_per_million)
                         continue
                     store.record_provider_attempt(
                         config.run_id,
@@ -367,7 +439,7 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path) 
                     provider_usage_recorded = True
                     break
                 if result is None:
-                    raise ProviderAttemptsExhausted(f"provider attempts exhausted for {unit.unit_id}")
+                    raise ProviderAttemptsExhausted(f"provider attempts exhausted for {unit.unit_id}", unit_id=unit.unit_id)
             from_cache = False
         if result.draft is not None:
             repaired_text, repaired = repair_boundary_markers(unit.source_text, result.draft.translated_text)
@@ -377,7 +449,7 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path) 
             elif repaired_text != result.draft.translated_text:
                 result = result.model_copy(update={"draft": result.draft.model_copy(update={"translated_text": repaired_text})})
         validate_result(request, result)
-        report = check_quality(unit, result)
+        report = check_quality(unit, result, glossary)
         store.commit(
             config.run_id,
             result,
@@ -387,4 +459,6 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path) 
             source=ledger_source,
             record_usage=not provider_usage_recorded,
         )
+        if request.cache_key != original_cache_key:
+            store.alias_cache_key(config.run_id, unit.unit_id, original_cache_key, result, report.status)
     return store.summary(config.run_id)

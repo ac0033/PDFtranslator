@@ -97,6 +97,8 @@ class ContextItem(StrictModel):
     revision: str
     required: bool
     selection_reason: str
+    term_source: str | None = None
+    term_target: str | None = None
 
 
 class ContextPacket(StrictModel):
@@ -147,6 +149,19 @@ class Usage(StrictModel):
     usage_source: Literal["provider", "estimated", "unavailable"]
 
 
+class TermReplacement(StrictModel):
+    marker: str
+    source_term: str
+    target_term: str
+    start: int
+    end: int
+
+
+class TermLockEvidence(StrictModel):
+    provider_text: str
+    replacements: tuple[TermReplacement, ...]
+
+
 class TranslationResult(StrictModel):
     request_id: str
     unit_id: str
@@ -156,6 +171,7 @@ class TranslationResult(StrictModel):
     model: ModelSpec
     usage: Usage
     raw_response: ArtifactRef | None = None
+    terminology_evidence: TermLockEvidence | None = None
 
 
 class QualityIssue(StrictModel):

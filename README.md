@@ -2,7 +2,7 @@
 
 这是按 `llm_pdf_translation_pipeline_plan.md` 实现的首个可运行版本。它优先保证可追溯、预算前置、严格契约、精确缓存和断点恢复，不会在缺少预算配置时调用收费模型。
 
-当前候选版本为 `0.7.0rc10`，Git 快照命名为 `v0.7.0-rc.10`。本版把第 42 页 2.2 开头的两个捕获片段作为同一个完整语义单元处理，生成三行连贯中文，脚注号 `5` 留在原位；原文正文操作已从诊断段落移除，复制文本顺序与视觉顺序一致。版面受限中文措辞仍需独立语义复核，页内其他段落尚未翻译，整页和整本 PDF 均不能正式使用。路线图中的 V0/V1/V2/V3 表示开发阶段，不等于 SemVer 主版本号；在完整文档接口稳定前，软件保持 `0.x`。版本规则见 `docs/versioning.md`。
+当前工作候选版本为 `0.7.0rc13`。用户选定的 18 页 CS224n 讲义已完成真实 API 翻译、源文复核、专业术语约束和逐页视觉/保真验收，提供 18 页中文版与 36 页双语对照版。交付文件位于 `output/pdf/v0.7-rc13/delivery/`，完整证据见 `reports/v0.7_rc13_final_acceptance.json`。本轮累计核对 108 条批准术语、444 个原样资产与 1061 个代码字形。模型自动审校仍有漏报和误报，不能独立放行；本文档通过的是带逐页复核的验收流程。
 
 ## 当前能力
 
@@ -25,7 +25,7 @@
 - `review`：运行保护标记、数字、URL 与空译文检查。
 - `report`：输出状态、用量、缓存与问题汇总。
 - SQLite 保存任务、结果、用量与事件；本地精确缓存避免热重跑再次调用模型。
-- 每一次外部模型尝试都先写入独立尝试记录和总账；无效结构、严重保护标记或布局标记错误可有限重试，重试上限跨恢复保持有效。
+- 每一次外部模型尝试都先写入独立尝试记录和总账；无效结构、严重保护标记或布局标记错误可有限重试，重试时把被拒译文和具体失败原因作为纠正反馈附加进请求（`retry_feedback_request`），重试上限跨恢复保持有效。
 - V1 Context Engine：真实 PDF 单元带章节层级和局部邻接图；非连续抽样页之间禁止上下文泄漏。上下文还支持带作用域和审核状态的术语、风格规则、原文证据摘要、精确翻译记忆与依赖失效。
 - `content-review.jsonl`：逐单元保存原文、译文、自动问题与人工语义/版面复核空位；即使 PDF 渲染失败也保留已付费结果和费用台账。页 42 的真实验证结果见 `reports/v0.7_rc1_validation.md`。
 - `source_preserving`：实验性的源页副本编辑组件，只清空精确匹配的正文 `TJ` 操作后插入内嵌中文字体；落盘前后检查目标外的原字形/字体/字号/位置、图像、矢量路径、数学字形、数字/符号字形和 2× 像素。`source_mapping` 对保守匹配的捕获片段自动生成原文操作与单行译文位置，单独保留原页的章节编号。仍要求单一内容流及译文能放入原行，尚未接入 `pdf-translate` 的全页自动路径。零费用验证见 `reports/v0.7_rc3_mapping_probe.md`。
@@ -35,6 +35,27 @@
 - `map_single_line_mixed_native_prose`：仅当高置信单行片段恰有一个保护标记，且该标记与原 PDF 一个不可变字体 span 唯一对齐时，逐 span 分离正文与公式/变量。第 42 页 `P(x⁰)` 例中安全删掉三段正文操作，原位保留公式和 `X`；加入全页只删原文审计的失败关闭备选路径。尚未完成同段中文重排或整页接入，证据见 `reports/v0.7_rc8_mixed_line_mapping.md`。
 - `interleaved_reading_order`：实验性地将每段中文插回对应已清空的原文操作后面，允许原公式和变量操作夹在中文之间。只在每个中文片段对应唯一源操作、下一原操作显式重置字体、生成流可唯一识别、嵌入前后整页 2× 渲染相同且中文/原锚点复制顺序正确时保存。一页诊断结果见 `reports/v0.7_rc9_interleaved_writeback.md`；未接入全页自动写回。
 - `map_complete_semantic_unit_native_spans`：把完整语义单元中已经精确定位的正文进一步拆成原 PDF 的字体 span。2.2 开头三行拆为六条正文操作，脚注号 `5` 独立保留；写回器现在允许连续两条待清空操作之间无字体重置，但保护内容前仍需显式重置。三行中文诊断页及全页目标外审计见 `reports/v0.7_rc10_semantic_paragraph.md`；尚未自动适配其他段落。
+
+## rc12 翻译质量修复
+
+`configs/v0.7.quality.deepseek.toml` 启用 `join_cross_page_words`。原始 `units.jsonl` 和 `capture-map.jsonl` 保留，派生语义单元写入 `prepared-units.jsonl`，合并证据写入 `semantic-preparation.json`。跨页单元只翻译一次，写回前按全局片段分配；逐页复核读取报告绑定哈希的派生单元。几何启发式不能证明每个连字符都属于断词，每个合并仍需语义复核。
+
+下面保留 rc11 的标准 CLI 示例。已生成的 rc12 结果见验证报告；对现有产物使用 `review-pages` 无须重新调用 API。
+
+## 完整 PDF 与逐页验收
+
+```powershell
+# 捕获全份 PDF 并估算，不调用翻译 API
+uv run pdftrans pdf-translate --input pdf/cs224n-2019-notes03-neuralnets.pdf --config configs/v0.7.page-review.deepseek.toml --output-root output/pdf/v0.7-rc11 --capture-root tmp/pdfs/v0.7-rc11
+# 确认配置中的费用上限后真实调用 API；只复用当前输入哈希对应的捕获
+uv run pdftrans pdf-translate --input pdf/cs224n-2019-notes03-neuralnets.pdf --config configs/v0.7.page-review.deepseek.toml --output-root output/pdf/v0.7-rc11 --capture-root tmp/pdfs/v0.7-rc11 --reuse-capture --execute-paid --render-review-draft
+# 对已有运行重建图片和页面审计，不调用 API
+uv run pdftrans review-pages --input pdf/cs224n-2019-notes03-neuralnets.pdf --output-dir <命令返回的output_dir>
+```
+
+入口输出 `page-review.html` 和 `page-review.json`，逐页列出原文、译稿、单元状态、公式/数字/图像审计及复核备注。缺失译文、未接受单元、PDF 缺失或页面数错误都会阻断对应页。即使所有自动检查通过，仍保持 `pending_review`，不会自动认定语义正确。
+
+`--render-review-draft` 只允许全部单元均已有结果且不存在 critical 问题时生成待审稿；major 警告仍记录在逐页验收中，不会被清除。严格识别的短符号赋值公式保持原样；该修复允许已误送模型的公式从原台账恢复，不增加重试。跨页连字符片段会标为需要复核。预算耗尽和重试耗尽都会保留费用台账及逐段复核文件。可选 `agent-review.json` 必须绑定原文和译稿 SHA-256，并恰好覆盖全部选定页；它不等同于人工批准。
 
 ## 快速开始
 

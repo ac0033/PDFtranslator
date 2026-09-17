@@ -21,6 +21,38 @@ def _is_running_matter(unit: TranslationUnit) -> bool:
     return bool(RUNNING_MATTER.search(_visible_text(unit)))
 
 
+def running_matter_ids(units: list[TranslationUnit]) -> set[str]:
+    """Find repeated top-margin text using source geometry and other pages.
+
+    Page numbers may vary; short fragments must be substrings of a longer
+    repeated header. No document-specific header words are assumed.
+    """
+    def signature(unit):
+        return re.sub(r"[\W\d_]+", "", _visible_text(unit).casefold())
+
+    top = [u for u in units if u.source_refs and all(r.bbox[3] <= 60 for r in u.source_refs)]
+    found = {u.unit_id for u in units if _is_running_matter(u)}
+    for unit in top:
+        key = signature(unit)
+        if not key:
+            found.add(unit.unit_id)
+            continue
+        matches = { _page_index(other) for other in top
+            if len(signature(other)) >= 20 and key in signature(other)
+            and _page_index(other) != _page_index(unit) }
+        if len(matches) >= 2:
+            found.add(unit.unit_id)
+    return found
+
+
+def _same_column(first: TranslationUnit, second: TranslationUnit) -> bool:
+    if not first.source_refs or not second.source_refs:
+        return True
+    a, b = first.source_refs[0].bbox, second.source_refs[0].bbox
+    overlap = max(0, min(a[2], b[2]) - max(a[0], b[0]))
+    return abs(a[0] - b[0]) <= 36 and overlap >= 0.5 * min(a[2] - a[0], b[2] - b[0])
+
+
 def _order_key(unit: TranslationUnit) -> tuple[int, float, float, str]:
     if not unit.source_refs:
         return (10**9, 10**9, 10**9, unit.unit_id)
@@ -66,6 +98,7 @@ def enrich_pdf_units_with_context(units: list[TranslationUnit]) -> list[Translat
         else:
             by_page[page].append(unit)
 
+    running = running_matter_ids(units)
     sections: dict[str, tuple[str, ...]] = {}
     current: tuple[str, ...] = ()
     previous_page: int | None = None
@@ -73,7 +106,7 @@ def enrich_pdf_units_with_context(units: list[TranslationUnit]) -> list[Translat
         if previous_page is None or page != previous_page + 1:
             current = (f"Physical page {page + 1}",)
         for unit in by_page[page]:
-            detected = _heading_path(_visible_text(unit), current)
+            detected = None if unit.unit_id in running else _heading_path(_visible_text(unit), current)
             if detected:
                 current = detected
             sections[unit.unit_id] = unit.section_path or current
@@ -81,23 +114,27 @@ def enrich_pdf_units_with_context(units: list[TranslationUnit]) -> list[Translat
     for unit in unpaged:
         sections[unit.unit_id] = unit.section_path
 
-    eligible = [unit for unit in ordered if unit.unit_type not in {"code", "protected"} and not _is_running_matter(unit)]
+    eligible = [unit for unit in ordered if unit.unit_type not in {"code", "protected"} and unit.unit_id not in running]
     inferred_neighbors: dict[str, list[str]] = defaultdict(list)
     for index, unit in enumerate(eligible):
         unit_page = _page_index(unit)
-        for neighbor_index in (index - 1, index + 1):
-            if neighbor_index < 0 or neighbor_index >= len(eligible):
-                continue
-            neighbor = eligible[neighbor_index]
-            neighbor_page = _page_index(neighbor)
-            same_section = sections[unit.unit_id] == sections[neighbor.unit_id]
-            if same_section and (unit_page is None or neighbor_page is None or abs(unit_page - neighbor_page) <= 1):
-                inferred_neighbors[unit.unit_id].append(neighbor.unit_id)
+        # Search within the reading column. Marginal captions must not displace
+        # the preceding/following body paragraph simply because their y is near.
+        for candidates in (reversed(eligible[:index]), iter(eligible[index + 1:])):
+            for neighbor in candidates:
+                neighbor_page = _page_index(neighbor)
+                if unit_page is not None and neighbor_page is not None and abs(unit_page - neighbor_page) > 1:
+                    break
+                if not _same_column(unit, neighbor):
+                    continue
+                if sections[unit.unit_id] == sections[neighbor.unit_id]:
+                    inferred_neighbors[unit.unit_id].append(neighbor.unit_id)
+                break
 
     enriched: list[TranslationUnit] = []
     for unit in units:
         neighbors = tuple(dict.fromkeys(inferred_neighbors[unit.unit_id]))
-        risk_tags = tuple(sorted(set(unit.risk_tags) | {"context_graph_v0.7"}))
+        risk_tags = tuple(sorted(set(unit.risk_tags) | {"context_graph_v0.7", "context_graph_rc12"} | ({"running_matter"} if unit.unit_id in running else set())))
         enriched.append(
             unit.model_copy(
                 update={

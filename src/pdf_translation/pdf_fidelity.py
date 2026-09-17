@@ -12,6 +12,7 @@ VISUAL_DRAWING_KEYS = (
     "lineCap", "lineJoin", "closePath", "fill_opacity", "stroke_opacity",
 )
 COORDINATE_TOLERANCE_PT = 0.001
+CODE_FONT_HINTS = ("courier", "mono", "consolas")
 FORMULA_FONT_HINTS = ("cmr", "cmmi", "cmsy", "pazomath", "stix", "math", "symbol")
 IMMUTABLE_SYMBOLS = frozenset("©=<>≤≥∑∏∫√∞≠±×÷∼≈→←↔∈∉∅∂∇∨∧¬⊆⊂⊇⊃∪∩∝∀∃")
 
@@ -59,14 +60,14 @@ def _images_equal(source: dict[tuple, list[tuple]], target: dict[tuple, list[tup
     )
 
 
-def _formula_font_glyphs(page) -> dict[tuple[str, str], list[tuple]]:
+def _formula_font_glyphs(page, font_hints=FORMULA_FONT_HINTS) -> dict[tuple[str, str], list[tuple]]:
     """Locate source glyphs set in recognizable math fonts at character precision."""
     grouped: dict[tuple[str, str], list[tuple]] = defaultdict(list)
     for block in page.get_text("rawdict")["blocks"]:
         for line in block.get("lines", []):
             for span in line.get("spans", []):
                 font = span.get("font", "")
-                if not any(hint in font.casefold() for hint in FORMULA_FONT_HINTS):
+                if not any(hint in font.casefold() for hint in font_hints):
                     continue
                 for character in span.get("chars", []):
                     if character.get("c", "").isspace():
@@ -77,11 +78,34 @@ def _formula_font_glyphs(page) -> dict[tuple[str, str], list[tuple]]:
     return {key: sorted(values) for key, values in grouped.items()}
 
 
+def _unordered_close_equal(source: list[tuple], target: list[tuple]) -> bool:
+    """Match geometry within tolerance without sorting by noisy float coordinates.
+
+    Tiny x-coordinate changes can invert lexicographic order for glyphs on
+    different lines. Bipartite matching preserves multiplicity without raising
+    the coordinate tolerance or accepting missing glyphs.
+    """
+    if len(source) != len(target):
+        return False
+    edges = [[i for i, candidate in enumerate(target) if _close_value(value, candidate)] for value in source]
+    if any(not row for row in edges):
+        return False
+    matched = {}
+    def assign(index, seen):
+        for candidate in edges[index]:
+            if candidate in seen:
+                continue
+            seen.add(candidate)
+            if candidate not in matched or assign(matched[candidate], seen):
+                matched[candidate] = index
+                return True
+        return False
+    return all(assign(index, set()) for index in range(len(source)))
+
+
 def _formula_font_glyphs_equal(source: dict[tuple, list[tuple]], target: dict[tuple, list[tuple]]) -> bool:
     return source.keys() == target.keys() and all(
-        len(source[key]) == len(target[key])
-        and all(_close_value(a, b) for a, b in zip(source[key], target[key]))
-        for key in source
+        _unordered_close_equal(source[key], target[key]) for key in source
     )
 
 
@@ -116,10 +140,13 @@ def compare_visual_primitives(source_page, translated_page) -> dict:
     target_paths = _drawing_inventory(translated_page)
     source_formula_glyphs = _formula_font_glyphs(source_page)
     target_formula_glyphs = _formula_font_glyphs(translated_page)
+    source_code_glyphs = _formula_font_glyphs(source_page, CODE_FONT_HINTS)
+    target_code_glyphs = _formula_font_glyphs(translated_page, CODE_FONT_HINTS)
     source_numeric_symbols = _numeric_symbol_glyphs(source_page)
     target_numeric_symbols = _numeric_symbol_glyphs(translated_page)
     checks = {
         "page_geometry_equal": _close_value(source_size, target_size),
+        "code_font_glyphs_text_font_size_bbox_equal": _formula_font_glyphs_equal(source_code_glyphs, target_code_glyphs),
         "images_digest_and_bbox_equal": _images_equal(source_images, target_images),
         "vector_paths_equal": len(source_paths) == len(target_paths) and all(
             _close_value(a, b) for a, b in zip(source_paths, target_paths)
@@ -129,6 +156,8 @@ def compare_visual_primitives(source_page, translated_page) -> dict:
     }
     return {
         "checks": checks,
+        "source_code_font_glyph_count": sum(len(values) for values in source_code_glyphs.values()),
+        "target_code_font_glyph_count": sum(len(values) for values in target_code_glyphs.values()),
         "source_image_count": sum(len(boxes) for boxes in source_images.values()),
         "target_image_count": sum(len(boxes) for boxes in target_images.values()),
         "source_vector_path_count": len(source_paths),
@@ -156,7 +185,7 @@ def audit_pdf_primitives(source: Path, translated: Path, source_page_indices: tu
             pages.append({"source_page": source_index + 1, "translated_page": target_index + 1, **comparison})
     return {
         "schema_version": "1.0",
-        "scope": "page geometry, raster images, vector paths, recognizable math-font glyphs, and numeric/symbol glyph text/font/size/position",
+        "scope": "page geometry, raster images, vector paths, recognizable math-font and monospace-code glyphs, and numeric/symbol glyph text/font/size/position",
         "coordinate_tolerance_pt": COORDINATE_TOLERANCE_PT,
         "pages": pages,
         "visual_primitives_passed": all(page["passed"] for page in pages),

@@ -21,6 +21,7 @@ from .hashing import sha256_bytes, sha256_file, stable_hash
 from .manifest import BenchmarkManifest, load_manifest, load_units
 from .pdf_adapter import inspect_pdf
 from .pdf_fidelity import audit_pdf_primitives
+from .page_review import build_page_review
 from .pipeline import DEFAULT_TRANSLATION_STYLE, estimate_units, make_request, run_units
 from .schemas import TranslationUnit
 from .storage import StateStore
@@ -184,6 +185,7 @@ def pdf_translate(
     source_page: Annotated[list[int] | None, typer.Option("--source-page", help="One-based physical page; repeat to test a selection. Omit for the full PDF.")] = None,
     execute_paid: Annotated[bool, typer.Option("--execute-paid")] = False,
     reuse_capture: Annotated[bool, typer.Option("--reuse-capture")] = False,
+    render_review_draft: Annotated[bool, typer.Option("--render-review-draft", help="Render complete, structurally safe translations for review even when semantic warnings remain. Never marks pages accepted.")] = False,
 ) -> None:
     """Run a context-first PDF translation without a benchmark A/B dependency."""
     if not input.is_file():
@@ -229,6 +231,7 @@ def pdf_translate(
         execute_paid=execute_paid,
         reuse_capture=True,
         sample_name="full" if len(pages) == page_count else "selection",
+        render_review_draft=render_review_draft,
     )
     report["formal_use_ready"] = False
     report.setdefault("formal_use_blockers", ["translation or rendering has not passed all formal-use gates"])
@@ -253,7 +256,17 @@ def pdf_translate(
         if not fidelity["visual_primitives_passed"]:
             report["status"] = "visual_primitive_gate_blocked"
         (work_dir / "run.report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-    typer.echo(json.dumps({"output_dir": str(work_dir), **report}, ensure_ascii=False, indent=2))
+    page_review = build_page_review(input, work_dir)
+    typer.echo(json.dumps({"output_dir": str(work_dir), **report, **page_review}, ensure_ascii=False, indent=2))
+
+
+@app.command("review-pages")
+def review_pages(
+    input: Annotated[Path, typer.Option("--input")],
+    output_dir: Annotated[Path, typer.Option("--output-dir")],
+) -> None:
+    """Rebuild saved page evidence without API calls."""
+    typer.echo(json.dumps(build_page_review(input, output_dir), ensure_ascii=False, indent=2))
 
 
 @app.command("audit-nontext")
@@ -652,3 +665,19 @@ def invalidate(
 
 if __name__ == "__main__":
     app()
+
+
+@app.command("pdf-native")
+def pdf_native(
+    input: Annotated[Path,typer.Option("--input")],
+    config: Annotated[Path,typer.Option("--config")],
+    output_dir: Annotated[Path,typer.Option("--output-dir")],
+    font: Annotated[Path,typer.Option("--font")],
+    source_page: Annotated[list[int] | None,typer.Option("--source-page")] = None,
+    runs_root: Annotated[Path,typer.Option("--runs-root")] = Path("runs"),
+    execute_paid: Annotated[bool,typer.Option("--execute-paid")] = False,
+) -> None:
+    """Prepare native objects and estimate; execute the runtime only with --execute-paid."""
+    from .native_pipeline import run_native_pdf
+    report=run_native_pdf(input,load_config(config),output_dir,runs_root,font,pages=source_page,execute_paid=execute_paid)
+    typer.echo(json.dumps(report,ensure_ascii=False,indent=2))

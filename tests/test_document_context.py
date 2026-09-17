@@ -89,3 +89,14 @@ def test_pdf_context_excludes_copyright_footer_and_recomputes_stale_links():
     assert enriched["body-a"].neighbor_ids == ("body-b",)
     assert enriched["body-b"].neighbor_ids == ("body-a",)
     assert enriched["footer"].neighbor_ids == ()
+
+
+def test_repeated_headers_and_sidebar_do_not_displace_body_context():
+    values = [unit(f"header-{i}", f"Lecture notes on neural networks {i}", i, 25) for i in range(3)]
+    values += [unit("a", "First body paragraph.", 1, 100), unit("b", "Second body paragraph.", 1, 150), unit("side", "Figure caption.", 1, 125)]
+    values[-1] = values[-1].model_copy(update={"source_refs": (values[-1].source_refs[0].model_copy(update={"bbox": (530, 125, 650, 140)}),)})
+    enriched = {u.unit_id: u for u in enrich_pdf_units_with_context(values)}
+    assert enriched["a"].neighbor_ids == ("b",)
+    assert enriched["b"].neighbor_ids == ("a",)
+    assert all(enriched[f"header-{i}"].neighbor_ids == () for i in range(3))
+    assert enriched["side"].neighbor_ids == ()

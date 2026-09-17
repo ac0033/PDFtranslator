@@ -1,3 +1,3 @@
 """Auditable PDF translation runtime."""
 
-__version__ = "0.7.0rc5"
+__version__ = "0.7.0rc13"

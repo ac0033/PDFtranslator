@@ -1,0 +1,191 @@
+{
+  "checks": [
+    {
+      "source_identity": "19d17c7dc558dcbb7751dcbb804de29e6fa237eec6f517ed6a5f4514c080a254",
+      "expected_pages": [
+        1,
+        2
+      ],
+      "recorded_pages": [
+        1,
+        2
+      ],
+      "full_records_present": true,
+      "full_translation_identical": true,
+      "record_sources": [
+        {
+          "page": 1,
+          "file": "page-001.translation-review.json"
+        },
+        {
+          "page": 2,
+          "file": "page-002.translation-review.json"
+        }
+      ]
+    },
+    {
+      "source_identity": "d36dc3458ff18ca87ea0d67fdf97ebd6c07df30ab101cdc45e82901a70945f76",
+      "expected_pages": [
+        2,
+        3
+      ],
+      "recorded_pages": [
+        2,
+        3
+      ],
+      "full_records_present": true,
+      "full_translation_identical": true,
+      "record_sources": [
+        {
+          "page": 2,
+          "file": "page-002.translation-review.json"
+        },
+        {
+          "page": 3,
+          "file": "page-003.translation-review.json"
+        }
+      ]
+    },
+    {
+      "source_identity": "ff64699735c0cfa745a98dbcece0969ba13f0698cc6dcebbc988b03ed594f481",
+      "expected_pages": [
+        3,
+        4
+      ],
+      "recorded_pages": [
+        3,
+        4
+      ],
+      "full_records_present": true,
+      "full_translation_identical": true,
+      "record_sources": [
+        {
+          "page": 3,
+          "file": "page-003.translation-review.json"
+        },
+        {
+          "page": 4,
+          "file": "page-004.translation-review.json"
+        }
+      ]
+    },
+    {
+      "source_identity": "325460ee4071bff2bbf4ee0f4cb473ed3a9495d9af58b127f2a7c524bc5da2b5",
+      "expected_pages": [
+        8,
+        9
+      ],
+      "recorded_pages": [
+        8,
+        9
+      ],
+      "full_records_present": true,
+      "full_translation_identical": true,
+      "record_sources": [
+        {
+          "page": 8,
+          "file": "page-008.translation-review.json"
+        },
+        {
+          "page": 9,
+          "file": "page-009.translation-review.json"
+        }
+      ]
+    },
+    {
+      "source_identity": "4ba9e11398575584efc0c00170af4ceb7871025048735de8eb77043b4f40643c",
+      "expected_pages": [
+        9,
+        10
+      ],
+      "recorded_pages": [
+        9,
+        10
+      ],
+      "full_records_present": true,
+      "full_translation_identical": true,
+      "record_sources": [
+        {
+          "page": 9,
+          "file": "page-009.translation-review.json"
+        },
+        {
+          "page": 10,
+          "file": "page-010.cross-linked.translation-review.json"
+        }
+      ]
+    },
+    {
+      "source_identity": "69fecd7bc01933ea90bdd1dacc0e4aff5b961046ac5570949c96fa344a071fbc",
+      "expected_pages": [
+        15,
+        16
+      ],
+      "recorded_pages": [
+        15,
+        16
+      ],
+      "full_records_present": true,
+      "full_translation_identical": true,
+      "record_sources": [
+        {
+          "page": 15,
+          "file": "page-015.cross-linked.translation-review.json"
+        },
+        {
+          "page": 16,
+          "file": "page-016.translation-review.json"
+        }
+      ]
+    },
+    {
+      "source_identity": "924e35422f744c2cc36fbb144e4366eda1a834393a2f3a86f1857e8d94d308ac",
+      "expected_pages": [
+        16,
+        17
+      ],
+      "recorded_pages": [
+        16,
+        17
+      ],
+      "full_records_present": true,
+      "full_translation_identical": true,
+      "record_sources": [
+        {
+          "page": 16,
+          "file": "page-016.translation-review.json"
+        },
+        {
+          "page": 17,
+          "file": "page-017.translation-review.json"
+        }
+      ]
+    },
+    {
+      "source_identity": "931e70b97fa4840ac36a39d27e5afceae2889a1e9aef99135ef7c90f99562287",
+      "expected_pages": [
+        17,
+        18
+      ],
+      "recorded_pages": [
+        17,
+        18
+      ],
+      "full_records_present": true,
+      "full_translation_identical": true,
+      "record_sources": [
+        {
+          "page": 17,
+          "file": "page-017.translation-review.json"
+        },
+        {
+          "page": 18,
+          "file": "page-018.cross-linked.translation-review.json"
+        }
+      ]
+    }
+  ],
+  "passed": true,
+  "scope": "Complete cross-page records and translations agree after native marker resolution. Assembly pixel proof and source/translation review are separate requirements.",
+  "entire_document_formal_use_ready": false
+}

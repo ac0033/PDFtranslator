@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+from .term_matching import normalize_target_spacing
+
 import re
 from collections import Counter
 
 from .hashing import stable_hash
+from .context_models import GlossaryEntry
+from .context_router import select_glossary
 from .schemas import QualityIssue, QualityReport, TranslationResult, TranslationUnit
-from .semantic_layout import LAYOUT_MARKER, layout_boundaries_are_natural
+from .semantic_layout import LAYOUT_MARKER, layout_boundaries_are_natural, is_formula_only
 
 MARKERS = re.compile(r"⟦P:[A-Za-z0-9_.:-]+⟧")
 # Chinese letters are Unicode "word" characters, so \w boundaries incorrectly
@@ -69,7 +73,7 @@ def repair_boundary_markers(source_text: str, translated_text: str) -> tuple[str
     return repaired, True
 
 
-def check_quality(unit: TranslationUnit, result: TranslationResult) -> QualityReport:
+def check_quality(unit: TranslationUnit, result: TranslationResult, glossary: list[GlossaryEntry] | None = None) -> QualityReport:
     issues: list[QualityIssue] = []
     translated = result.draft.translated_text if result.draft else ""
 
@@ -82,14 +86,15 @@ def check_quality(unit: TranslationUnit, result: TranslationResult) -> QualityRe
     translated_markers = MARKERS.findall(translated)
     if sorted(source_markers) != sorted(translated_markers):
         add("protected_marker", "critical", "protected marker multiset changed")
+    unchanged_formula = translated == unit.source_text and is_formula_only(unit.source_text)
     source_layout_markers = LAYOUT_MARKER.findall(unit.source_text)
     translated_layout_markers = LAYOUT_MARKER.findall(translated)
     if sorted(source_markers) == sorted(translated_markers) and source_markers != translated_markers:
-        severity = "critical" if source_layout_markers else "major"
+        severity = "critical" if source_layout_markers or "native_immutable_slots" in unit.risk_tags else "major"
         add("protected_marker_order", severity, "protected marker order changed")
     if source_layout_markers != translated_layout_markers:
         add("layout_marker_order", "critical", "layout marker order changed")
-    elif source_layout_markers and not layout_boundaries_are_natural(translated):
+    elif source_layout_markers and not unchanged_formula and not layout_boundaries_are_natural(translated):
         add("layout_boundary", "critical", "translated layout boundary remains inside a sentence")
     if sorted(NUMBERS.findall(unit.source_text)) != sorted(NUMBERS.findall(translated)):
         add("number", "major", "number inventory changed")
@@ -99,10 +104,16 @@ def check_quality(unit: TranslationUnit, result: TranslationResult) -> QualityRe
         span.marker for span in unit.protected
         if span.kind == "formula" and span.marker not in unit.protected_literal_hints
     }
-    if missing_literal_markers:
+    if missing_literal_markers and not unchanged_formula:
         add(
             "protected_source_literal_unavailable", "major",
             f"{len(missing_literal_markers)} protected source literals were unavailable to the translator; review nearby meaning against the source PDF",
         )
+    for entry in select_glossary(unit, glossary or []):
+        if not any(normalize_target_spacing(term) in normalize_target_spacing(translated) for term in (entry.target_term, *entry.accepted_target_variants)):
+            add("terminology", "critical", f"Required discipline term missing: {entry.source_term} => {entry.target_term}")
+        for forbidden in entry.forbidden_target_terms:
+            if normalize_target_spacing(forbidden) in normalize_target_spacing(translated):
+                add("terminology", "critical", f"Disallowed translation for {entry.source_term}: {forbidden}; use {entry.target_term}")
     status = "blocked" if any(i.severity == "critical" for i in issues) else ("needs_review" if issues else "pass")
-    return QualityReport(unit_id=unit.unit_id, result_hash=stable_hash(result), policy_revision="v0.4", status=status, issues=tuple(issues), checks_run=("completion", "protected_marker_multiset", "protected_marker_order", "layout_marker_order", "layout_boundary", "number_inventory", "url_inventory", "protected_source_literal_availability"))
+    return QualityReport(unit_id=unit.unit_id, result_hash=stable_hash(result), policy_revision="v0.7-terminology", status=status, issues=tuple(issues), checks_run=("completion", "protected_marker_multiset", "protected_marker_order", "layout_marker_order", "layout_boundary", "number_inventory", "url_inventory", "protected_source_literal_availability", "approved_terminology"))
