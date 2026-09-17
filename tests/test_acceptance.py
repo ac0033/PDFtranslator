@@ -4,6 +4,7 @@ from pathlib import Path
 import pymupdf
 import pytest
 
+from pdf_translation.triage import ReviewLedger
 from pdf_translation.acceptance import (
     DELIVERABLE,
     DELIVERABLE_WITH_KNOWN_ISSUES,
@@ -39,16 +40,48 @@ def fixture_delivery(tmp_path, rows, *, pages=2, render_pages=None, books=('mono
     return source, render_dir, queue
 
 
-def unit(unit_id, *, state='accepted', pages=(1,), issues=(), translated='译文', markers=()):
+def unit(unit_id, *, state='accepted', pages=(1,), issues=(), translated='译文', markers=(),
+         source='source paragraph', result_hash=None):
     return {
         'unit_id': unit_id,
         'source_pages': list(pages),
-        'source_text': 'source',
+        'source_text': source,
         'translated_text': translated,
         'state': state,
+        'result_hash': result_hash or f'hash-{unit_id}',
         'issues': [dict(issue) for issue in issues],
         'unresolved_formula_markers': list(markers),
     }
+
+
+def flagged(unit_id, category, **kwargs):
+    """A unit whose warning triage cannot explain away.
+
+    Number warnings need digits that really differ: a rule that dismissed these
+    would be dismissing a real defect.
+    """
+    kwargs.setdefault('source', 'see chapter 1 of the reference work')
+    kwargs.setdefault('translated', '参见该参考著作。')
+    return unit(unit_id, state='needs_review', issues=[issue(category)], **kwargs)
+
+
+class FakeStore:
+    """Stands in for StateStore: unit_id -> (state, translated, issues, hash)."""
+
+    def __init__(self, units):
+        self.units = units
+
+    def quality_reports(self, run_id):
+        return [
+            {'unit_id': uid, 'state': state, 'quality': {'issues': issues, 'result_hash': result_hash}}
+            for uid, (state, _translated, issues, result_hash) in self.units.items()
+        ]
+
+    def results(self, run_id):
+        return {
+            uid: type('R', (), {'draft': type('D', (), {'translated_text': translated})()})()
+            for uid, (_state, translated, _issues, _hash) in self.units.items()
+        }
 
 
 def issue(category, severity='major'):
@@ -68,13 +101,13 @@ def test_a_clean_run_is_deliverable(tmp_path):
 
 def test_minor_issues_are_recorded_without_blocking_delivery(tmp_path):
     rows = [unit(f'u{i}') for i in range(90)]
-    rows += [unit(f'f{i}', state='needs_review', pages=(2,), issues=[issue('protected_source_literal_unavailable')], markers=['m']) for i in range(10)]
+    rows += [flagged(f'f{i}', 'protected_source_literal_unavailable', pages=(2,), markers=['m']) for i in range(10)]
     source, render_dir, queue = fixture_delivery(tmp_path, rows)
     report = build_acceptance_report(source, render_dir, queue)
     assert report['verdict'] == DELIVERABLE_WITH_KNOWN_ISSUES
     assert report['major_problems'] == []
     recorded = {entry['category']: entry for entry in report['minor_issues']}
-    assert recorded['protected_source_literal_unavailable']['units'] == 10
+    assert recorded['protected_source_literal_unavailable']['needs_human'] == 10
     assert recorded['protected_source_literal_unavailable']['sample_pages'] == [2]
     outstanding = report['coverage']['human_review_outstanding']
     assert outstanding['unresolved_formula_markers'] == 10
@@ -100,7 +133,7 @@ def test_an_exhausted_unit_stops_delivery(tmp_path):
 
 
 def test_a_critical_quality_issue_stops_delivery(tmp_path):
-    rows = [unit('u0'), unit('u1', state='needs_review', issues=[issue('protected_marker', 'critical')])]
+    rows = [unit('u0'), unit('u1', state='needs_review', issues=[issue('protected_marker', 'critical')], translated='译文内容')]
     source, render_dir, queue = fixture_delivery(tmp_path, rows)
     report = build_acceptance_report(source, render_dir, queue)
     assert report['verdict'] == NOT_DELIVERABLE
@@ -149,7 +182,7 @@ def test_accumulated_minor_issues_escalate_per_category(tmp_path):
     # Ten percent of units with a changed number inventory is far past the
     # strict threshold for that category, even though nothing is critical.
     rows = [unit(f'u{i}') for i in range(90)]
-    rows += [unit(f'n{i}', state='needs_review', issues=[issue('number')]) for i in range(10)]
+    rows += [flagged(f'n{i}', 'number') for i in range(10)]
     source, render_dir, queue = fixture_delivery(tmp_path, rows)
     report = build_acceptance_report(source, render_dir, queue)
     assert report['verdict'] == NOT_DELIVERABLE
@@ -161,7 +194,7 @@ def test_the_same_volume_of_formula_placeholders_stays_deliverable(tmp_path):
     # Same share, different category: a known capability boundary is tolerated
     # where a real-error signal is not.
     rows = [unit(f'u{i}') for i in range(90)]
-    rows += [unit(f'p{i}', state='needs_review', issues=[issue('protected_source_literal_unavailable')]) for i in range(10)]
+    rows += [flagged(f'p{i}', 'protected_source_literal_unavailable') for i in range(10)]
     source, render_dir, queue = fixture_delivery(tmp_path, rows)
     report = build_acceptance_report(source, render_dir, queue)
     assert report['verdict'] == DELIVERABLE_WITH_KNOWN_ISSUES
@@ -169,7 +202,7 @@ def test_the_same_volume_of_formula_placeholders_stays_deliverable(tmp_path):
 
 def test_an_unknown_issue_category_uses_the_strict_default(tmp_path):
     rows = [unit(f'u{i}') for i in range(90)]
-    rows += [unit(f'x{i}', state='needs_review', issues=[issue('something_new')]) for i in range(10)]
+    rows += [flagged(f'x{i}', 'something_new') for i in range(10)]
     source, render_dir, queue = fixture_delivery(tmp_path, rows)
     report = build_acceptance_report(source, render_dir, queue)
     assert report['verdict'] == NOT_DELIVERABLE
@@ -178,26 +211,64 @@ def test_an_unknown_issue_category_uses_the_strict_default(tmp_path):
 
 def test_thresholds_are_overridable(tmp_path):
     rows = [unit(f'u{i}') for i in range(90)]
-    rows += [unit(f'n{i}', state='needs_review', issues=[issue('number')]) for i in range(10)]
+    rows += [flagged(f'n{i}', 'number') for i in range(10)]
     source, render_dir, queue = fixture_delivery(tmp_path, rows)
     report = build_acceptance_report(source, render_dir, queue, thresholds={'number': 0.5})
     assert report['verdict'] == DELIVERABLE_WITH_KNOWN_ISSUES
     assert report['thresholds']['per_category']['number'] == 0.5
 
 
-def test_a_stale_queue_that_hides_blocking_work_stops_delivery(tmp_path):
-    rows = [unit(f'u{i}') for i in range(10)]
-    source, render_dir, queue = fixture_delivery(tmp_path, rows)
-    report = build_acceptance_report(source, render_dir, queue, store_states={'accepted': 9, 'blocked': 1})
-    assert report['verdict'] == NOT_DELIVERABLE
-    assert any(p['kind'] == 'stale_review_queue' for p in report['major_problems'])
+def test_the_store_overrides_a_queue_that_was_written_before_the_fixes(tmp_path):
+    """val.pdf shipped with 25 units whose queue entry predated their fix.
 
-
-def test_a_store_that_merely_differs_in_counts_does_not_stop_delivery(tmp_path):
-    rows = [unit(f'u{i}') for i in range(10)]
+    Grading the file would have reported defects the delivered book no longer
+    had, and in the other direction would hide ones it did.
+    """
+    rows = [unit('u0'), unit('u1', state='blocked', translated='', pages=(2,))]
     source, render_dir, queue = fixture_delivery(tmp_path, rows)
-    report = build_acceptance_report(source, render_dir, queue, store_states={'accepted': 12})
+    store = FakeStore({
+        'u0': ('accepted', '译文', [], 'hash-u0'),
+        'u1': ('accepted', '修好的译文', [], 'fixed-hash'),
+    })
+    report = build_acceptance_report(source, render_dir, queue, store=store, run_id='r')
     assert report['verdict'] == DELIVERABLE
+    assert report['graded_from'] == 'run_store'
+    assert report['review_queue']['stale_units'] == 1
+    assert report['review_queue']['sample_stale_pages'] == [2]
+
+
+def test_the_store_also_surfaces_a_defect_the_queue_predates(tmp_path):
+    rows = [unit('u0'), unit('u1')]
+    source, render_dir, queue = fixture_delivery(tmp_path, rows)
+    store = FakeStore({
+        'u0': ('accepted', '译文', [], 'hash-u0'),
+        'u1': ('blocked', '', [issue('protected_marker', 'critical')], 'later-hash'),
+    })
+    report = build_acceptance_report(source, render_dir, queue, store=store, run_id='r')
+    assert report['verdict'] == NOT_DELIVERABLE
+    assert {p['kind'] for p in report['major_problems']} >= {'unit_state_blocked', 'critical_quality_issue'}
+
+
+def test_without_a_store_the_report_says_staleness_was_not_checked(tmp_path):
+    rows = [unit('u0')]
+    source, render_dir, queue = fixture_delivery(tmp_path, rows)
+    report = build_acceptance_report(source, render_dir, queue)
+    assert report['graded_from'] == 'review_queue'
+    assert 'staleness could not be checked' in report['review_queue']['note']
+
+
+def test_a_ledger_dismissal_removes_a_warning_from_the_delivery_maths(tmp_path):
+    rows = [unit(f'u{i}') for i in range(90)]
+    rows += [flagged(f'n{i}', 'number') for i in range(10)]
+    source, render_dir, queue = fixture_delivery(tmp_path, rows)
+    assert build_acceptance_report(source, render_dir, queue)['verdict'] == NOT_DELIVERABLE
+    ledger = ReviewLedger([
+        {'unit_id': f'n{i}', 'result_hash': f'hash-n{i}', 'category': 'number', 'verdict': 'dismiss'}
+        for i in range(10)
+    ])
+    report = build_acceptance_report(source, render_dir, queue, ledger=ledger)
+    assert report['verdict'] == DELIVERABLE
+    assert report['ledger']['dismissals_applied'] == 10
 
 
 def test_the_report_states_what_it_did_not_check(tmp_path):
@@ -214,6 +285,6 @@ def test_summary_leads_with_the_verdict_and_names_blocking_problems(tmp_path):
     rows = [unit('u0'), unit('u1', state='blocked', pages=(2,))]
     source, render_dir, queue = fixture_delivery(tmp_path, rows)
     text = format_summary(build_acceptance_report(source, render_dir, queue))
-    assert text.splitlines()[0] == f'verdict: {NOT_DELIVERABLE}'
+    assert text.splitlines()[0].startswith(f'verdict: {NOT_DELIVERABLE}')
     assert 'unit_state_blocked' in text
     assert 'not machine checkable' in text

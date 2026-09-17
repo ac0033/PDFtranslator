@@ -68,7 +68,11 @@ uv run pdftrans acceptance-report --source pdf/<book>.pdf --render-dir output/pd
 
 渲染驱动把 BabelDOC 在 Windows 长进程下的随机内存分配失败隔离在有界子进程里（根因未消除），每块最多重试 3 次，某块耗尽不中断其余块，最后按 `missing_pages` 决定退出码。
 
-验收单按 AGENTS.md 第 2 节分级：未完成翻译、critical 问题、缺页、成品页数不符等为大问题并阻断交付；needs_review 的 major 项按类别聚合为小问题，各类别有独立的累积阈值（公式占位符不可恢复宽松、数字清单变化从严）。报告明确声明**不检查**译文是否忠实、公式是否贴对位置，并给出仍需人工对照原书的页数。
+验收单按 AGENTS.md 第 2 节分级：未完成翻译、critical 问题、缺页、成品页数不符等为大问题并阻断交付；其余告警先经分诊（`src/pdf_translation/triage.py`）消除可证明的检查自身产物和已由人裁定无害的条目，再按类别的累积阈值判定。传 `--run-id` 时以运行库为准，而不是渲染时写下的 `content-review.jsonl` 快照——后者不包含此后的 curated-TM 修复。
+
+分诊只在两种情况下消除告警：规则能证明它是检查的分词产物，或人已在台账里判定无害（按 result_hash 键控，重译即失效）。对 val.pdf 的 165 条人工裁定实测：0 处真实错误被消除，数字告警 136→1，标记顺序 44→0。另新增三类此前没有的信号：`untranslated_unit`（整段未译，排除文献条目）、`leaked_markup`（译文里冒出的标记标签）、`retained_english`（中文行文里的英文，按术语分组，咨询性）。
+
+报告明确声明**不检查**译文是否忠实、公式是否贴对位置、残留英文该不该译，并给出仍需人工对照原书的页数。
 
 目标、能力边界与明确未解决的问题见 `docs/unattended_delivery.md`。
 

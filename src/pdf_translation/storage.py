@@ -181,6 +181,12 @@ class StateStore:
             attempts = con.execute("SELECT COUNT(*) total, SUM(CASE WHEN outcome!='success' THEN 1 ELSE 0 END) failed FROM provider_attempts WHERE run_id=?", (run_id,)).fetchone()
             return {"run_id": run_id, "states": states, "cost_usd": usage["cost"], "input_tokens": usage["input_tokens"], "output_tokens": usage["output_tokens"], "cache_hits": usage["cache_hits"] or 0, "provider_attempts": attempts["total"] or 0, "failed_provider_attempts": attempts["failed"] or 0}
 
+    def results(self, run_id: str) -> dict[str, TranslationResult]:
+        """Read every committed result at once; per-unit reads do not scale."""
+        with self.connect() as con:
+            rows = con.execute("SELECT unit_id,result_json FROM tasks WHERE run_id=? AND result_json IS NOT NULL", (run_id,)).fetchall()
+            return {row["unit_id"]: TranslationResult.model_validate_json(row["result_json"]) for row in rows}
+
     def quality_reports(self, run_id: str) -> list[dict]:
         with self.connect() as con:
             rows = con.execute("SELECT unit_id,state,quality_json FROM tasks WHERE run_id=? ORDER BY unit_id", (run_id,)).fetchall()
