@@ -70,6 +70,10 @@ _COPYRIGHT = re.compile(r"^\s*(?:©|\(c\))", re.I)
 NEEDS_HUMAN = "needs_human"
 DISMISSED_BY_RULE = "dismissed_by_rule"
 DISMISSED_BY_LEDGER = "dismissed_by_ledger"
+#: A model said this is not a defect. Counted, annotated, and by default still
+#: left on the human list: a model asserting there is no problem is not evidence
+#: that there is none (AGENTS.md section 5).
+DISMISSED_BY_MODEL = "dismissed_by_model"
 
 #: A term seen in this share of all units is document furniture - a running
 #: footer, the authors' names - not a translation defect.
@@ -252,6 +256,10 @@ class ReviewLedger:
         payload = json.loads(Path(path).read_text(encoding="utf-8"))
         return cls(payload.get("entries", []), set(payload.get("retained_terms", [])))
 
+    @staticmethod
+    def is_model_verdict(entry: dict) -> bool:
+        return str(entry.get("reviewed_by") or "").startswith("model:")
+
     def dump(self, path: Path, *, note: str = "") -> None:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         payload = {
@@ -277,15 +285,26 @@ class ReviewLedger:
 
 def _bucket(categories: dict, name: str) -> dict:
     return categories.setdefault(name, {
-        "total": 0, DISMISSED_BY_RULE: 0, DISMISSED_BY_LEDGER: 0, NEEDS_HUMAN: 0, "rules": {},
+        "total": 0, DISMISSED_BY_RULE: 0, DISMISSED_BY_LEDGER: 0, DISMISSED_BY_MODEL: 0,
+        NEEDS_HUMAN: 0, "rules": {},
     })
 
 
-def triage_rows(rows: list[dict], *, ledger: ReviewLedger | None = None, profile: DocumentProfile | None = None) -> dict:
+def triage_rows(
+    rows: list[dict],
+    *,
+    ledger: ReviewLedger | None = None,
+    profile: DocumentProfile | None = None,
+    trust_model_verdicts: bool = False,
+) -> dict:
     """Sort every warning into dismissed or needs_human, and add the new signals.
 
     ``residual`` is what a person actually has to read, and what delivery
     thresholds should be judged against instead of the raw warning counts.
+
+    A model verdict from the ledger annotates its warning with the model's
+    reason and quotes but, unless ``trust_model_verdicts`` is set, leaves the
+    warning on the human list. It shortens the reading, not the list.
     """
     ledger = ledger or ReviewLedger([])
     profile = profile or DocumentProfile(rows)
@@ -294,17 +313,34 @@ def triage_rows(rows: list[dict], *, ledger: ReviewLedger | None = None, profile
     term_pages: dict[str, set[int]] = {}
     term_units: Counter = Counter()
 
+    def dismissed(entry: dict, row: dict, category: str) -> tuple[bool, dict | None]:
+        """Apply a ledger verdict. Returns (warning is cleared, model annotation)."""
+        found = ledger.dismissal(row["unit_id"], row.get("result_hash"), category)
+        if found is None:
+            return False, None
+        if not ReviewLedger.is_model_verdict(found):
+            entry[DISMISSED_BY_LEDGER] += 1
+            return True, None
+        entry[DISMISSED_BY_MODEL] += 1
+        annotation = {key: found[key] for key in ("reason", "evidence_source", "evidence_target", "reviewed_by") if key in found}
+        if trust_model_verdicts:
+            return True, annotation
+        return False, annotation
+
     def record(row: dict, category: str, **extra) -> None:
         entry = _bucket(categories, category)
         entry["total"] += 1
-        if ledger.dismissal(row["unit_id"], row.get("result_hash"), category):
-            entry[DISMISSED_BY_LEDGER] += 1
+        cleared, annotation = dismissed(entry, row, category)
+        if cleared:
             return
         entry[NEEDS_HUMAN] += 1
-        residual.append({
+        item = {
             "unit_id": row["unit_id"], "category": category,
             "pages": row.get("source_pages") or [], "result_hash": row.get("result_hash"), **extra,
-        })
+        }
+        if annotation:
+            item["model_verdict"] = annotation
+        residual.append(item)
 
     for row in rows:
         source_text = row.get("source_text") or ""
@@ -318,19 +354,22 @@ def triage_rows(rows: list[dict], *, ledger: ReviewLedger | None = None, profile
             seen.add(category)
             entry = _bucket(categories, category)
             entry["total"] += 1
-            if ledger.dismissal(row["unit_id"], row.get("result_hash"), category):
-                entry[DISMISSED_BY_LEDGER] += 1
+            cleared, annotation = dismissed(entry, row, category)
+            if cleared:
                 continue
             rule = explain_number_warning(source_text, translated_text) if category == "number" else None
-            if rule:
+            if rule and annotation is None:
                 entry[DISMISSED_BY_RULE] += 1
                 entry["rules"][rule] = entry["rules"].get(rule, 0) + 1
                 continue
             entry[NEEDS_HUMAN] += 1
-            residual.append({
+            item = {
                 "unit_id": row["unit_id"], "category": category,
                 "pages": pages, "result_hash": row.get("result_hash"),
-            })
+            }
+            if annotation:
+                item["model_verdict"] = annotation
+            residual.append(item)
 
         if unit_is_untranslated(source_text, translated_text):
             record(row, "untranslated_unit", latin_share=round(latin_share(prose(translated_text)), 3))

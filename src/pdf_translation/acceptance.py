@@ -38,7 +38,15 @@ from pathlib import Path
 import pymupdf
 
 from .capture_coverage import reconcile_capture
-from .triage import DISMISSED_BY_LEDGER, DISMISSED_BY_RULE, NEEDS_HUMAN, DocumentProfile, ReviewLedger, triage_rows
+from .triage import (
+    DISMISSED_BY_LEDGER,
+    DISMISSED_BY_MODEL,
+    DISMISSED_BY_RULE,
+    NEEDS_HUMAN,
+    DocumentProfile,
+    ReviewLedger,
+    triage_rows,
+)
 
 #: Unit states that mean the translation never reached a deliverable form.
 BLOCKING_STATES = ("blocked", "exhausted", "prepared", "not_started")
@@ -236,6 +244,7 @@ def _grade_minor(triage: dict, total_units: int, thresholds: dict[str, float], t
             "raised": counts["total"],
             "dismissed_by_rule": counts[DISMISSED_BY_RULE],
             "dismissed_by_ledger": counts[DISMISSED_BY_LEDGER],
+            "model_says_not_a_problem": counts[DISMISSED_BY_MODEL],
             "needs_human": outstanding,
             "unit_share": round(share, 4),
             "threshold": limit,
@@ -342,8 +351,13 @@ def build_acceptance_report(
         },
         "ledger": {
             "dismissals_applied": sum(counts[DISMISSED_BY_LEDGER] for counts in triage["categories"].values()),
+            "model_verdicts_applied": sum(counts[DISMISSED_BY_MODEL] for counts in triage["categories"].values()),
             "stale_entries": len(triage["stale_ledger_entries"]),
             "retained_terms": len(ledger.retained_terms),
+            "note": (
+                "A model verdict annotates a warning but does not clear it. AGENTS.md section 5: "
+                "a model asserting there is no problem is not evidence that there is none."
+            ),
         },
         "coverage": {
             "checked": [
@@ -396,10 +410,11 @@ def format_summary(report: dict) -> str:
         lines.append("unresolved warnings (recorded for later optimisation):")
         for entry in report["minor_issues"]:
             dismissed = entry["dismissed_by_rule"] + entry["dismissed_by_ledger"]
+            annotated = f", {entry['model_says_not_a_problem']} annotated by a model" if entry["model_says_not_a_problem"] else ""
             origin = f" (from {entry['raised']} raised, {dismissed} dismissed)" if dismissed else ""
             lines.append(
                 f"  - {entry['category']}: {entry['needs_human']} units{origin} "
-                f"({entry['unit_share']:.1%}, threshold {entry['threshold']:.0%}), pages e.g. {entry['sample_pages']}"
+                f"({entry['unit_share']:.1%}, threshold {entry['threshold']:.0%}{annotated}), pages e.g. {entry['sample_pages']}"
             )
     coverage = report.get("capture_coverage")
     if coverage:

@@ -66,6 +66,8 @@ uv run python scripts/render_val_full.py --auto --capture output/pdf/<capture-di
 uv run pdftrans acceptance-report --source pdf/<book>.pdf --render-dir output/pdf/<capture-dir> --run-id <run_id>
 # 单独查捕获层漏了什么（验收单默认已含此项）
 uv run pdftrans capture-coverage --source pdf/<book>.pdf --capture-map output/pdf/<capture-dir>/capture-map.jsonl
+# 让模型判断剩余告警是不是真问题：默认只估算成本，不发送任何请求
+uv run pdftrans review-warnings --source pdf/<book>.pdf --render-dir output/pdf/<capture-dir> --config configs/<run>.toml --run-id <run_id>
 ```
 
 渲染驱动把 BabelDOC 在 Windows 长进程下的随机内存分配失败隔离在有界子进程里（根因未消除），每块最多重试 3 次，某块耗尽不中断其余块，最后按 `missing_pages` 决定退出码。
@@ -77,6 +79,10 @@ uv run pdftrans capture-coverage --source pdf/<book>.pdf --capture-map output/pd
 报告明确声明**不检查**译文是否忠实、公式是否贴对位置、残留英文该不该译，并给出仍需人工对照原书的页数。
 
 验收单还会把源 PDF 与捕获层交出的文本逐页对账（`src/pdf_translation/capture_coverage.py`）。**从未成为翻译单元的文本对其他所有检查都是隐形的**——不阻断、不告警、不进队列，只会以原文印在成品上。对账用 pymupdf 作第二意见，排除代码（等宽字体）、公式字形（数学字体）和 LaTeX 标准算子名。val.pdf 实测 92,076 个正文词中 139 个未捕获（0.151%），并查出第 88 页整列 27 个真值表单元格漏捕——此前无人知道。
+
+`review-warnings` 一条告警一次短调用，比全量翻译便宜几个数量级（val 剩余 23 条告警估算上限 0.0094 美元）。三条硬约束：判定必须逐字引用 source/target 的子串并在本地校验；模型裁定记为 `reviewed_by: model:<id>`，验收单单独计数且**默认仍留在人工清单上**（AGENTS.md 第 5 节：模型说没问题不构成没问题的证据）；模型答不了的类别**不问**——公式占位符它和管线一样读不到，术语该不该保留英文是全书一个决定而非 300 个独立问题。
+
+公式上下文恢复（`src/pdf_translation/protected_literals.py`）也在这一轮加强：BabelDOC 为每个公式存的"原文"其实就是 `<b1>` 占位符本身，真正的字形从不进入文本流，只能从页面读。bbox 不可信时改为要求锚点在**整页**唯一匹配（比信任低置信度的框更强），并接受代码标识符作为上下文。val 实测标记恢复 22.1% → 31.1%，零丢失、零改变。
 
 目标、能力边界与明确未解决的问题见 `docs/unattended_delivery.md`。
 

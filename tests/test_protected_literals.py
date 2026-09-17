@@ -110,3 +110,91 @@ def test_combining_not_equal_glyph_is_readable_to_translator():
     }
     assert recover_protected_literal_hints(page, record) == {"not-equal": "/="}
     document.close()
+
+
+def test_untrusted_bbox_falls_back_to_a_unique_match_on_the_page():
+    """A single match on the whole page is a stronger claim than a bad box."""
+    document = pymupdf.open()
+    page = document.new_page(width=500, height=200)
+    page.insert_text((40, 80), "The value P(X = 7) governs the result.", fontsize=12)
+    record = {
+        "bbox": (0, 0, 10, 10), "bbox_confidence": 0.2,
+        "babeldoc_text": "The value P(X <b1>) governs the result.",
+        "marker_map": {"m": "<b1>"},
+    }
+    assert recover_protected_literal_hints(page, record) == {"m": "=7"}
+    document.close()
+
+
+def test_the_page_fallback_still_refuses_an_ambiguous_match():
+    document = pymupdf.open()
+    page = document.new_page(width=500, height=200)
+    page.insert_text((40, 70), "The value P(X = 7) governs the result.", fontsize=12)
+    page.insert_text((40, 95), "The value P(X = 9) governs the result.", fontsize=12)
+    record = {
+        "bbox": (0, 0, 10, 10), "bbox_confidence": 0.2,
+        "babeldoc_text": "The value P(X <b1>) governs the result.",
+        "marker_map": {"m": "<b1>"},
+    }
+    assert recover_protected_literal_hints(page, record) == {}
+    document.close()
+
+
+def test_a_code_identifier_is_credible_context():
+    """"the sys function" cannot be translated from an opaque marker."""
+    document = pymupdf.open()
+    page = document.new_page(width=500, height=200)
+    page.insert_text((40, 80), "It calls the sys function to advance.", fontsize=12)
+    record = {
+        "bbox": (35, 60, 450, 95), "bbox_confidence": 0.99,
+        "babeldoc_text": "It calls the <b1> function to advance.",
+        "marker_map": {"m": "<b1>"},
+    }
+    assert recover_protected_literal_hints(page, record) == {"m": "sys"}
+    document.close()
+
+
+def test_a_dotted_package_name_is_credible_context():
+    document = pymupdf.open()
+    page = document.new_page(width=500, height=200)
+    page.insert_text((40, 80), "We depend on the Turing.jl package here.", fontsize=12)
+    record = {
+        "bbox": (35, 60, 450, 95), "bbox_confidence": 0.99,
+        "babeldoc_text": "We depend on the <b1> package here.",
+        "marker_map": {"m": "<b1>"},
+    }
+    assert recover_protected_literal_hints(page, record) == {"m": "Turing.jl"}
+    document.close()
+
+
+def test_a_run_of_prose_is_not_a_literal():
+    """A prose gap means the anchors failed to bound the marker."""
+    document = pymupdf.open()
+    page = document.new_page(width=500, height=200)
+    page.insert_text((40, 80), "It calls the very slow and careful routine to advance.", fontsize=12)
+    record = {
+        "bbox": (35, 60, 450, 95), "bbox_confidence": 0.99,
+        "babeldoc_text": "It calls the <b1> to advance.",
+        "marker_map": {"m": "<b1>"},
+    }
+    assert recover_protected_literal_hints(page, record) == {}
+    document.close()
+
+
+def test_the_tightest_bound_that_explains_the_markers_wins():
+    """A wider gap admits a second alignment and would lose the reading.
+
+    With a 16-character gap only the first occurrence can match, so the literal
+    is unique; with 32 both match and the marker would go unresolved.
+    """
+    document = pymupdf.open()
+    page = document.new_page(width=600, height=200)
+    page.insert_text((40, 70), "startX1end", fontsize=12)
+    page.insert_text((40, 95), "startYYYYYYYYYYYYYYYYYYYY1end", fontsize=12)
+    record = {
+        "bbox": (35, 55, 560, 110), "bbox_confidence": 0.99,
+        "babeldoc_text": "start<b1>end",
+        "marker_map": {"m": "<b1>"},
+    }
+    assert recover_protected_literal_hints(page, record) == {"m": "X1"}
+    document.close()

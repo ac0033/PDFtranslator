@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated
 
@@ -10,8 +11,17 @@ from dotenv import load_dotenv
 
 from .babeldoc_adapter import _write_content_review_queue, capture_pdf_sample, run_one_page_spike, run_smoke_document, validate_capture_identity
 from .ab_experiment import MAX_COMBINED_AB_BUDGET_USD, approved_execution_configs, build_blind_review, prepare_ab_manifest
-from .acceptance import NOT_DELIVERABLE, build_acceptance_report, format_summary
-from .triage import ReviewLedger
+from .acceptance import NOT_DELIVERABLE, build_acceptance_report, format_summary, load_review_queue, refresh_from_store
+from .triage import DocumentProfile, ReviewLedger, triage_rows
+from .warning_review import (
+    UNREVIEWABLE_CATEGORIES,
+    DeepSeekWarningReviewProvider,
+    MockWarningReviewProvider,
+    OpenAIWarningReviewProvider,
+    build_warning_cases,
+    ledger_entries,
+    review_warnings,
+)
 from .benchmark import build_samples
 from .capture_coverage import reconcile_capture
 from .config import load_config
@@ -270,6 +280,74 @@ def review_pages(
 ) -> None:
     """Rebuild saved page evidence without API calls."""
     typer.echo(json.dumps(build_page_review(input, output_dir), ensure_ascii=False, indent=2))
+
+
+@app.command("review-warnings")
+def review_warnings_command(
+    source: Annotated[Path, typer.Option("--source", help="Original PDF (for the report header only).")],
+    render_dir: Annotated[Path, typer.Option("--render-dir", help="Directory holding content-review.jsonl.")],
+    config: Annotated[Path, typer.Option("--config", help="Run config supplying the model, prices and budget.")],
+    run_id: Annotated[str, typer.Option("--run-id", help="Grade from this run's live store rather than the queue snapshot.")] = None,
+    runs_root: Annotated[Path, typer.Option("--runs-root")] = Path("runs"),
+    review_ledger: Annotated[Path, typer.Option("--review-ledger", help="Existing verdicts; new ones are merged in with --update-ledger.")] = None,
+    output: Annotated[Path, typer.Option("--output", help="Where to write the review result.")] = None,
+    execute_paid: Annotated[bool, typer.Option("--execute-paid", help="Actually call the provider. Without this only an estimate is produced.")] = False,
+    update_ledger: Annotated[bool, typer.Option("--update-ledger", help="Append the model's verdicts to the ledger.")] = False,
+    provider_name: Annotated[str, typer.Option("--provider", help="deepseek, openai or mock.")] = None,
+    categories: Annotated[list[str], typer.Option("--category", help="Restrict to these warning categories; repeat. Defaults to the ones a model can answer.")] = None,
+) -> None:
+    """Ask a model whether each surviving warning is a real problem.
+
+    Estimates by default and calls nothing. A model verdict is recorded as a
+    model's: acceptance counts it separately and, unless explicitly trusted,
+    leaves the warning on the human list.
+    """
+    queue = render_dir / "content-review.jsonl"
+    if not queue.is_file():
+        raise typer.BadParameter(f"content review queue not found: {queue}")
+    cfg = load_config(config)
+    rows = load_review_queue(queue)
+    if run_id:
+        rows, _stale = refresh_from_store(rows, StateStore(runs_root / run_id / "state.sqlite"), run_id)
+    ledger = ReviewLedger.load(review_ledger)
+    triage = triage_rows(rows, ledger=ledger, profile=DocumentProfile(rows))
+    cases = build_warning_cases(rows, triage["residual"], categories=set(categories) if categories else None)
+
+    chosen = (provider_name or cfg.provider).lower()
+    providers = {
+        "deepseek": lambda: DeepSeekWarningReviewProvider(api_key_env=cfg.api_key_env or "DEEPSEEK_API_KEY"),
+        "openai": lambda: OpenAIWarningReviewProvider(api_key_env=cfg.api_key_env or "OPENAI_API_KEY", base_url=cfg.base_url),
+        "mock": MockWarningReviewProvider,
+    }
+    if chosen not in providers:
+        raise typer.BadParameter(f"unknown provider for warning review: {chosen}")
+
+    result = review_warnings(cases, providers[chosen](), cfg, execute_paid=execute_paid)
+    result["source"] = str(source)
+    result["not_asked"] = {
+        category: sum(1 for item in triage["residual"] if item["category"] == category)
+        for category in sorted(UNREVIEWABLE_CATEGORIES)
+        if any(item["category"] == category for item in triage["residual"])
+    }
+    result["why_not_asked"] = {k: v for k, v in UNREVIEWABLE_CATEGORIES.items() if k in result["not_asked"]}
+    result["cases_by_category"] = {
+        category: sum(1 for case in cases if case["category"] == category)
+        for category in sorted({case["category"] for case in cases})
+    }
+    if execute_paid and update_ledger:
+        if review_ledger is None:
+            raise typer.BadParameter("--update-ledger needs --review-ledger")
+        entries = ledger_entries(result, cases, reviewed_at=datetime.now(timezone.utc).date().isoformat())
+        ReviewLedger(ledger.entries + entries, ledger.retained_terms).dump(review_ledger)
+        result["ledger_entries_added"] = len(entries)
+
+    destination = output or render_dir / "warning-review.json"
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+    typer.echo(json.dumps({k: v for k, v in result.items() if k not in ("verdicts", "failures")}, ensure_ascii=False, indent=2))
+    if not execute_paid:
+        typer.echo("estimate only: nothing was sent to a provider. Re-run with --execute-paid to spend it.")
+    typer.echo(f"wrote {destination}")
 
 
 @app.command("capture-coverage")

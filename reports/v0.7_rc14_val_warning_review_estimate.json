@@ -1,0 +1,29 @@
+{
+  "status": "estimate_only",
+  "estimate": {
+    "cases": 23,
+    "estimated_input_tokens": 11017,
+    "estimated_output_tokens": 5060,
+    "estimated_max_cost_usd": 0.0093771,
+    "budget_usd": 3.75,
+    "within_budget": true,
+    "is_estimate": true,
+    "note": "Ceiling, not a bill: token counts are approximated from character length at 2.0 chars/token and every reply is charged the full output allowance."
+  },
+  "verdicts": [],
+  "failures": [],
+  "source": "pdf\\val.pdf",
+  "not_asked": {
+    "protected_source_literal_unavailable": 1466,
+    "retained_english": 300
+  },
+  "why_not_asked": {
+    "protected_source_literal_unavailable": "the formula's source text could not be recovered for anyone, the model included; it would be judging a marker it cannot read",
+    "retained_english": "whether a term should stay English is one decision for the whole document, not one per occurrence; it belongs in the retained-term list, not in 300 separate questions"
+  },
+  "cases_by_category": {
+    "leaked_markup": 1,
+    "number": 1,
+    "untranslated_unit": 21
+  }
+}
