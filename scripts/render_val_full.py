@@ -17,10 +17,10 @@ Modes:
 from pathlib import Path
 import argparse
 import json
-import subprocess
 import sys
 
 from pdf_translation.acceptance import missing_rendered_pages, page_output_paths
+from pdf_translation.chunk_driver import DEFAULT_MAX_RETRIES, REQUIRED_COMMIT_BYTES, chunk_ranges, require_memory, run_subprocess_chunks, summarise
 from pdf_translation.babeldoc_adapter import (
     _injection_translator,
     _load_layout_model,
@@ -35,48 +35,12 @@ from pdf_translation.storage import StateStore
 import pymupdf
 
 DEFAULT_CHUNK_SIZE = 10
-DEFAULT_MAX_RETRIES = 3
 
 
 # The page-level checkpoint contract lives in pdf_translation.acceptance, which
 # verifies what this script writes; both sides must agree on it.
 page_outputs = page_output_paths
 missing_pages = missing_rendered_pages
-
-
-def chunk_ranges(first_page: int, last_page: int, chunk_size: int) -> list[tuple[int, int]]:
-    """Split an inclusive one-based page span into bounded chunks."""
-    if chunk_size < 1:
-        raise ValueError('chunk size must be at least 1')
-    return [(start, min(start + chunk_size - 1, last_page)) for start in range(first_page, last_page + 1, chunk_size)]
-
-
-def drive_chunks(chunks: list[tuple[int, int]], run_chunk, max_retries: int = DEFAULT_MAX_RETRIES) -> list[dict]:
-    """Run each chunk in its own process, retrying a chunk that fails.
-
-    run_chunk(first_page, last_page) returns a process exit code. A chunk that
-    exhausts its retries does not stop the remaining chunks: an unattended run
-    should salvage every page it can and report the rest.
-    """
-    if max_retries < 1:
-        raise ValueError('max retries must be at least 1')
-    outcomes: list[dict] = []
-    for first, last in chunks:
-        attempts = 0
-        exit_code = None
-        while attempts < max_retries:
-            attempts += 1
-            exit_code = run_chunk(first, last)
-            if exit_code == 0:
-                break
-        outcomes.append({
-            'from_page': first,
-            'to_page': last,
-            'attempts': attempts,
-            'exit_code': exit_code,
-            'ok': exit_code == 0,
-        })
-    return outcomes
 
 
 def merge_rendered_pages(capture: Path, source: Path, output_prefix: str) -> dict:
@@ -177,20 +141,13 @@ def chunk_command(args, first: int, last: int) -> list[str]:
 
 def run_auto(args, page_numbers: list[int]) -> int:
     """Drive every chunk in its own process, then merge. Returns an exit code."""
+    require_memory(args.min_free_mb * 1024 * 1024)
     chunks = chunk_ranges(page_numbers[0], page_numbers[-1], args.chunk_size)
-
-    def run_chunk(first: int, last: int) -> int:
-        print(f'=== chunk {first}-{last} ===', flush=True)
-        return subprocess.run(chunk_command(args, first, last)).returncode
-
-    outcomes = drive_chunks(chunks, run_chunk, max_retries=args.max_retries)
+    outcomes = run_subprocess_chunks(
+        chunks, lambda first, last: chunk_command(args, first, last), max_retries=args.max_retries,
+    )
     still_missing = missing_pages(args.capture, args.source.stem, page_numbers)
-    summary = {
-        'chunks': outcomes,
-        'failed_chunks': [outcome for outcome in outcomes if not outcome['ok']],
-        'retried_chunks': [outcome for outcome in outcomes if outcome['attempts'] > 1],
-        'missing_pages': still_missing,
-    }
+    summary = summarise(outcomes, still_missing)
     if still_missing:
         summary['status'] = 'incomplete'
         print(json.dumps(summary, ensure_ascii=True), flush=True)
@@ -212,6 +169,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument('--to-page', type=int, default=None)
     parser.add_argument('--auto', action='store_true', help='Drive every chunk in its own process, retry crashes, then merge.')
     parser.add_argument('--chunk-size', type=int, default=DEFAULT_CHUNK_SIZE, help='Pages per subprocess in --auto mode.')
+    parser.add_argument('--min-free-mb', type=int, default=REQUIRED_COMMIT_BYTES // 1024 // 1024,
+                        help='Commit headroom required before --auto starts. Lower it only knowing the workload.')
     parser.add_argument('--max-retries', type=int, default=DEFAULT_MAX_RETRIES, help='Attempts per chunk in --auto mode.')
     parser.add_argument('--merge-only', action='store_true')
     return parser

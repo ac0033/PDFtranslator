@@ -5,6 +5,8 @@ from pathlib import Path
 import pymupdf
 import pytest
 
+from pdf_translation import chunk_driver
+
 
 def _load_driver():
     """Load the render script as a module so its globals can be substituted."""
@@ -61,29 +63,6 @@ def test_page_checkpoint_requires_both_mono_and_dual(tmp_path):
     assert driver.missing_pages(capture, stem, [1, 2, 3]) == [2, 3]
 
 
-def test_driver_retries_a_crashed_chunk_and_continues_past_an_exhausted_one():
-    calls = []
-
-    def run_chunk(first, last):
-        calls.append((first, last))
-        if first == 11:
-            return 0 if calls.count((11, 20)) >= 2 else 1
-        if first == 21:
-            return 1
-        return 0
-
-    outcomes = driver.drive_chunks([(1, 10), (11, 20), (21, 30), (31, 40)], run_chunk, max_retries=3)
-    assert [o['attempts'] for o in outcomes] == [1, 2, 3, 1]
-    assert [o['ok'] for o in outcomes] == [True, True, False, True]
-    # An exhausted chunk must not abort the run: page 31-40 still ran.
-    assert (31, 40) in calls
-
-
-def test_driver_rejects_a_retry_budget_that_never_runs():
-    with pytest.raises(ValueError):
-        driver.drive_chunks([(1, 10)], lambda first, last: 0, max_retries=0)
-
-
 def test_chunk_command_round_trips_through_the_parser(tmp_path):
     args = driver.build_parser().parse_args([
         '--capture', str(tmp_path / 'cap'),
@@ -122,6 +101,9 @@ def test_merge_refuses_to_publish_a_book_with_a_missing_page(tmp_path):
 
 def fake_subprocess(monkeypatch, source, capture, *, crash_pages=(), crash_times=0):
     """Replace the chunk subprocess with one that writes the page checkpoints."""
+    # The driver preflights commit headroom before starting; these tests are
+    # about the loop, not about how loaded the machine running them is.
+    monkeypatch.setattr(chunk_driver, 'available_commit_bytes', lambda: 8 * 1024 * 1024 * 1024)
     attempts = {}
 
     class Completed:
@@ -138,7 +120,7 @@ def fake_subprocess(monkeypatch, source, capture, *, crash_pages=(), crash_times
             write_page_pair(capture, source.stem, number, source, number - 1)
         return Completed(0)
 
-    monkeypatch.setattr(driver.subprocess, 'run', fake_run)
+    monkeypatch.setattr(chunk_driver.subprocess, 'run', fake_run)
     return attempts
 
 
@@ -192,9 +174,11 @@ def test_merge_only_mode_does_not_render(tmp_path, monkeypatch):
     for index in range(3):
         write_page_pair(capture, source.stem, index + 1, source, index)
 
+    monkeypatch.setattr(chunk_driver, 'available_commit_bytes', lambda: 8 * 1024 * 1024 * 1024)
+
     def refuse(*args, **kwargs):
         raise AssertionError('--merge-only must not spawn a render subprocess')
 
-    monkeypatch.setattr(driver.subprocess, 'run', refuse)
+    monkeypatch.setattr(chunk_driver.subprocess, 'run', refuse)
     assert driver.main(['--merge-only', '--capture', str(capture), '--source', str(source)]) == 0
     assert (capture / 'source.usable-deepseek.zh.mono.pdf').is_file()

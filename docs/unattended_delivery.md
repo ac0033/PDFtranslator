@@ -251,6 +251,42 @@ uv run pdftrans review-warnings ... --execute-paid --update-ledger
 
 预算门复用既有 `budget.py`：估算超预算直接拒绝启动。校验失败的裁定记为 failure 而非静默丢弃。
 
+## 换一本书：optimization.pdf 暴露的三个缺口
+
+目标是"对**常规文本型 PDF** 无人值守一次交付可用"，而此前端到端只跑过 val.pdf 一本。拿 optimization.pdf（634 页，抽第 150–269 页共 120 页）来验证，**第一次跑就失败了**——这正是换一本书的意义。
+
+### 1. 捕获阶段没有崩溃防护
+
+```
+RuntimeError: code=2: realloc (3405097 bytes) failed
+```
+
+第 ① 步给**渲染**做了子进程隔离 + 有界重试，**捕获没有**：`capture_val_full.py` 虽然分块、可续跑，但那个循环跑在**同一个进程里**，内存压力照样累积。val.pdf 当年是靠人手工分批跑绕过去的，所以这个洞一直没暴露；换一本书，第一块 20 页就倒了。
+
+修法不是在捕获脚本里再抄一遍渲染的驱动，而是把它提到包里：`src/pdf_translation/chunk_driver.py`，**渲染和捕获共用同一份**。复制一遍的代价是只修一边——这次就是这么漏的。
+
+### 2. 捕获脚本只支持整本
+
+`expected_chunks` 按全书页数算、`physical_pages` 硬写 1..N，所以捕获一个**页范围**会在合并阶段永远等不齐。现在页范围是一等输入，`--total-pages` 默认从 PDF 自己读，`--capture-root` 可配置。
+
+### 3. 资源不足时死得不知所云
+
+```
+OpenBLAS error: Memory allocation still failed after 10 retries, giving up.
+```
+
+真实原因是 Windows 的**提交内存（commit charge）耗尽**——上限 36.9 GB 已用 36.8 GB，物理内存却还有 2.3 GB 空闲。**看空闲内存是看不出来的**，Windows 按 commit 限额拒绝分配。而这条报错既不指向原因也不指向解法，无人值守下等于跑十分钟后拿到一句天书。
+
+现在 `--auto` 启动前预检提交内存，不够就**一秒内**报清楚数字：
+
+```
+MemoryError: only 839 MB of commit headroom, need 2048 MB. Free memory before
+starting: a long BabelDOC run dies inside OpenBLAS with an error that names
+neither the cause nor the cure.
+```
+
+阈值是**实测**来的，不是拍的：366 MB 余量时连一页都读不到就死在 OpenBLAS；1563 MB 时两页捕获正常完成（264 秒 / 31 单元）。2 GB 是这个下界加余量，并且只是默认值——`--min-free-mb` 可以调低，因为**拦住一个本来能跑完的任务同样是一种失败**。
+
 ## 在 val.pdf 上的实际结论（2026-09-17）
 
 ```
