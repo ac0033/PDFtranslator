@@ -7,7 +7,10 @@ from difflib import SequenceMatcher
 import gc
 import json
 import re
+import shutil
 import threading
+import time
+import warnings
 from pathlib import Path
 
 import pymupdf
@@ -293,6 +296,41 @@ async def _translate(config):
     raise RuntimeError("BabelDOC ended without a finish event")
 
 
+def _purge_working_dir(working_dir, attempts: int = 5) -> bool:
+    """Delete a BabelDOC working directory that upstream cleanup left behind.
+
+    BabelDOC ends every run with ``shutil.rmtree(working_dir, ignore_errors=True)``.
+    On POSIX that removes everything; on Windows a file with a live handle cannot be
+    unlinked, and ``ignore_errors`` swallows the refusal without a log line. In
+    practice two files survive every run -- ``input.pdf``, still held by PyMuPDF, and
+    ``temp_subset_output_mono.pdf`` from font subsetting -- stranding ~25 MB per page
+    in ``%TEMP%``. A batch run leaves thousands of those directories.
+
+    Collecting garbage drops the PyMuPDF ``Document`` objects nothing references any
+    more, which closes their handles; the backoff covers handles the OS has not
+    released yet. Returns True when the directory is gone.
+    """
+    if working_dir is None:
+        return True
+    target = Path(working_dir)
+    for attempt in range(attempts):
+        gc.collect()
+        shutil.rmtree(target, ignore_errors=True)
+        if not target.exists():
+            return True
+        time.sleep(0.2 * (attempt + 1))
+    if target.exists():
+        # Never fail a translation over cleanup, but never swallow it either --
+        # a silent leak is what buried the drive in the first place.
+        warnings.warn(
+            f"BabelDOC working directory could not be removed: {target}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return False
+    return True
+
+
 def _run_babeldoc_page(source: Path, page_index: int, output_dir: Path, translator, layout=None):
     from babeldoc.format.pdf.translation_config import TranslationConfig
 
@@ -318,7 +356,11 @@ def _run_babeldoc_page(source: Path, page_index: int, output_dir: Path, translat
         disable_same_text_fallback=True,
     )
     getattr(layout, "init_font_mapper", lambda _config: None)(config)
-    return asyncio.run(_translate(config))
+    try:
+        return asyncio.run(_translate(config))
+    finally:
+        # Outputs live under output_dir, so the working dir is disposable here.
+        _purge_working_dir(config.working_dir)
 
 
 def extract_page_units(source: Path, page_index: int, capture_dir: Path, layout=None) -> tuple[list[TranslationUnit], list[dict]]:
@@ -863,7 +905,10 @@ def run_one_page_spike(source: Path, page_index: int, output_dir: Path) -> dict:
         disable_rich_text_translate=True,
     )
     getattr(layout, "init_font_mapper", lambda _config: None)(config)
-    result = asyncio.run(_translate(config))
+    try:
+        result = asyncio.run(_translate(config))
+    finally:
+        _purge_working_dir(config.working_dir)
     document_sha256 = sha256_file(source)
     for row in records:
         row["page_index"] = page_index
