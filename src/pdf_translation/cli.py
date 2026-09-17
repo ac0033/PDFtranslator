@@ -13,6 +13,7 @@ from .ab_experiment import MAX_COMBINED_AB_BUDGET_USD, approved_execution_config
 from .acceptance import NOT_DELIVERABLE, build_acceptance_report, format_summary
 from .triage import ReviewLedger
 from .benchmark import build_samples
+from .capture_coverage import reconcile_capture
 from .config import load_config
 from .analyzer import extract_term_candidates, validate_semantic_evidence
 from .context_models import ContextBundle, GlossaryEntry, Scope, StyleRule, make_invalidation_report
@@ -271,6 +272,26 @@ def review_pages(
     typer.echo(json.dumps(build_page_review(input, output_dir), ensure_ascii=False, indent=2))
 
 
+@app.command("capture-coverage")
+def capture_coverage(
+    source: Annotated[Path, typer.Option("--source", help="Original PDF.")],
+    capture_map: Annotated[Path, typer.Option("--capture-map", help="capture-map.jsonl produced by the capture step.")],
+    output: Annotated[Path, typer.Option("--output")] = None,
+) -> None:
+    """Find body text the capture layer never delivered. No API calls.
+
+    Text that never became a unit is invisible to every other check: it is not
+    blocked, not flagged, not queued, and it renders in the source language.
+    """
+    report = reconcile_capture(source, capture_map)
+    if output:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    typer.echo(json.dumps({k: v for k, v in report.items() if k != "significant_pages"}, ensure_ascii=False, indent=2))
+    for page in report["significant_pages"]:
+        typer.echo(f"  page {page['page']}: {page['uncaptured_words']} words ({page['share']:.1%}) {page['words']}")
+
+
 @app.command("refresh-review-queue")
 def refresh_review_queue(
     capture: Annotated[Path, typer.Option("--capture", help="Capture directory holding units.jsonl and content-review.jsonl.")],
@@ -306,6 +327,7 @@ def acceptance_report(
     run_id: Annotated[str, typer.Option("--run-id", help="Grade from this run's live store instead of the review queue snapshot.")] = None,
     runs_root: Annotated[Path, typer.Option("--runs-root")] = Path("runs"),
     review_ledger: Annotated[Path, typer.Option("--review-ledger", help="Human verdicts that dismiss warnings while the text is unchanged.")] = None,
+    capture_map: Annotated[Path, typer.Option("--capture-map", help="capture-map.jsonl, for reconciling what the capture layer delivered.")] = None,
     output: Annotated[Path, typer.Option("--output", help="Where to write acceptance-report.json.")] = None,
 ) -> None:
     """Decide whether a rendered translation can be delivered, without a human."""
@@ -316,6 +338,7 @@ def acceptance_report(
     report = build_acceptance_report(
         source, render_dir, queue, output_prefix=output_prefix,
         store=store, run_id=run_id, ledger=ReviewLedger.load(review_ledger),
+        capture_map=capture_map or render_dir / "capture-map.jsonl",
     )
     destination = output or render_dir / "acceptance-report.json"
     destination.parent.mkdir(parents=True, exist_ok=True)

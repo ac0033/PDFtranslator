@@ -37,6 +37,7 @@ from pathlib import Path
 
 import pymupdf
 
+from .capture_coverage import reconcile_capture
 from .triage import DISMISSED_BY_LEDGER, DISMISSED_BY_RULE, NEEDS_HUMAN, DocumentProfile, ReviewLedger, triage_rows
 
 #: Unit states that mean the translation never reached a deliverable form.
@@ -272,6 +273,7 @@ def build_acceptance_report(
     store=None,
     run_id: str | None = None,
     ledger: ReviewLedger | None = None,
+    capture_map: Path | None = None,
 ) -> dict:
     """Grade one rendered translation and return a machine-readable verdict."""
     queue_rows = load_review_queue(content_review)
@@ -289,7 +291,20 @@ def build_acceptance_report(
     triage = triage_rows(rows, ledger=ledger, profile=DocumentProfile(rows))
     escalated, minor_summary = _grade_minor(triage, len(rows), limits, total_threshold)
 
-    major = [*unit_major, *render_major, *escalated]
+    coverage_report = None
+    coverage_major: list[dict] = []
+    if capture_map and Path(capture_map).is_file():
+        coverage_report = reconcile_capture(source, Path(capture_map))
+        if coverage_report["over_threshold"]:
+            coverage_major.append(_problem(
+                "uncaptured_prose", "major", coverage_report["uncaptured_words"],
+                f"{coverage_report['uncaptured_share']:.2%} of body text never became a translation "
+                f"unit, above the {coverage_report['threshold']:.0%} threshold; that text is in the "
+                "book untranslated and no other check can see it",
+                pages=coverage_report["sample_pages"],
+            ))
+
+    major = [*unit_major, *render_major, *escalated, *coverage_major]
     unresolved_formulas = sum(len(row.get("unresolved_formula_markers") or []) for row in queue_rows)
     formula_pages = {page for row in queue_rows if row.get("unresolved_formula_markers") for page in (row.get("source_pages") or [])}
 
@@ -310,6 +325,7 @@ def build_acceptance_report(
         "major_problems": major,
         "minor_issues": minor_summary,
         "retained_english_terms": triage["retained_english_terms"][:50],
+        "capture_coverage": coverage_report,
         "thresholds": {"per_category": limits, "default_per_category": DEFAULT_CATEGORY_THRESHOLD, "total": total_threshold},
         "review_queue": {
             "path": str(content_review),
@@ -341,6 +357,7 @@ def build_acceptance_report(
                 "markup tags the translation introduced",
                 "English terms left in Chinese prose (advisory; the detector has known noise)",
                 "unresolved warning accumulation against per-category thresholds",
+                "body text the capture layer never delivered, reconciled against an independent extractor",
             ],
             "not_checked": [
                 "whether the Chinese text is a faithful translation of the source",
@@ -384,6 +401,14 @@ def format_summary(report: dict) -> str:
                 f"  - {entry['category']}: {entry['needs_human']} units{origin} "
                 f"({entry['unit_share']:.1%}, threshold {entry['threshold']:.0%}), pages e.g. {entry['sample_pages']}"
             )
+    coverage = report.get("capture_coverage")
+    if coverage:
+        lines.append(
+            f"capture coverage: {coverage['uncaptured_words']} of {coverage['prose_words']} body words "
+            f"never became a unit ({coverage['uncaptured_share']:.2%}, threshold {coverage['threshold']:.0%}); "
+            f"{len(coverage['significant_pages'])} pages worth a look"
+            + (f", e.g. {[p['page'] for p in coverage['significant_pages'][:5]]}" if coverage['significant_pages'] else "")
+        )
     queue = report["review_queue"]
     if queue["stale_units"]:
         lines.append(f"review queue is stale for {queue['stale_units']} units; regenerate it before a human reads it")

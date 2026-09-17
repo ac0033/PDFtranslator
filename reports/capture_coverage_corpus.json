@@ -1,0 +1,74 @@
+{
+  "scope": "Capture-layer reconciliation only, on a deterministic sample of pages per document. No translation, rendering or API call is performed, so this is not evidence that any of these documents can be translated end to end. It calibrates one thing: whether the capture layer hands over a document body text.",
+  "sample_size": 12,
+  "threshold": 0.01,
+  "documents": [
+    {
+      "source": "pdf/val.pdf",
+      "page_count": 442,
+      "sampled_pages": 12,
+      "prose_words": 2719,
+      "uncaptured_words": 2,
+      "uncaptured_share": 0.00074,
+      "pages_with_uncaptured": 1,
+      "significant_pages": []
+    },
+    {
+      "source": "pdf/dm.pdf",
+      "page_count": 700,
+      "sampled_pages": 11,
+      "prose_words": 1830,
+      "uncaptured_words": 2,
+      "uncaptured_share": 0.00109,
+      "pages_with_uncaptured": 1,
+      "significant_pages": []
+    },
+    {
+      "source": "pdf/optimization.pdf",
+      "page_count": 634,
+      "sampled_pages": 12,
+      "prose_words": 1729,
+      "uncaptured_words": 10,
+      "uncaptured_share": 0.00578,
+      "pages_with_uncaptured": 3,
+      "significant_pages": [
+        {
+          "page": 340,
+          "prose_words": 105,
+          "uncaptured_words": 6,
+          "share": 0.0571,
+          "words": {
+            "pow": 1,
+            "extended": 1,
+            "real": 1,
+            "valued": 1,
+            "feasible": 1,
+            "respect": 1
+          }
+        },
+        {
+          "page": 202,
+          "prose_words": 147,
+          "uncaptured_words": 3,
+          "share": 0.0204,
+          "words": {
+            "objective": 1,
+            "function": 1,
+            "value": 1
+          }
+        }
+      ]
+    },
+    {
+      "source": "pdf/cs224n-2019-notes03-neuralnets.pdf",
+      "page_count": 18,
+      "sampled_pages": 12,
+      "prose_words": 2719,
+      "uncaptured_words": 2,
+      "uncaptured_share": 0.00074,
+      "pages_with_uncaptured": 1,
+      "significant_pages": []
+    }
+  ],
+  "note": "optimization.pdf failed outright on the first attempt with a RuntimeError about a missing temp input file. The system temp directory was on a full C: drive at the time; it captured cleanly once temp moved to a disk with space. Recorded because an unattended run must survive that, not because the document is unsupported."
+}

@@ -288,3 +288,50 @@ def test_summary_leads_with_the_verdict_and_names_blocking_problems(tmp_path):
     assert text.splitlines()[0].startswith(f'verdict: {NOT_DELIVERABLE}')
     assert 'unit_state_blocked' in text
     assert 'not machine checkable' in text
+
+
+def write_capture_map(path, per_page):
+    lines = [json.dumps({'page_index': page, 'sequence': i, 'babeldoc_text': text})
+             for page, texts in per_page.items() for i, text in enumerate(texts)]
+    path.write_text("\n".join(lines), encoding='utf-8')
+    return path
+
+
+def test_capture_coverage_is_reported_when_the_capture_map_is_there(tmp_path):
+    rows = [unit('u0')]
+    source, render_dir, queue = fixture_delivery(tmp_path, rows)
+    # fixture_delivery writes "Page 1"/"Page 2"; deliver only page 1's text.
+    capture_map = write_capture_map(render_dir / 'capture-map.jsonl', {0: ['Page 1']})
+    report = build_acceptance_report(source, render_dir, queue, capture_map=capture_map)
+    coverage = report['capture_coverage']
+    assert coverage is not None
+    assert coverage['pages_reconciled'] == 2
+    assert any('capture layer never delivered' in item for item in report['coverage']['checked'])
+
+
+def test_losing_most_of_the_body_text_stops_delivery(tmp_path):
+    """Text that never became a unit is invisible to every other check."""
+    rows = [unit('u0')]
+    source, render_dir, queue = fixture_delivery(tmp_path, rows, pages=3)
+    capture_map = write_capture_map(render_dir / 'capture-map.jsonl', {0: ['Page 1']})
+    report = build_acceptance_report(source, render_dir, queue, capture_map=capture_map)
+    assert report['verdict'] == NOT_DELIVERABLE
+    uncaptured = [p for p in report['major_problems'] if p['kind'] == 'uncaptured_prose']
+    assert uncaptured and uncaptured[0]['pages'] == [2, 3]
+
+
+def test_a_complete_capture_does_not_block_delivery(tmp_path):
+    rows = [unit('u0')]
+    source, render_dir, queue = fixture_delivery(tmp_path, rows, pages=3)
+    capture_map = write_capture_map(render_dir / 'capture-map.jsonl',
+                                    {0: ['Page 1'], 1: ['Page 2'], 2: ['Page 3']})
+    report = build_acceptance_report(source, render_dir, queue, capture_map=capture_map)
+    assert report['verdict'] == DELIVERABLE
+    assert report['capture_coverage']['uncaptured_words'] == 0
+
+
+def test_without_a_capture_map_coverage_is_simply_absent(tmp_path):
+    rows = [unit('u0')]
+    source, render_dir, queue = fixture_delivery(tmp_path, rows)
+    report = build_acceptance_report(source, render_dir, queue, capture_map=render_dir / 'absent.jsonl')
+    assert report['capture_coverage'] is None

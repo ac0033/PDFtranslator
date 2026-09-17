@@ -593,6 +593,135 @@
       ]
     }
   ],
+  "capture_coverage": {
+    "source": "pdf\\val.pdf",
+    "page_count": 442,
+    "pages_reconciled": 442,
+    "prose_words": 92040,
+    "uncaptured_words": 130,
+    "uncaptured_share": 0.00141,
+    "threshold": 0.01,
+    "over_threshold": false,
+    "pages_with_uncaptured": 45,
+    "significance_floor": 3,
+    "significant_pages": [
+      {
+        "page": 88,
+        "prose_words": 116,
+        "uncaptured_words": 27,
+        "share": 0.2328,
+        "words": {
+          "true": 27
+        }
+      },
+      {
+        "page": 396,
+        "prose_words": 92,
+        "uncaptured_words": 14,
+        "share": 0.1522,
+        "words": {
+          "pred": 10,
+          "true": 4
+        }
+      },
+      {
+        "page": 61,
+        "prose_words": 63,
+        "uncaptured_words": 10,
+        "share": 0.1587,
+        "words": {
+          "true": 8,
+          "pdf": 1,
+          "cdf": 1
+        }
+      },
+      {
+        "page": 177,
+        "prose_words": 171,
+        "uncaptured_words": 7,
+        "share": 0.0409,
+        "words": {
+          "fail": 6,
+          "high": 1
+        }
+      },
+      {
+        "page": 86,
+        "prose_words": 275,
+        "uncaptured_words": 4,
+        "share": 0.0145,
+        "words": {
+          "alert": 4
+        }
+      },
+      {
+        "page": 105,
+        "prose_words": 215,
+        "uncaptured_words": 4,
+        "share": 0.0186,
+        "words": {
+          "true": 4
+        }
+      },
+      {
+        "page": 297,
+        "prose_words": 240,
+        "uncaptured_words": 4,
+        "share": 0.0167,
+        "words": {
+          "fail": 4
+        }
+      },
+      {
+        "page": 381,
+        "prose_words": 276,
+        "uncaptured_words": 4,
+        "share": 0.0145,
+        "words": {
+          "limit": 3,
+          "sign": 1
+        }
+      },
+      {
+        "page": 71,
+        "prose_words": 113,
+        "uncaptured_words": 3,
+        "share": 0.0265,
+        "words": {
+          "sign": 3
+        }
+      },
+      {
+        "page": 321,
+        "prose_words": 160,
+        "uncaptured_words": 3,
+        "share": 0.0187,
+        "words": {
+          "rad": 3
+        }
+      },
+      {
+        "page": 329,
+        "prose_words": 123,
+        "uncaptured_words": 3,
+        "share": 0.0244,
+        "words": {
+          "changes": 3
+        }
+      }
+    ],
+    "sample_pages": [
+      88,
+      396,
+      61,
+      177,
+      86,
+      105,
+      297,
+      381
+    ],
+    "scope": "Alphabetic words of three or more characters in body-text fonts. Code (monospace fonts), formula glyphs (mathematical fonts) and standard LaTeX operator names are excluded because the pipeline preserves them deliberately. Digits are excluded. A word the capture merged into its neighbour is treated as captured. This measures what never became a translation unit; it says nothing about whether the units that do exist were translated correctly."
+  },
   "thresholds": {
     "per_category": {
       "protected_source_literal_unavailable": 0.6,
@@ -629,7 +758,8 @@
       "paragraphs that came back in the source language, excluding bibliography entries",
       "markup tags the translation introduced",
       "English terms left in Chinese prose (advisory; the detector has known noise)",
-      "unresolved warning accumulation against per-category thresholds"
+      "unresolved warning accumulation against per-category thresholds",
+      "body text the capture layer never delivered, reconciled against an independent extractor"
     ],
     "not_checked": [
       "whether the Chinese text is a faithful translation of the source",

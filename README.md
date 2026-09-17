@@ -64,6 +64,8 @@ uv run pdftrans review-pages --input pdf/cs224n-2019-notes03-neuralnets.pdf --ou
 uv run python scripts/render_val_full.py --auto --capture output/pdf/<capture-dir> --config configs/<run>.toml --source pdf/<book>.pdf
 # 判断能否交付：产出 acceptance-report.json；not_deliverable 时退出码非零
 uv run pdftrans acceptance-report --source pdf/<book>.pdf --render-dir output/pdf/<capture-dir> --run-id <run_id>
+# 单独查捕获层漏了什么（验收单默认已含此项）
+uv run pdftrans capture-coverage --source pdf/<book>.pdf --capture-map output/pdf/<capture-dir>/capture-map.jsonl
 ```
 
 渲染驱动把 BabelDOC 在 Windows 长进程下的随机内存分配失败隔离在有界子进程里（根因未消除），每块最多重试 3 次，某块耗尽不中断其余块，最后按 `missing_pages` 决定退出码。
@@ -73,6 +75,8 @@ uv run pdftrans acceptance-report --source pdf/<book>.pdf --render-dir output/pd
 分诊只在两种情况下消除告警：规则能证明它是检查的分词产物，或人已在台账里判定无害（按 result_hash 键控，重译即失效）。对 val.pdf 的 165 条人工裁定实测：0 处真实错误被消除，数字告警 136→1，标记顺序 44→0。另新增三类此前没有的信号：`untranslated_unit`（整段未译，排除文献条目）、`leaked_markup`（译文里冒出的标记标签）、`retained_english`（中文行文里的英文，按术语分组，咨询性）。
 
 报告明确声明**不检查**译文是否忠实、公式是否贴对位置、残留英文该不该译，并给出仍需人工对照原书的页数。
+
+验收单还会把源 PDF 与捕获层交出的文本逐页对账（`src/pdf_translation/capture_coverage.py`）。**从未成为翻译单元的文本对其他所有检查都是隐形的**——不阻断、不告警、不进队列，只会以原文印在成品上。对账用 pymupdf 作第二意见，排除代码（等宽字体）、公式字形（数学字体）和 LaTeX 标准算子名。val.pdf 实测 92,076 个正文词中 139 个未捕获（0.151%），并查出第 88 页整列 27 个真值表单元格漏捕——此前无人知道。
 
 目标、能力边界与明确未解决的问题见 `docs/unattended_delivery.md`。
 
