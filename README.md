@@ -57,6 +57,21 @@ uv run pdftrans review-pages --input pdf/cs224n-2019-notes03-neuralnets.pdf --ou
 
 `--render-review-draft` 只允许全部单元均已有结果且不存在 critical 问题时生成待审稿；major 警告仍记录在逐页验收中，不会被清除。严格识别的短符号赋值公式保持原样；该修复允许已误送模型的公式从原台账恢复，不增加重试。跨页连字符片段会标为需要复核。预算耗尽和重试耗尽都会保留费用台账及逐段复核文件。可选 `agent-review.json` 必须绑定原文和译稿 SHA-256，并恰好覆盖全部选定页；它不等同于人工批准。
 
+## 整本渲染与自动验收（无人值守）
+
+```powershell
+# 渲染整本：每 10 页一个子进程，崩溃自动重试、页级续跑，齐全后自动合并并写回书签
+uv run python scripts/render_val_full.py --auto --capture output/pdf/<capture-dir> --config configs/<run>.toml --source pdf/<book>.pdf
+# 判断能否交付：产出 acceptance-report.json；not_deliverable 时退出码非零
+uv run pdftrans acceptance-report --source pdf/<book>.pdf --render-dir output/pdf/<capture-dir> --run-id <run_id>
+```
+
+渲染驱动把 BabelDOC 在 Windows 长进程下的随机内存分配失败隔离在有界子进程里（根因未消除），每块最多重试 3 次，某块耗尽不中断其余块，最后按 `missing_pages` 决定退出码。
+
+验收单按 AGENTS.md 第 2 节分级：未完成翻译、critical 问题、缺页、成品页数不符等为大问题并阻断交付；needs_review 的 major 项按类别聚合为小问题，各类别有独立的累积阈值（公式占位符不可恢复宽松、数字清单变化从严）。报告明确声明**不检查**译文是否忠实、公式是否贴对位置，并给出仍需人工对照原书的页数。
+
+目标、能力边界与明确未解决的问题见 `docs/unattended_delivery.md`。
+
 ## 快速开始
 
 ```powershell

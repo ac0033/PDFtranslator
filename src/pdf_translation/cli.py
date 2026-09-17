@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 
 from .babeldoc_adapter import capture_pdf_sample, run_one_page_spike, run_smoke_document, validate_capture_identity
 from .ab_experiment import MAX_COMBINED_AB_BUDGET_USD, approved_execution_configs, build_blind_review, prepare_ab_manifest
+from .acceptance import NOT_DELIVERABLE, build_acceptance_report, format_summary
 from .benchmark import build_samples
 from .config import load_config
 from .analyzer import extract_term_candidates, validate_semantic_evidence
@@ -267,6 +268,35 @@ def review_pages(
 ) -> None:
     """Rebuild saved page evidence without API calls."""
     typer.echo(json.dumps(build_page_review(input, output_dir), ensure_ascii=False, indent=2))
+
+
+@app.command("acceptance-report")
+def acceptance_report(
+    source: Annotated[Path, typer.Option("--source", help="Original PDF the translation was rendered from.")],
+    render_dir: Annotated[Path, typer.Option("--render-dir", help="Directory holding page-NNNN output and the merged books.")],
+    content_review: Annotated[Path, typer.Option("--content-review", help="content-review.jsonl produced by the run.")] = None,
+    output_prefix: Annotated[str, typer.Option("--output-prefix", help="Infix of the merged book filenames.")] = "usable-deepseek",
+    run_id: Annotated[str, typer.Option("--run-id", help="Cross-check the review queue against this run's live store.")] = None,
+    runs_root: Annotated[Path, typer.Option("--runs-root")] = Path("runs"),
+    output: Annotated[Path, typer.Option("--output", help="Where to write acceptance-report.json.")] = None,
+) -> None:
+    """Decide whether a rendered translation can be delivered, without a human."""
+    queue = content_review or render_dir / "content-review.jsonl"
+    if not queue.is_file():
+        raise typer.BadParameter(f"content review queue not found: {queue}")
+    store_states = None
+    if run_id:
+        store_states = StateStore(runs_root / run_id / "state.sqlite").summary(run_id)["states"]
+    report = build_acceptance_report(
+        source, render_dir, queue, output_prefix=output_prefix, store_states=store_states,
+    )
+    destination = output or render_dir / "acceptance-report.json"
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    typer.echo(format_summary(report))
+    typer.echo(f"wrote {destination}")
+    if report["verdict"] == NOT_DELIVERABLE:
+        raise typer.Exit(code=1)
 
 
 @app.command("audit-nontext")

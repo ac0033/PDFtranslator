@@ -20,6 +20,7 @@ import json
 import subprocess
 import sys
 
+from pdf_translation.acceptance import missing_rendered_pages, page_output_paths
 from pdf_translation.babeldoc_adapter import (
     _injection_translator,
     _load_layout_model,
@@ -29,7 +30,6 @@ from pdf_translation.babeldoc_adapter import (
 )
 from pdf_translation.config import load_config
 from pdf_translation.cross_page import split_document_translation
-from pdf_translation.schemas import TranslationUnit
 from pdf_translation.storage import StateStore
 
 import pymupdf
@@ -38,19 +38,10 @@ DEFAULT_CHUNK_SIZE = 10
 DEFAULT_MAX_RETRIES = 3
 
 
-def page_outputs(capture: Path, stem: str, page_number: int) -> tuple[Path, Path]:
-    """Locate the mono and dual PDFs one rendered page is expected to produce."""
-    page_dir = capture / f'page-{page_number:04d}'
-    return page_dir / f'{stem}.zh.mono.pdf', page_dir / f'{stem}.zh.dual.pdf'
-
-
-def page_is_rendered(capture: Path, stem: str, page_number: int) -> bool:
-    mono, dual = page_outputs(capture, stem, page_number)
-    return mono.is_file() and dual.is_file()
-
-
-def missing_pages(capture: Path, stem: str, page_numbers: list[int]) -> list[int]:
-    return [number for number in page_numbers if not page_is_rendered(capture, stem, number)]
+# The page-level checkpoint contract lives in pdf_translation.acceptance, which
+# verifies what this script writes; both sides must agree on it.
+page_outputs = page_output_paths
+missing_pages = missing_rendered_pages
 
 
 def chunk_ranges(first_page: int, last_page: int, chunk_size: int) -> list[tuple[int, int]]:
@@ -212,7 +203,7 @@ def run_auto(args, page_numbers: list[int]) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--capture', type=Path, default=Path('output/pdf/val-usable-babeldoc-full-r1'), help='Capture directory holding capture-map.jsonl, units.jsonl and per-page output.')
+    parser.add_argument('--capture', type=Path, default=Path('output/pdf/val-usable-babeldoc-full-r1'), help='Capture directory holding capture-map.jsonl and per-page output.')
     parser.add_argument('--config', type=Path, default=Path('configs/val.usable.deepseek.full.toml'))
     parser.add_argument('--source', type=Path, default=Path('pdf/val.pdf'))
     parser.add_argument('--runs-root', type=Path, default=Path('runs'), help='Root holding <run_id>/state.sqlite.')

@@ -1,0 +1,112 @@
+{
+  "verdict": "deliverable_with_known_issues",
+  "source": "pdf\\val.pdf",
+  "render_dir": "output\\pdf\\val-usable-babeldoc-full-r1",
+  "units": {
+    "total": 4963,
+    "states": {
+      "accepted": 3379,
+      "needs_review": 1584
+    }
+  },
+  "render": {
+    "source_pages": 442,
+    "rendered_pages": 442,
+    "books": {
+      "val.usable-deepseek.zh.mono.pdf": 442,
+      "val.usable-deepseek.zh.dual.pdf": 442
+    }
+  },
+  "major_problems": [],
+  "minor_issues": [
+    {
+      "category": "protected_source_literal_unavailable",
+      "issues": 1466,
+      "units": 1466,
+      "unit_share": 0.2954,
+      "threshold": 0.6,
+      "sample_pages": [
+        4,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23
+      ]
+    },
+    {
+      "category": "number",
+      "issues": 136,
+      "units": 136,
+      "unit_share": 0.0274,
+      "threshold": 0.05,
+      "sample_pages": [
+        13,
+        18,
+        19,
+        20,
+        21,
+        23,
+        26,
+        28,
+        29,
+        31
+      ]
+    },
+    {
+      "category": "protected_marker_order",
+      "issues": 44,
+      "units": 44,
+      "unit_share": 0.0089,
+      "threshold": 0.05,
+      "sample_pages": [
+        53,
+        55,
+        104,
+        107,
+        109,
+        110,
+        111,
+        112,
+        121,
+        127
+      ]
+    }
+  ],
+  "thresholds": {
+    "per_category": {
+      "protected_source_literal_unavailable": 0.6,
+      "number": 0.05,
+      "protected_marker_order": 0.05,
+      "url": 0.02,
+      "terminology": 0.02
+    },
+    "default_per_category": 0.05,
+    "total": 0.8
+  },
+  "coverage": {
+    "checked": [
+      "unit state reached a deliverable translation",
+      "no critical quality issue survived",
+      "every unit has translated text",
+      "every source page has complete mono/dual render output",
+      "both merged books exist and match the source page count",
+      "minor issue accumulation against per-category thresholds"
+    ],
+    "not_checked": [
+      "whether the Chinese text is a faithful translation of the source",
+      "whether preserved formula images sit beside the right prose",
+      "visual layout quality beyond page presence and page count"
+    ],
+    "human_review_outstanding": {
+      "unresolved_formula_markers": 3998,
+      "pages_with_unresolved_formulas": 361,
+      "note": "formula placeholder meaning is not machine checkable here; these pages need a human against the source PDF"
+    },
+    "limitation": "this verdict covers the artifacts named above only; it is not evidence about any other document"
+  }
+}
