@@ -1,0 +1,1 @@
+本书为 Algorithms for Decision Making（决策算法教材）。逐段完整翻译，不总结、不删减、不添加原文没有的解释；保留公式标记、数字、变量名、算法名和条件/否定关系；同一术语全书一致（如 value function 价值函数、policy 策略、reward 奖励、belief 信念、rollout 推演、Markov decision process 马尔可夫决策过程、policy gradient 策略梯度）；算法伪代码与代码块中的标识符保持英文原样。
