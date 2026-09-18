@@ -33,6 +33,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument('--capture-root', type=Path, default=Path('tmp/pdfs'), help='Parent of the BabelDOC scratch directory.')
     parser.add_argument('--sample-name', default='usable-sample')
     parser.add_argument('--style-note', default=None, help='Book-specific instruction appended to the default style.')
+    parser.add_argument('--style-note-file', type=Path, default=None,
+                        help='Read --style-note from this UTF-8 file. A batch file cannot carry non-ASCII text safely.')
     parser.add_argument('--style-version', default='usable-v1', help='Version stamped on the stored style rule.')
     parser.add_argument('--execute-paid', action='store_true')
     return parser
@@ -54,7 +56,12 @@ def main(argv: list[str] | None = None) -> int:
     document_id = next(iter(documents))
 
     store = ContextStore(Path(config.context_db))
-    content = DEFAULT_TRANSLATION_STYLE + ('\n' + args.style_note if args.style_note else '')
+    note = args.style_note
+    if args.style_note_file:
+        if note:
+            raise ValueError('pass --style-note or --style-note-file, not both')
+        note = args.style_note_file.read_text(encoding='utf-8').strip()
+    content = DEFAULT_TRANSLATION_STYLE + ('\n' + note if note else '')
     store.put_style(StyleRule(
         rule_id=f'{args.sample_name}-style-{document_id}',
         scope=Scope(kind='document', value=document_id),
