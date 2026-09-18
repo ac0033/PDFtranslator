@@ -3,6 +3,7 @@ import pytest
 from pdf_translation.semantic_layout import (
     group_semantic_fragments,
     layout_boundaries_are_natural,
+    marker_fragment_index,
     layout_marker,
     rebalance_layout_markers,
     restore_and_rebalance_layout_markers,
@@ -170,3 +171,62 @@ def test_layout_boundary_accepts_toc_entries_ending_in_page_numbers():
     assert layout_boundaries_are_natural(mid_sentence_digit) is True
     dangling = f"{first_marker}概率分布为结果分配概率{second_marker}的表示方式。"
     assert layout_boundaries_are_natural(dangling) is False
+
+
+def test_layout_markers_are_placed_by_fragment_when_chinese_reorders_the_clause():
+    """optimization.pdf page 207, verbatim, three attempts, all abandoned.
+
+    Every marker came back intact and the layout order was right, but Chinese
+    fronts the conditional clause, so the footnote marker traded places with a
+    formula. The strict repair gives up on any reordering, so nothing placed
+    the layout marker and the paragraph was never translated.
+    """
+    from pdf_translation.semantic_layout import place_layout_markers_by_fragment
+
+    source = (
+        '⟦P:layout-a⟧and find that our constraint is satisfied⟦P:bd-o000⟧when y⟦P:bd-o001⟧:m '
+        '⟦P:bd-o002⟧L⟦P:bd-o003⟧b. The remaining ⟦P:layout-b⟧variables in y(m⟦P:bd-o007⟧:n) can take on any values.'
+    )
+    translated = (
+        '⟦P:layout-a⟧并发现当 y⟦P:bd-o001⟧:m ⟦P:bd-o002⟧L⟦P:bd-o003⟧b 时，我们的约束得到满足⟦P:bd-o000⟧。'
+        'y(m⟦P:bd-o007⟧:n) 中剩余的变量可以取任意值。'
+    )
+    repaired, changed = place_layout_markers_by_fragment(source, translated)
+    assert changed
+    # The formula that belongs in the second box is back in the second box.
+    assert marker_fragment_index(repaired) == marker_fragment_index(source)
+    assert '⟦P:layout-b⟧y(m⟦P:bd-o007⟧:n)' in repaired
+
+
+def test_no_sentence_boundary_in_the_window_is_left_alone():
+    """optimization.pdf page 172: the only boundary sits nowhere sensible.
+
+    Taking it would move most of the paragraph into a box sized for one line.
+    Declining is the honest answer; the unit degrades to its source instead.
+    """
+    from pdf_translation.semantic_layout import place_layout_markers_by_fragment
+
+    source = (
+        '⟦P:layout-a⟧Another popular method is covariance matrix adaptation,⟦P:bd-o011⟧which is also '
+        'referred ⟦P:layout-b⟧to as CMA-ES or covariance matrix adaptation evolutionary strategy.'
+        '⟦P:bd-o008⟧This method ⟦P:layout-c⟧makes a number of changes.'
+    )
+    translated = (
+        '另一种流行的方法是协方差矩阵自适应，⟦P:bd-o011⟧它也被称为CMA-ES或协方差矩阵自适应进化策略。'
+        '⟦P:bd-o008⟧该方法作了若干改动。'
+    )
+    repaired, changed = place_layout_markers_by_fragment(source, translated)
+    assert not changed
+    assert repaired == translated
+
+
+def test_a_marker_that_would_land_in_the_wrong_box_is_refused():
+    """Containment is the whole point: this must not be repaired into place."""
+    from pdf_translation.semantic_layout import place_layout_markers_by_fragment
+
+    source = '⟦P:layout-a⟧First sentence⟦P:bd-o1⟧. ⟦P:layout-b⟧Second sentence⟦P:bd-o2⟧.'
+    # Both formulas came back inside what would be the first box, with no
+    # boundary left between them for the layout marker to sit at.
+    translated = '第一句⟦P:bd-o2⟧和⟦P:bd-o1⟧第二句。'
+    repaired, changed = place_layout_markers_by_fragment(source, translated)
+    assert not changed and repaired == translated

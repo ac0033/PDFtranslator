@@ -17,10 +17,31 @@ MARKERS = re.compile(r"⟦P:[A-Za-z0-9_.:-]+⟧")
 NUMBERS = re.compile(r"(?<![A-Za-z0-9_])[+-]?(?:\d+(?:\.\d+)?%?)(?![A-Za-z0-9_])")
 URLS = re.compile(r"https?://[^\s)\]}]+")
 URL_TRAILING_PUNCTUATION = ".,;:!?，。；：！？"
+#: Markup that renders literally when it reaches a page. Triage borrows this
+#: to catch what got printed; the gate uses it while a retry can still fix it.
+MARKUP_TAG = re.compile(r"</?[A-Za-z][A-Za-z0-9_-]*>")
 
 
 def url_inventory(text: str) -> list[str]:
     return [value.rstrip(URL_TRAILING_PUNCTUATION) for value in URLS.findall(text)]
+
+
+def marker_fragments(text: str) -> dict[str, int]:
+    """Which layout fragment each protected marker sits in.
+
+    Layout markers are the boundaries between the PDF text boxes a unit is
+    written back into, so this is the thing that decides whether a reordered
+    marker still lands in the right box.
+    """
+    fragment = 0
+    placed: dict[str, int] = {}
+    for match in MARKERS.finditer(text):
+        token = match.group(0)
+        if LAYOUT_MARKER.fullmatch(token):
+            fragment += 1
+            continue
+        placed.setdefault(token, fragment)
+    return placed
 
 
 def repair_boundary_markers(source_text: str, translated_text: str) -> tuple[str, bool]:
@@ -97,8 +118,24 @@ def check_quality(unit: TranslationUnit, result: TranslationResult, glossary: li
     source_layout_markers = LAYOUT_MARKER.findall(unit.source_text)
     translated_layout_markers = LAYOUT_MARKER.findall(translated)
     if sorted(source_markers) == sorted(translated_markers) and source_markers != translated_markers:
-        severity = "critical" if source_layout_markers or "native_immutable_slots" in unit.risk_tags else "major"
-        add("protected_marker_order", severity, "protected marker order changed")
+        # Reordering only matters critically when a marker leaves the PDF text
+        # box it belongs to, which is what the layout markers delimit. Chinese
+        # puts the conditional clause first, so a footnote marker routinely
+        # moves within its own fragment - correct Chinese that the old rule
+        # rejected three times and then abandoned the paragraph over.
+        source_fragments = marker_fragments(unit.source_text)
+        translated_fragments = marker_fragments(translated)
+        crossed = sorted(
+            marker for marker, fragment in source_fragments.items()
+            if translated_fragments.get(marker) != fragment
+        )
+        if crossed or "native_immutable_slots" in unit.risk_tags:
+            add("protected_marker_order", "critical",
+                f"a protected marker moved to a different layout fragment: {' '.join(crossed)}"
+                if crossed else "protected marker order changed in immutable native slots")
+        else:
+            add("protected_marker_order", "major",
+                "protected marker order changed within its layout fragment")
     if source_layout_markers != translated_layout_markers:
         add("layout_marker_order", "critical", "layout marker order changed")
     elif source_layout_markers and not unchanged_formula and not layout_boundaries_are_natural(translated):
@@ -115,6 +152,16 @@ def check_quality(unit: TranslationUnit, result: TranslationResult, glossary: li
                 "the source's own layout boundary falls inside a sentence, so the translated "
                 "boundary cannot be checked against it; compare this fragment with the source PDF",
             )
+    introduced_markup = sorted(set(MARKUP_TAG.findall(translated)) - set(MARKUP_TAG.findall(unit.source_text)))
+    if introduced_markup:
+        # Markup the translation invented renders literally: page 93 of the
+        # delivered val book reads "区间STL规范的<term>定义</term>". The detector
+        # lived only in triage, which runs after the book is printed, so the gate
+        # accepted the unit with no issue at all and it was never retried. It is
+        # a structural defect the model can fix on a second attempt, so it is
+        # treated like a lost marker rather than left for a human to find.
+        add("leaked_markup", "critical",
+            f"the translation introduced markup that is not in the source: {' '.join(introduced_markup)}")
     if sorted(NUMBERS.findall(unit.source_text)) != sorted(NUMBERS.findall(translated)):
         add("number", "major", "number inventory changed")
     if sorted(url_inventory(unit.source_text)) != sorted(url_inventory(translated)):
@@ -135,4 +182,4 @@ def check_quality(unit: TranslationUnit, result: TranslationResult, glossary: li
             if normalize_target_spacing(forbidden) in normalize_target_spacing(translated):
                 add("terminology", "critical", f"Disallowed translation for {entry.source_term}: {forbidden}; use {entry.target_term}")
     status = "blocked" if any(i.severity == "critical" for i in issues) else ("needs_review" if issues else "pass")
-    return QualityReport(unit_id=unit.unit_id, result_hash=stable_hash(result), policy_revision="v0.7-terminology", status=status, issues=tuple(issues), checks_run=("completion", "protected_marker_multiset", "protected_marker_order", "layout_marker_order", "layout_boundary", "formula_slot_unchanged", "number_inventory", "url_inventory", "protected_source_literal_availability", "approved_terminology"))
+    return QualityReport(unit_id=unit.unit_id, result_hash=stable_hash(result), policy_revision="v0.7-terminology", status=status, issues=tuple(issues), checks_run=("completion", "protected_marker_multiset", "protected_marker_order", "layout_marker_order", "layout_boundary", "formula_slot_unchanged", "introduced_markup", "number_inventory", "url_inventory", "protected_source_literal_availability", "approved_terminology"))

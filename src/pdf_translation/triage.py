@@ -44,6 +44,10 @@ import re
 from collections import Counter
 from pathlib import Path
 
+#: The gate catches invented markup while a retry can still fix it; this layer
+#: catches what reached the page anyway.
+from .quality import MARKUP_TAG
+
 #: The quality gate's own number pattern, repeated so the artifact rule can be
 #: explained against it.
 STRICT_NUMBER = re.compile(r"(?<![A-Za-z0-9_])[+-]?(?:\d+(?:\.\d+)?%?)(?![A-Za-z0-9_])")
@@ -57,7 +61,6 @@ _DECADE = re.compile(r"(?<![A-Za-z0-9])(\d{1,2})(\d0)s(?![A-Za-z0-9])")
 MARKER = re.compile(r"⟦P:[^⟧]+⟧")
 ENGLISH_WORD = re.compile(r"(?<![A-Za-z])[A-Za-z][A-Za-z-]{2,}(?![A-Za-z])")
 URL_LIKE = re.compile(r"https?://\S+|\b[\w-]+\.(?:com|org|edu|net|gov|io)\b|\bcc-by[\w-]*", re.I)
-MARKUP_TAG = re.compile(r"</?[A-Za-z][A-Za-z0-9_-]*>")
 ROMAN_NUMERAL = re.compile(r"^[ivxlcdm]+$")
 CJK = re.compile(r"[一-鿿]")
 LATIN = re.compile(r"[A-Za-z]")

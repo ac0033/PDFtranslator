@@ -172,6 +172,11 @@ def restore_and_rebalance_layout_markers(source_text: str, translated_text: str)
     Layout markers carry no source semantics. They may therefore be restored
     deterministically when every non-layout protected marker is still exact.
     Unknown or duplicated layout markers remain a hard failure.
+
+    When the non-layout markers come back reordered - Chinese fronts a
+    conditional clause, so a footnote routinely trades places with a formula -
+    this falls through to :func:`place_layout_markers_by_fragment`, which asks
+    only that each marker end up in the box it started in.
     """
     expected = LAYOUT_MARKER.findall(source_text)
     if not expected:
@@ -184,7 +189,7 @@ def restore_and_rebalance_layout_markers(source_text: str, translated_text: str)
     source_non_layout = [marker for marker in source_markers if not LAYOUT_MARKER.fullmatch(marker)]
     target_non_layout = [marker for marker in ANY_PROTECTED_MARKER.findall(translated_text) if not LAYOUT_MARKER.fullmatch(marker)]
     if source_non_layout != target_non_layout:
-        return translated_text, False
+        return place_layout_markers_by_fragment(source_text, translated_text)
 
     source_visible = ANY_PROTECTED_MARKER.sub("", source_text)
     target_body = LAYOUT_MARKER.sub("", translated_text)
@@ -262,6 +267,91 @@ def restore_and_rebalance_layout_markers(source_text: str, translated_text: str)
         return translated_text, False
     changed = rebuilt != translated_text
     return rebuilt, changed
+
+
+def marker_fragment_index(text: str) -> dict[str, int]:
+    """Which layout fragment each non-layout protected marker sits in."""
+    fragment = 0
+    placed: dict[str, int] = {}
+    for match in ANY_PROTECTED_MARKER.finditer(text):
+        token = match.group(0)
+        if LAYOUT_MARKER.fullmatch(token):
+            fragment += 1
+            continue
+        placed.setdefault(token, fragment)
+    return placed
+
+
+def place_layout_markers_by_fragment(source_text: str, translated_text: str) -> tuple[str, bool]:
+    """Place layout markers so every protected marker returns to its own box.
+
+    The repair above keeps the translation's marker sequence intact and moves
+    layout markers to target sentence boundaries. It gives up the moment the
+    non-layout markers come back in a different order - and Chinese fronts a
+    conditional clause, so a footnote marker trading places with a formula is
+    ordinary, correct output. optimization.pdf page 207 was abandoned over
+    exactly that, after three attempts that each returned every marker intact.
+
+    What has to hold is weaker than the order: each fragment is written back
+    into its own PDF text box, so every protected marker must end up in the
+    fragment it started in. Where it sits inside that fragment is the
+    translation's business. When no sentence boundary exists in the window a
+    marker's box allows, this gives up too - guessing a split inside a clause
+    would move text into the wrong box, which is the thing being prevented.
+    """
+    expected = LAYOUT_MARKER.findall(source_text)
+    if not expected:
+        return translated_text, False
+    source_non_layout = [m for m in ANY_PROTECTED_MARKER.findall(source_text) if not LAYOUT_MARKER.fullmatch(m)]
+    target_non_layout = [m for m in ANY_PROTECTED_MARKER.findall(translated_text) if not LAYOUT_MARKER.fullmatch(m)]
+    if Counter(source_non_layout) != Counter(target_non_layout):
+        return translated_text, False
+    # A repeated marker has no single position to reason about, and the
+    # occurrence ids make repeats a capture defect rather than normal input.
+    if len(set(source_non_layout)) != len(source_non_layout):
+        return translated_text, False
+
+    source_fragment = marker_fragment_index(source_text)
+    base = LAYOUT_MARKER.sub("", translated_text)
+    position = {marker: base.find(marker) for marker in source_non_layout}
+    if any(offset < 0 for offset in position.values()):
+        return translated_text, False
+
+    source_visible = ANY_PROTECTED_MARKER.sub("", source_text)
+    boundaries = [0, *_sentence_boundaries(base), len(base)]
+    placements: list[tuple[int, int, str]] = []
+    previous = 0
+    for order, marker in enumerate(expected):
+        lower = max(
+            (position[m] + len(m) for m in source_non_layout if source_fragment[m] <= order),
+            default=0,
+        )
+        upper = min(
+            (position[m] for m in source_non_layout if source_fragment[m] > order),
+            default=len(base),
+        )
+        if lower > upper:
+            return translated_text, False
+        visible_prefix = ANY_PROTECTED_MARKER.sub("", source_text[: source_text.find(marker)])
+        approximate = round(len(visible_prefix) / max(len(source_visible), 1) * len(base))
+        candidates = [b for b in boundaries if max(previous, lower) <= b <= upper]
+        if not candidates:
+            return translated_text, False
+        placement = min(candidates, key=lambda b: (abs(b - approximate), b))
+        placements.append((placement, order, marker))
+        previous = placement
+
+    rebuilt = ""
+    cursor = 0
+    for placement, _, marker in sorted(placements):
+        rebuilt += base[cursor:placement] + marker
+        cursor = placement
+    rebuilt += base[cursor:]
+    if Counter(ANY_PROTECTED_MARKER.findall(rebuilt)) != Counter(ANY_PROTECTED_MARKER.findall(source_text)):
+        return translated_text, False
+    if marker_fragment_index(rebuilt) != source_fragment:
+        return translated_text, False
+    return rebuilt, rebuilt != translated_text
 
 
 def split_layout_translation(text: str, records: list[dict]) -> dict[str, str]:

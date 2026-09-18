@@ -721,3 +721,33 @@ def test_a_changed_formula_slot_is_blocked_on_its_own_terms():
     report = check_quality(source, changed)
     assert report.status == 'blocked'
     assert 'formula_slot_changed' in [issue.category for issue in report.issues]
+
+
+def test_markup_the_translation_invented_is_blocked_while_a_retry_can_fix_it():
+    """Page 93 of the delivered val book reads "区间STL规范的<term>定义</term>".
+
+    The detector lived only in triage, which runs after the book is printed, so
+    the gate accepted the unit with no issue at all and it was never retried.
+    """
+    text = 'Algorithm 3.2. Definition of an STL specification for an interval.'
+    source = unit(text).model_copy(update={'source_hash': stable_hash(text)})
+    model = make_request(unit(), config()).model
+    result = TranslationResult(
+        request_id='r', unit_id='u1', model=model, finish='complete',
+        draft=TranslationDraft(unit_id='u1', translated_text='算法3.2. 区间STL规范的<term>定义</term>。'),
+        usage=Usage(usage_source='unavailable'))
+    report = check_quality(source, result)
+    assert report.status == 'blocked'
+    leaked = [issue for issue in report.issues if issue.category == 'leaked_markup']
+    assert leaked and '<term>' in leaked[0].explanation
+
+
+def test_markup_the_source_already_had_is_not_the_translations_fault():
+    text = 'Use the <div> element to group content.'
+    source = unit(text).model_copy(update={'source_hash': stable_hash(text)})
+    model = make_request(unit(), config()).model
+    result = TranslationResult(
+        request_id='r', unit_id='u1', model=model, finish='complete',
+        draft=TranslationDraft(unit_id='u1', translated_text='使用 <div> 元素对内容分组。'),
+        usage=Usage(usage_source='unavailable'))
+    assert [i.category for i in check_quality(source, result).issues] == []
