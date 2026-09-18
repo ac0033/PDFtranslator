@@ -335,3 +335,73 @@ def test_without_a_capture_map_coverage_is_simply_absent(tmp_path):
     source, render_dir, queue = fixture_delivery(tmp_path, rows)
     report = build_acceptance_report(source, render_dir, queue, capture_map=render_dir / 'absent.jsonl')
     assert report['capture_coverage'] is None
+
+
+def slice_delivery(tmp_path, rows, *, pages, span):
+    """A rendered slice: only the span's pages exist, and the books hold just those."""
+    source, render_dir, queue = fixture_delivery(
+        tmp_path, rows, pages=pages, render_pages=span, books=())
+    (render_dir / 'capture.report.json').write_text(
+        json.dumps({'physical_pages': list(span)}), encoding='utf-8')
+    for kind in ('mono', 'dual'):
+        with pymupdf.open(source) as original, pymupdf.open() as book:
+            book.insert_pdf(original, from_page=span[0] - 1, to_page=span[-1] - 1)
+            book.save(render_dir / f'source.usable-deepseek.zh.{kind}.pdf')
+    return source, render_dir, queue
+
+
+def test_a_complete_slice_of_a_book_is_deliverable(tmp_path):
+    """Grading a 120-page slice against the source's 634 pages condemned it.
+
+    Every page outside the slice read as missing and both books read as short,
+    so a run that had done exactly what it was asked came back not_deliverable.
+    """
+    rows = [unit(f'u{i}', pages=(4,)) for i in range(10)]
+    source, render_dir, queue = slice_delivery(tmp_path, rows, pages=10, span=range(4, 8))
+    report = build_acceptance_report(source, render_dir, queue)
+    assert report['verdict'] == DELIVERABLE
+    assert report['major_problems'] == []
+    assert report['render']['source_pages'] == 4
+    assert report['render']['rendered_pages'] == 4
+    assert report['render']['source_page_range'] == [4, 7]
+
+
+def test_a_hole_inside_the_slice_still_stops_delivery(tmp_path):
+    """Narrowing the span must not narrow what the check can see."""
+    rows = [unit(f'u{i}', pages=(4,)) for i in range(10)]
+    source, render_dir, queue = slice_delivery(tmp_path, rows, pages=10, span=range(4, 8))
+    for path in page_output_paths(render_dir, source.stem, 6):
+        path.unlink()
+    report = build_acceptance_report(source, render_dir, queue)
+    assert report['verdict'] == NOT_DELIVERABLE
+    missing = [p for p in report['major_problems'] if p['kind'] == 'missing_rendered_page']
+    assert missing and missing[0]['pages'] == [6]
+
+
+def test_coverage_reconciles_the_slice_and_not_the_rest_of_the_book(tmp_path):
+    """Pages outside the slice were never meant to be captured.
+
+    Reconciling them would report the other 514 pages of the book as body text
+    the capture lost, and block a delivery that is complete.
+    """
+    rows = [unit(f'u{i}', pages=(4,)) for i in range(10)]
+    source, render_dir, queue = slice_delivery(tmp_path, rows, pages=10, span=range(4, 8))
+    capture_map = write_capture_map(
+        render_dir / 'capture-map.jsonl',
+        {index: [f'Page {index + 1}'] for index in range(3, 7)})
+    report = build_acceptance_report(source, render_dir, queue, capture_map=capture_map)
+    assert report['verdict'] == DELIVERABLE
+    assert report['capture_coverage']['pages_reconciled'] == 4
+    assert report['capture_coverage']['uncaptured_words'] == 0
+
+
+def test_a_page_the_slice_did_lose_is_still_caught(tmp_path):
+    rows = [unit(f'u{i}', pages=(4,)) for i in range(10)]
+    source, render_dir, queue = slice_delivery(tmp_path, rows, pages=10, span=range(4, 8))
+    capture_map = write_capture_map(
+        render_dir / 'capture-map.jsonl',
+        {index: [f'Page {index + 1}'] for index in (3, 4, 5)})
+    report = build_acceptance_report(source, render_dir, queue, capture_map=capture_map)
+    assert report['verdict'] == NOT_DELIVERABLE
+    uncaptured = [p for p in report['major_problems'] if p['kind'] == 'uncaptured_prose']
+    assert uncaptured and uncaptured[0]['pages'] == [7]

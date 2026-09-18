@@ -30,7 +30,7 @@ def write_page_pair(capture: Path, stem: str, page_number: int, source: Path, pa
         single.save(dual)
 
 
-def fixture_capture(tmp_path, pages=3, captured=None):
+def fixture_capture(tmp_path, pages=3, captured=None, span=None):
     source = tmp_path / 'source.pdf'
     with pymupdf.open() as doc:
         for number in range(pages):
@@ -41,6 +41,9 @@ def fixture_capture(tmp_path, pages=3, captured=None):
     indices = range(pages) if captured is None else captured
     records = [{'page_index': index, 'unit_id': f'u{index}'} for index in indices]
     (capture / 'capture-map.jsonl').write_text('\n'.join(json.dumps(r) for r in records), encoding='utf-8')
+    if span is not None:
+        (capture / 'capture.report.json').write_text(
+            json.dumps({'physical_pages': list(span)}), encoding='utf-8')
     return source, capture
 
 
@@ -182,3 +185,50 @@ def test_merge_only_mode_does_not_render(tmp_path, monkeypatch):
     monkeypatch.setattr(chunk_driver.subprocess, 'run', refuse)
     assert driver.main(['--merge-only', '--capture', str(capture), '--source', str(source)]) == 0
     assert (capture / 'source.usable-deepseek.zh.mono.pdf').is_file()
+
+
+def test_a_slice_renders_and_merges_only_the_pages_it_captured(tmp_path, monkeypatch):
+    """A 120-page slice of a 634-page book is a deliverable, not a book with holes.
+
+    The span used to come from the source PDF, so a slice asked for every page
+    of the whole book, rendered pages nobody captured and then refused to merge
+    on the ones it could not produce.
+    """
+    source, capture = fixture_capture(tmp_path, pages=10, captured=range(3, 7), span=range(4, 8))
+    fake_subprocess(monkeypatch, source, capture)
+    assert driver.main(['--auto', '--chunk-size', '2', '--capture', str(capture), '--source', str(source)]) == 0
+    assert driver.missing_pages(capture, source.stem, [4, 5, 6, 7]) == []
+    # Pages outside the slice must not have been rendered at all.
+    assert driver.missing_pages(capture, source.stem, [1, 2, 3, 8, 9, 10]) == [1, 2, 3, 8, 9, 10]
+    with pymupdf.open(capture / 'source.usable-deepseek.zh.mono.pdf') as merged:
+        assert len(merged) == 4
+
+
+def test_a_slice_merge_reports_its_span_and_drops_the_books_bookmarks(tmp_path):
+    source, capture = fixture_capture(tmp_path, pages=10, captured=range(3, 7), span=range(4, 8))
+    with pymupdf.open(source) as document:
+        document.set_toc([[1, 'Chapter 9', 9]])
+        document.saveIncr()
+    for number in (4, 5, 6, 7):
+        write_page_pair(capture, source.stem, number, source, number - 1)
+    report = driver.merge_rendered_pages(capture, source, 'usable-deepseek')
+    assert report['status'] == 'completed'
+    assert report['expected_pages'] == 4
+    assert report['source_pages'] == [4, 7]
+    # The book's outline points at page 9, which this four-page slice does not have.
+    assert report['bookmarks_carried'] is False
+    with pymupdf.open(capture / 'source.usable-deepseek.zh.mono.pdf') as merged:
+        assert merged.get_toc() == []
+
+
+def test_a_whole_book_still_carries_its_bookmarks(tmp_path):
+    source, capture = fixture_capture(tmp_path, pages=3)
+    with pymupdf.open(source) as document:
+        document.set_toc([[1, 'Chapter 1', 2]])
+        document.saveIncr()
+    for index in range(3):
+        write_page_pair(capture, source.stem, index + 1, source, index)
+    report = driver.merge_rendered_pages(capture, source, 'usable-deepseek')
+    assert report['bookmarks_carried'] is True
+    with pymupdf.open(capture / 'source.usable-deepseek.zh.mono.pdf') as merged:
+        assert merged.get_toc() == [[1, 'Chapter 1', 2]]

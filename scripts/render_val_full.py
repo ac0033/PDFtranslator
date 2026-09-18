@@ -19,7 +19,7 @@ import argparse
 import json
 import sys
 
-from pdf_translation.acceptance import missing_rendered_pages, page_output_paths
+from pdf_translation.acceptance import captured_page_span, missing_rendered_pages, page_output_paths
 from pdf_translation.chunk_driver import DEFAULT_MAX_RETRIES, REQUIRED_COMMIT_BYTES, chunk_ranges, require_memory, run_subprocess_chunks, summarise
 from pdf_translation.babeldoc_adapter import (
     _injection_translator,
@@ -41,14 +41,15 @@ DEFAULT_CHUNK_SIZE = 10
 # verifies what this script writes; both sides must agree on it.
 page_outputs = page_output_paths
 missing_pages = missing_rendered_pages
+# The captured range too: grading and merging must agree on which pages the
+# run is responsible for, or a complete slice looks like a book with holes.
+page_span = captured_page_span
 
 
 def merge_rendered_pages(capture: Path, source: Path, output_prefix: str) -> dict:
     """Merge per-page output into the mono and dual books, carrying bookmarks."""
     stem = source.stem
-    with pymupdf.open(source) as source_doc:
-        total_pages = len(source_doc)
-    page_numbers = list(range(1, total_pages + 1))
+    page_numbers = page_span(capture, source)
     missing = missing_pages(capture, stem, page_numbers)
     if missing:
         raise RuntimeError(f'pages missing rendered output: {missing}')
@@ -60,6 +61,12 @@ def merge_rendered_pages(capture: Path, source: Path, output_prefix: str) -> dic
     _merge_pdfs(dual_pages, dual_output)
     with pymupdf.open(source) as source_doc:
         source_toc = source_doc.get_toc()
+        whole_document = page_numbers == list(range(1, len(source_doc) + 1))
+    # A slice's pages are renumbered from one, so the book's bookmarks would
+    # point at pages the slice does not contain. Dropping them is honest; the
+    # report says so rather than leaving a silently wrong outline behind.
+    if source_toc and not whole_document:
+        source_toc = []
     if source_toc:
         for path in (mono_output, dual_output):
             with pymupdf.open(path) as merged:
@@ -71,8 +78,13 @@ def merge_rendered_pages(capture: Path, source: Path, output_prefix: str) -> dic
     for path in (mono_output, dual_output):
         with pymupdf.open(path) as document:
             counts[path.name] = len(document)
-    status = 'completed' if all(count == total_pages for count in counts.values()) else 'page_count_mismatch'
-    return {'status': status, 'expected_pages': total_pages, 'outputs': counts}
+    expected = len(page_numbers)
+    status = 'completed' if all(count == expected for count in counts.values()) else 'page_count_mismatch'
+    return {
+        'status': status, 'expected_pages': expected, 'outputs': counts,
+        'source_pages': [page_numbers[0], page_numbers[-1]],
+        'bookmarks_carried': whole_document,
+    }
 
 
 def capture_records(capture: Path) -> list[dict]:
@@ -165,8 +177,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument('--source', type=Path, default=Path('pdf/val.pdf'))
     parser.add_argument('--runs-root', type=Path, default=Path('runs'), help='Root holding <run_id>/state.sqlite.')
     parser.add_argument('--output-prefix', default='usable-deepseek', help='Infix of the merged book filenames.')
-    parser.add_argument('--from-page', type=int, default=1)
-    parser.add_argument('--to-page', type=int, default=None)
+    parser.add_argument('--from-page', type=int, default=None, help='Defaults to the first captured page.')
+    parser.add_argument('--to-page', type=int, default=None, help='Defaults to the last captured page.')
     parser.add_argument('--auto', action='store_true', help='Drive every chunk in its own process, retry crashes, then merge.')
     parser.add_argument('--chunk-size', type=int, default=DEFAULT_CHUNK_SIZE, help='Pages per subprocess in --auto mode.')
     parser.add_argument('--min-free-mb', type=int, default=REQUIRED_COMMIT_BYTES // 1024 // 1024,
@@ -183,12 +195,11 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(merge_rendered_pages(args.capture, args.source, args.output_prefix), ensure_ascii=True), flush=True)
         return 0
 
-    # The span comes from the source PDF, not from the captured records: a
-    # trailing blank page has no records but still has to reach the book, and
-    # the per-page path passes verifiably empty pages through unchanged.
-    with pymupdf.open(args.source) as source_doc:
-        last_page = args.to_page or len(source_doc)
-    page_numbers = list(range(args.from_page, last_page + 1))
+    # The span is the captured range, not the records inside it: a trailing
+    # blank page has no records but still has to reach the book, and the
+    # per-page path passes verifiably empty pages through unchanged.
+    span = page_span(args.capture, args.source)
+    page_numbers = list(range(args.from_page or span[0], (args.to_page or span[-1]) + 1))
 
     if args.auto:
         return run_auto(args, page_numbers)

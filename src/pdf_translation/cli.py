@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 
 from .babeldoc_adapter import _write_content_review_queue, capture_pdf_sample, run_one_page_spike, run_smoke_document, validate_capture_identity
 from .ab_experiment import MAX_COMBINED_AB_BUDGET_USD, approved_execution_configs, build_blind_review, prepare_ab_manifest
-from .acceptance import NOT_DELIVERABLE, build_acceptance_report, format_summary, load_review_queue, refresh_from_store
+from .acceptance import NOT_DELIVERABLE, build_acceptance_report, captured_page_span, format_summary, load_review_queue, refresh_from_store
 from .triage import DocumentProfile, ReviewLedger, triage_rows
 from .warning_review import (
     UNREVIEWABLE_CATEGORIES,
@@ -361,7 +361,10 @@ def capture_coverage(
     Text that never became a unit is invisible to every other check: it is not
     blocked, not flagged, not queued, and it renders in the source language.
     """
-    report = reconcile_capture(source, capture_map)
+    # A slice of a book is reconciled over its own pages; without this every
+    # page outside it reports as wholly uncaptured, which is true but useless.
+    span = captured_page_span(capture_map.parent, source)
+    report = reconcile_capture(source, capture_map, page_indices=tuple(page - 1 for page in span))
     if output:
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")

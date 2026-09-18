@@ -98,6 +98,25 @@ def page_output_paths(render_dir: Path, stem: str, page_number: int) -> tuple[Pa
     return page_dir / f"{stem}.zh.mono.pdf", page_dir / f"{stem}.zh.dual.pdf"
 
 
+def captured_page_span(render_dir: Path, source: Path) -> list[int]:
+    """The one-based source pages this run covers - a slice of a book, or all of it.
+
+    The capture's own report is authoritative because it records the range that
+    was asked for, not the pages that produced records: a blank page yields no
+    records but still has to reach the book. Grading a 120-page slice against
+    the source's 634 pages would report 514 missing pages and refuse to deliver
+    work that is complete. Falling back to the source page count keeps captures
+    written before the report carried a range working.
+    """
+    report_path = render_dir / "capture.report.json"
+    if report_path.is_file():
+        pages = json.loads(report_path.read_text(encoding="utf-8")).get("physical_pages")
+        if pages:
+            return list(pages)
+    with pymupdf.open(source) as document:
+        return list(range(1, len(document) + 1))
+
+
 def page_is_rendered(render_dir: Path, stem: str, page_number: int) -> bool:
     mono, dual = page_output_paths(render_dir, stem, page_number)
     return mono.is_file() and dual.is_file()
@@ -196,13 +215,12 @@ def _grade_units(rows: list[dict]) -> tuple[list[dict], dict]:
     return major, states
 
 
-def _grade_render(render_dir: Path, source: Path, output_prefix: str) -> tuple[list[dict], dict]:
-    """Check that every source page reached the books, and that they exist."""
+def _grade_render(render_dir: Path, source: Path, output_prefix: str, span: list[int]) -> tuple[list[dict], dict]:
+    """Check that every captured page reached the books, and that they exist."""
     major: list[dict] = []
     stem = source.stem
-    with pymupdf.open(source) as document:
-        source_pages = len(document)
-    missing = missing_rendered_pages(render_dir, stem, list(range(1, source_pages + 1)))
+    source_pages = len(span)
+    missing = missing_rendered_pages(render_dir, stem, span)
     if missing:
         major.append(_problem(
             "missing_rendered_page", "major", len(missing),
@@ -220,9 +238,14 @@ def _grade_render(render_dir: Path, source: Path, output_prefix: str) -> tuple[l
         if books[path.name] != source_pages:
             major.append(_problem(
                 "page_count_mismatch", "major", abs(books[path.name] - source_pages),
-                f"{path.name} has {books[path.name]} pages but the source has {source_pages}",
+                f"{path.name} has {books[path.name]} pages but the captured range has {source_pages}",
             ))
-    return major, {"source_pages": source_pages, "rendered_pages": source_pages - len(missing), "books": books}
+    return major, {
+        "source_pages": source_pages,
+        "rendered_pages": source_pages - len(missing),
+        "source_page_range": [span[0], span[-1]],
+        "books": books,
+    }
 
 
 def _grade_minor(triage: dict, total_units: int, thresholds: dict[str, float], total_threshold: float) -> tuple[list[dict], list[dict]]:
@@ -296,14 +319,18 @@ def build_acceptance_report(
         rows, stale, graded_from = queue_rows, [], "review_queue"
 
     unit_major, states = _grade_units(rows)
-    render_major, render = _grade_render(render_dir, source, output_prefix)
+    span = captured_page_span(render_dir, source)
+    render_major, render = _grade_render(render_dir, source, output_prefix, span)
     triage = triage_rows(rows, ledger=ledger, profile=DocumentProfile(rows))
     escalated, minor_summary = _grade_minor(triage, len(rows), limits, total_threshold)
 
     coverage_report = None
     coverage_major: list[dict] = []
     if capture_map and Path(capture_map).is_file():
-        coverage_report = reconcile_capture(source, Path(capture_map))
+        # Only the captured pages: outside the span there is nothing to compare
+        # against, and every page of the rest of the book would read as lost.
+        coverage_report = reconcile_capture(
+            source, Path(capture_map), page_indices=tuple(page - 1 for page in span))
         if coverage_report["over_threshold"]:
             coverage_major.append(_problem(
                 "uncaptured_prose", "major", coverage_report["uncaptured_words"],
