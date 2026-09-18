@@ -15,6 +15,11 @@ allocations in a long Windows process, and capture is as exposed to that as
 rendering is: a plain loop over chunks stays in one interpreter, so the
 pressure accumulates until a chunk dies and takes the run with it. Chunk output
 is its own checkpoint, so a retry is simply the same command again.
+
+Merging belongs to whoever holds the whole range. A chunk process is told to
+capture and stop: it can see the other chunks' output on disk but not how many
+there are meant to be, so left to itself it would publish its own ten pages as
+the finished capture.
 """
 from pathlib import Path
 import argparse
@@ -39,10 +44,13 @@ def chunk_command(args, first: int, last: int) -> list[str]:
         '--output', str(args.output),
         '--from-page', str(first),
         '--to-page', str(last),
+        # Merging is the driver's job. A child only knows its own ten pages, so
+        # if it were allowed to merge it would publish those as the whole book.
+        '--capture-only',
     ]
 
 
-def main():
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--source', type=Path, default=Path('pdf/val.pdf'))
     parser.add_argument('--total-pages', type=int, default=None, help='Defaults to the source PDF page count.')
@@ -55,8 +63,13 @@ def main():
                         help='Commit headroom required before --auto starts. Lower it only knowing the workload.')
     parser.add_argument('--max-retries', type=int, default=DEFAULT_MAX_RETRIES, help='Attempts per chunk in --auto mode.')
     parser.add_argument('--merge-only', action='store_true', help='only merge existing chunk outputs')
+    parser.add_argument('--capture-only', action='store_true', help='capture this range and stop; leave merging to the caller')
     parser.add_argument('--output', type=Path, required=True)
-    args = parser.parse_args()
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
     if args.total_pages is None:
         with pymupdf.open(args.source) as document:
             args.total_pages = len(document)
@@ -82,13 +95,20 @@ def main():
                 continue
             report = capture_pdf_sample(args.source, pages, chunk_dir, args.capture_root / chunk_dir.name, enrich_context=False)
             print(f'captured {chunk_dir.name}: units={report["unit_count"]} empty={report["empty_pages"]}', flush=True)
-    expected_chunks = len(range(args.from_page - 1, last_page, args.chunk_size))
-    present = sorted(d for d in chunks_root.iterdir() if (d / 'units.jsonl').exists()) if chunks_root.exists() else []
-    if len(present) < expected_chunks:
-        print(json.dumps({'status': 'partial', 'chunks_present': len(present), 'chunks_expected': expected_chunks}, ensure_ascii=True), flush=True)
+    if args.capture_only:
         return 0
+    expected = [chunks_root / f'chunk-{start:04d}-{min(start + args.chunk_size - 1, last_page):04d}'
+                for start in range(args.from_page, last_page + 1, args.chunk_size)]
+    missing = [directory.name for directory in expected if not (directory / 'units.jsonl').exists()]
+    if missing:
+        print(json.dumps({'status': 'partial', 'chunks_missing': missing, 'chunks_expected': len(expected)}, ensure_ascii=True), flush=True)
+        return 0
+    present = expected
     if args.output.exists():
-        raise FileExistsError(args.output)
+        raise FileExistsError(
+            f'{args.output} already holds a merged capture. Delete it to merge again - '
+            'overwriting in place would leave a half-old, half-new unit list behind.'
+        )
     all_units = []
     all_records = []
     empty_pages = []
