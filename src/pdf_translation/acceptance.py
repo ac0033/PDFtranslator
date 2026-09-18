@@ -74,6 +74,11 @@ DEFAULT_MINOR_THRESHOLDS = {
     "retained_english": 0.30,
     "url": 0.02,
     "terminology": 0.02,
+    # The source's own layout boundary falls inside a sentence - a display
+    # equation splitting one - so there is nothing to check the translated
+    # boundary against. It marks where the check could not run, which is a
+    # property of the book's typesetting, not a count of defects.
+    "layout_boundary_unverifiable": 0.30,
 }
 DEFAULT_CATEGORY_THRESHOLD = 0.05
 
@@ -406,6 +411,9 @@ def build_acceptance_report(
                 "whether a retained English term should have been translated",
                 "marker order correctness: 1 real case in 44 on val, too few to build a rule on",
                 "visual layout quality beyond page presence and page count",
+                "layout boundaries whose source falls mid-sentence, where a display equation "
+                "splits one and leaves nothing to check the translation against "
+                "(counted as layout_boundary_unverifiable)",
             ],
             "human_review_outstanding": {
                 "warnings": len(triage["residual"]),

@@ -395,7 +395,7 @@ def test_quality_failure_retry_carries_correction_feedback(tmp_path: Path, monke
     provider = LayoutRetryProvider()
     monkeypatch.setattr("pdf_translation.pipeline.DeepSeekProvider", lambda **_: provider)
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-only")
-    text = "⟦P:layout-p0001-aaaa⟧direct sampling ⟦P:layout-p0001-bbbb⟧fuzzing"
+    text = "⟦P:layout-p0001-aaaa⟧Direct sampling covers the space. ⟦P:layout-p0001-bbbb⟧Fuzzing perturbs an input."
     protected = tuple(
         ProtectedSpan(
             occurrence_id=occurrence_id,
@@ -606,6 +606,17 @@ def test_exhausted_unit_is_marked_and_skipped_on_rerun(tmp_path: Path, monkeypat
     attempts = store.provider_attempts(cfg.run_id)
     assert [a["unit_id"] for a in attempts].count(bad.unit_id) == 2
 
+    # Once the rule that rejected it is corrected, the pin has to lift, or the
+    # fix cannot reach the unit and its pages stay unrendered forever.
+    assert store.clear_exhausted(cfg.run_id) == [bad.unit_id]
+    assert store.state(cfg.run_id, bad.unit_id) is None
+    assert [a["unit_id"] for a in store.provider_attempts(cfg.run_id)].count(bad.unit_id) == 0
+    with pytest.raises(ProviderAttemptsExhausted):
+        run_units([bad, good], cfg, tmp_path)
+    assert [a["unit_id"] for a in store.provider_attempts(cfg.run_id)].count(bad.unit_id) == 2
+    # The units that were fine are untouched: clearing is not a rerun from zero.
+    assert store.state(cfg.run_id, good.unit_id) == "accepted"
+
 
 def test_retry_success_survives_rerun_without_new_attempts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     class FlakyOnceProvider:
@@ -630,7 +641,7 @@ def test_retry_success_survives_rerun_without_new_attempts(tmp_path: Path, monke
     provider = FlakyOnceProvider()
     monkeypatch.setattr("pdf_translation.pipeline.DeepSeekProvider", lambda **_: provider)
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-only")
-    text = "⟦P:layout-p0001-aaaa⟧direct sampling ⟦P:layout-p0001-bbbb⟧fuzzing"
+    text = "⟦P:layout-p0001-aaaa⟧Direct sampling covers the space. ⟦P:layout-p0001-bbbb⟧Fuzzing perturbs an input."
     protected = tuple(
         ProtectedSpan(
             occurrence_id=occurrence_id,
@@ -659,3 +670,54 @@ def test_retry_success_survives_rerun_without_new_attempts(tmp_path: Path, monke
     assert second["states"] == {"accepted": 1}
     assert second["provider_attempts"] == 2
     assert provider.calls == 2
+
+
+def test_a_source_boundary_inside_a_sentence_is_unverifiable_not_a_defect():
+    """optimization.pdf page 247: a display equation splits an English sentence.
+
+    The source reads "...yields <equation> where...", so its own layout boundary
+    falls mid-sentence and rebalancing has nowhere to move the marker to. The
+    translation cannot pass a check the source fails, so demanding it burned all
+    three attempts and lost the unit - 7 of the 8 units the first full run of
+    this book never translated died exactly here, costing 50 rendered pages.
+    """
+    text = '⟦P:layout-a⟧Proximal minimization applied to this yields ⟦P:layout-b⟧where'
+    source = unit(text).model_copy(update={'source_hash': stable_hash(text)})
+    translated = '⟦P:layout-a⟧对此应用近端最小化，得到 ⟦P:layout-b⟧其中'
+    model = make_request(unit(), config()).model
+    result = TranslationResult(
+        request_id='r', unit_id='u1', model=model, finish='complete',
+        draft=TranslationDraft(unit_id='u1', translated_text=translated),
+        usage=Usage(usage_source='unavailable'))
+    report = check_quality(source, result)
+    assert report.status == 'needs_review'
+    assert [issue.category for issue in report.issues] == ['layout_boundary_unverifiable']
+    assert all(issue.severity != 'critical' for issue in report.issues)
+
+
+def test_a_dangling_boundary_is_still_blocked_when_the_source_is_clean():
+    """Relaxing the impossible case must not relax the case it was built for."""
+    text = '⟦P:layout-a⟧Direct sampling covers the space. ⟦P:layout-b⟧Fuzzing perturbs an input.'
+    source = unit(text).model_copy(update={'source_hash': stable_hash(text)})
+    model = make_request(unit(), config()).model
+    result = TranslationResult(
+        request_id='r', unit_id='u1', model=model, finish='complete',
+        draft=TranslationDraft(unit_id='u1', translated_text='⟦P:layout-a⟧直接采样覆盖空间而⟦P:layout-b⟧模糊测试扰动输入'),
+        usage=Usage(usage_source='unavailable'))
+    report = check_quality(source, result)
+    assert report.status == 'blocked'
+    assert 'layout_boundary' in [issue.category for issue in report.issues]
+
+
+def test_a_changed_formula_slot_is_blocked_on_its_own_terms():
+    """It used to be caught only as a side effect of the boundary check."""
+    text = '⟦P:layout-x⟧z ⟦P:eq⟧Wx ⟦P:plus⟧b ⟦P:layout-y⟧a ⟦P:sigma⟧(z)'
+    source = unit(text).model_copy(update={'source_hash': stable_hash(text)})
+    model = make_request(unit(), config()).model
+    changed = TranslationResult(
+        request_id='r', unit_id='u1', model=model, finish='complete',
+        draft=TranslationDraft(unit_id='u1', translated_text=text.replace('Wx', 'Wy')),
+        usage=Usage(usage_source='unavailable'))
+    report = check_quality(source, changed)
+    assert report.status == 'blocked'
+    assert 'formula_slot_changed' in [issue.category for issue in report.issues]

@@ -82,6 +82,27 @@ class StateStore:
                 (run_id, unit_id),
             )
 
+    def clear_exhausted(self, run_id: str) -> list[str]:
+        """Let exhausted units be attempted again, and say which ones.
+
+        A unit is pinned as exhausted so a rerun does not pay for the same
+        rejection twice. That is right while the rules stay the same and wrong
+        the moment one is corrected: the verdict was about a rule that no longer
+        exists, but the unit stays untranslatable and its pages stay unrendered.
+        Clearing the recorded attempts too is the point - the runner refuses a
+        unit that has already used its attempt budget.
+        """
+        with self.connect() as con:
+            units = [
+                row["unit_id"] for row in
+                con.execute("SELECT unit_id FROM tasks WHERE run_id=? AND state='exhausted'", (run_id,))
+            ]
+            if units:
+                placeholders = ",".join("?" * len(units))
+                con.execute(f"DELETE FROM tasks WHERE run_id=? AND unit_id IN ({placeholders})", (run_id, *units))
+                con.execute(f"DELETE FROM provider_attempts WHERE run_id=? AND unit_id IN ({placeholders})", (run_id, *units))
+            return units
+
     def state(self, run_id: str, unit_id: str) -> str | None:
         with self.connect() as con:
             row = con.execute("SELECT state FROM tasks WHERE run_id=? AND unit_id=?", (run_id,unit_id)).fetchone()

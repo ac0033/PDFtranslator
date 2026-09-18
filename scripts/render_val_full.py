@@ -91,6 +91,46 @@ def capture_records(capture: Path) -> list[dict]:
     return [json.loads(line) for line in (capture / 'capture-map.jsonl').read_text(encoding='utf-8').splitlines() if line.strip()]
 
 
+def captured_source_text(capture: Path, unit_ids: list[str]) -> dict[str, str]:
+    """The source text of named units, for pages that must render without them."""
+    wanted = set(unit_ids)
+    found: dict[str, str] = {}
+    for line in (capture / 'units.jsonl').read_text(encoding='utf-8').splitlines():
+        if not line.strip():
+            continue
+        unit = json.loads(line)
+        if unit['unit_id'] in wanted:
+            found[unit['unit_id']] = unit['source_text']
+    return found
+
+
+def chunk_translations(store, run_id: str, capture: Path, unit_ids: set[str]) -> tuple[dict[str, str], list[str]]:
+    """Text to inject for each unit, and which of them are still in the source language.
+
+    A unit that never reached a deliverable translation falls back to its own
+    source text, which carries the same markers by construction and so injects
+    cleanly. Refusing instead cost the whole chunk's ten pages, and with them the
+    merged book, over a single paragraph: on optimization.pdf two units out of
+    1473 took fifty pages down with them. The page now renders with that one
+    paragraph still in English, and acceptance reports the unit as untranslated
+    from the run store - degraded in the open, never passed off as finished.
+    """
+    results = {unit_id: store.result(run_id, unit_id) for unit_id in unit_ids}
+    untranslated = sorted(
+        unit_id for unit_id, result in results.items()
+        if result is None or result.draft is None
+    )
+    source_by_unit = captured_source_text(capture, untranslated) if untranslated else {}
+    unresolved = sorted(set(untranslated) - set(source_by_unit))
+    if unresolved:
+        raise RuntimeError(f'units with neither a translation nor a captured source: {unresolved}')
+    text = {
+        unit_id: source_by_unit[unit_id] if unit_id in source_by_unit else results[unit_id].draft.translated_text
+        for unit_id in unit_ids
+    }
+    return text, untranslated
+
+
 def render_chunk(args, chunk_pages: list[int]) -> dict:
     """Render one bounded chunk of zero-based page indices inside this process."""
     cfg = load_config(args.config)
@@ -100,10 +140,9 @@ def render_chunk(args, chunk_pages: list[int]) -> dict:
     for record in records:
         records_by_page.setdefault(record['page_index'], []).append(record)
     chunk_unit_ids = {r['unit_id'] for p in chunk_pages for r in records_by_page.get(p, [])}
-    missing_results = [uid for uid in chunk_unit_ids if store.result(cfg.run_id, uid) is None or store.result(cfg.run_id, uid).draft is None]
-    if missing_results:
-        raise RuntimeError(f'units without translation results: {missing_results}')
-    translated_by_unit = {uid: store.result(cfg.run_id, uid).draft.translated_text for uid in chunk_unit_ids}
+    translated_by_unit, untranslated = chunk_translations(store, cfg.run_id, args.capture, chunk_unit_ids)
+    if untranslated:
+        print(f'left in the source language: {untranslated}', flush=True)
     translated_by_fragment = split_document_translation(translated_by_unit, {p: records_by_page.get(p, []) for p in chunk_pages})
 
     layout = _load_layout_model()
@@ -134,7 +173,8 @@ def render_chunk(args, chunk_pages: list[int]) -> dict:
             raise RuntimeError(f'injection mismatch on page {page_number}: errors={translator.errors}, remaining={translator.remaining}')
         rendered.append(page_number)
         print(f'page {page_number} rendered', flush=True)
-    return {'rendered': rendered, 'reused': reused, 'empty_passthrough': empty}
+    return {'rendered': rendered, 'reused': reused, 'empty_passthrough': empty,
+            'untranslated_units': untranslated}
 
 
 def chunk_command(args, first: int, last: int) -> list[str]:

@@ -232,3 +232,51 @@ def test_a_whole_book_still_carries_its_bookmarks(tmp_path):
     assert report['bookmarks_carried'] is True
     with pymupdf.open(capture / 'source.usable-deepseek.zh.mono.pdf') as merged:
         assert merged.get_toc() == [[1, 'Chapter 1', 2]]
+
+
+class FakeStore:
+    """Just enough of StateStore for the text-selection decision."""
+
+    def __init__(self, translations):
+        self.translations = translations
+
+    def result(self, run_id, unit_id):
+        text = self.translations.get(unit_id)
+        if text is None:
+            return None
+        return type('R', (), {'draft': type('D', (), {'translated_text': text})()})()
+
+
+def write_units(capture: Path, units: dict[str, str]) -> None:
+    capture.mkdir(parents=True, exist_ok=True)
+    (capture / 'units.jsonl').write_text(
+        '\n'.join(json.dumps({'unit_id': uid, 'source_text': text}) for uid, text in units.items()),
+        encoding='utf-8')
+
+
+def test_an_untranslated_unit_falls_back_to_its_source_instead_of_losing_the_chunk(tmp_path):
+    """Two units out of 1473 took fifty pages and the whole book down with them."""
+    capture = tmp_path / 'capture'
+    write_units(capture, {'u1': 'Source one.', 'u2': 'Source two.', 'u3': 'Source three.'})
+    store = FakeStore({'u1': '译文一。', 'u3': '译文三。'})
+    text, untranslated = driver.chunk_translations(store, 'run', capture, {'u1', 'u2', 'u3'})
+    assert untranslated == ['u2']
+    assert text == {'u1': '译文一。', 'u2': 'Source two.', 'u3': '译文三。'}
+
+
+def test_a_unit_with_neither_a_translation_nor_a_source_still_stops_the_chunk(tmp_path):
+    """Falling back to the source is only honest when there is a source to fall back to."""
+    capture = tmp_path / 'capture'
+    write_units(capture, {'u1': 'Source one.'})
+    store = FakeStore({'u1': '译文一。'})
+    with pytest.raises(RuntimeError, match='neither a translation nor a captured source'):
+        driver.chunk_translations(store, 'run', capture, {'u1', 'ghost'})
+
+
+def test_a_fully_translated_chunk_reports_nothing_left_in_english(tmp_path):
+    capture = tmp_path / 'capture'
+    write_units(capture, {'u1': 'Source one.'})
+    store = FakeStore({'u1': '译文一。'})
+    text, untranslated = driver.chunk_translations(store, 'run', capture, {'u1'})
+    assert untranslated == []
+    assert text == {'u1': '译文一。'}

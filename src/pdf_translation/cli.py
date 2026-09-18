@@ -489,6 +489,23 @@ def report(run_id: Annotated[str, typer.Option("--run-id")], runs_root: Annotate
     typer.echo(json.dumps(StateStore(runs_root / run_id / "state.sqlite").summary(run_id), ensure_ascii=False, indent=2))
 
 
+@app.command("retry-exhausted")
+def retry_exhausted(
+    run_id: Annotated[str, typer.Option("--run-id")],
+    runs_root: Annotated[Path, typer.Option("--runs-root")] = Path("runs"),
+) -> None:
+    """Let units that exhausted their attempts be translated again. No API calls.
+
+    A unit is pinned as exhausted so a rerun does not pay for the same rejection
+    twice, and reruns skip it for good. That is right while the rules stay the
+    same and wrong the moment one is corrected: the verdict was about a rule
+    that no longer exists, but the unit stays untranslated and its pages stay
+    unrendered. Run this after fixing a check, then rerun the translation.
+    """
+    units = StateStore(runs_root / run_id / "state.sqlite").clear_exhausted(run_id)
+    typer.echo(json.dumps({"run_id": run_id, "cleared": len(units), "units": units}, ensure_ascii=False))
+
+
 @app.command()
 def review(run_id: Annotated[str, typer.Option("--run-id")], runs_root: Annotated[Path, typer.Option("--runs-root")] = Path("runs")) -> None:
     """Show every unit-level quality decision and its evidence."""

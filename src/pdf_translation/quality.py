@@ -87,6 +87,13 @@ def check_quality(unit: TranslationUnit, result: TranslationResult, glossary: li
     if sorted(source_markers) != sorted(translated_markers):
         add("protected_marker", "critical", "protected marker multiset changed")
     unchanged_formula = translated == unit.source_text and is_formula_only(unit.source_text)
+    if is_formula_only(unit.source_text) and not unchanged_formula:
+        # The pipeline passes a formula-only unit through untouched, so text that
+        # differs from the source did not come from translating it. This used to
+        # be caught only as a side effect of the layout boundary check, which
+        # made it invisible the moment that check was relaxed.
+        add("formula_slot_changed", "critical",
+            "a formula-only unit is passed through unchanged; this text differs from the source")
     source_layout_markers = LAYOUT_MARKER.findall(unit.source_text)
     translated_layout_markers = LAYOUT_MARKER.findall(translated)
     if sorted(source_markers) == sorted(translated_markers) and source_markers != translated_markers:
@@ -95,7 +102,19 @@ def check_quality(unit: TranslationUnit, result: TranslationResult, glossary: li
     if source_layout_markers != translated_layout_markers:
         add("layout_marker_order", "critical", "layout marker order changed")
     elif source_layout_markers and not unchanged_formula and not layout_boundaries_are_natural(translated):
-        add("layout_boundary", "critical", "translated layout boundary remains inside a sentence")
+        # Only when the source could satisfy this itself. A display equation can
+        # split an English sentence with no sentence end to break at - "...yields
+        # <eq> where..." - and rebalancing has nowhere to move the marker to. The
+        # translation then cannot pass a check the source fails, so demanding it
+        # burns every retry and loses the unit. Say it was unverifiable instead.
+        if layout_boundaries_are_natural(unit.source_text):
+            add("layout_boundary", "critical", "translated layout boundary remains inside a sentence")
+        else:
+            add(
+                "layout_boundary_unverifiable", "major",
+                "the source's own layout boundary falls inside a sentence, so the translated "
+                "boundary cannot be checked against it; compare this fragment with the source PDF",
+            )
     if sorted(NUMBERS.findall(unit.source_text)) != sorted(NUMBERS.findall(translated)):
         add("number", "major", "number inventory changed")
     if sorted(url_inventory(unit.source_text)) != sorted(url_inventory(translated)):
@@ -116,4 +135,4 @@ def check_quality(unit: TranslationUnit, result: TranslationResult, glossary: li
             if normalize_target_spacing(forbidden) in normalize_target_spacing(translated):
                 add("terminology", "critical", f"Disallowed translation for {entry.source_term}: {forbidden}; use {entry.target_term}")
     status = "blocked" if any(i.severity == "critical" for i in issues) else ("needs_review" if issues else "pass")
-    return QualityReport(unit_id=unit.unit_id, result_hash=stable_hash(result), policy_revision="v0.7-terminology", status=status, issues=tuple(issues), checks_run=("completion", "protected_marker_multiset", "protected_marker_order", "layout_marker_order", "layout_boundary", "number_inventory", "url_inventory", "protected_source_literal_availability", "approved_terminology"))
+    return QualityReport(unit_id=unit.unit_id, result_hash=stable_hash(result), policy_revision="v0.7-terminology", status=status, issues=tuple(issues), checks_run=("completion", "protected_marker_multiset", "protected_marker_order", "layout_marker_order", "layout_boundary", "formula_slot_unchanged", "number_inventory", "url_inventory", "protected_source_literal_availability", "approved_terminology"))
