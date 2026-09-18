@@ -9,6 +9,31 @@ from .hashing import stable_hash
 from .source_preserving import SourcePreservingUnsupported
 
 
+def side_by_side_frame(rows, anchor_rows):
+    """Bound prose that has a fixed native beside it, not just above or below.
+
+    A fixed anchor normally sits on its own line, so the prose between anchors
+    can use the whole text column. In a table row it does not: on val.pdf page
+    94 the Inverted Pendulum row puts a diagram label to the left of its quoted
+    property and a block of code to the right, starting at x 346 while the body
+    column runs to x 392. Flowing the translation to the column edge put its
+    box straight through the code.
+
+    Only an anchor that overlaps the prose vertically can bound it sideways -
+    one above or below is not in the way - so ordinary display equations are
+    left alone and keep the full column.
+    """
+    top=min(r['bbox'][1] for r in rows);bottom=max(r['bbox'][3] for r in rows)
+    left=min(r['bbox'][0] for r in rows);right=max(r['bbox'][2] for r in rows)
+    beside=[a for a in anchor_rows if a['bbox'][1]<bottom and a['bbox'][3]>top]
+    limit=min((a['bbox'][0] for a in beside if a['bbox'][0]>=right),default=None)
+    if limit is None:
+        return None
+    # The text keeps the left edge the source gave it; only the right edge moves
+    # in, to the neighbour it would otherwise be written over.
+    return [left,top,limit,bottom]
+
+
 def expand_fixed_flow(units,plans,translations):
     out_units=[];out_plans=[];out_text={};evidence=[]
     for unit,plan in zip(units,plans):
@@ -58,9 +83,10 @@ def expand_fixed_flow(units,plans,translations):
             continue
         fixed_ids={gid for a in fixed.values() for gid in a['glyph_ids']}
         grouped=[[] for _ in source_parts]
+        anchor_rows=[]
         for row in plan['rows']:
             ids={gid for s in row['slots'] for gid in s['glyph_ids']}
-            if ids<=fixed_ids:continue
+            if ids<=fixed_ids:anchor_rows.append(row);continue
             if ids&fixed_ids:raise SourcePreservingUnsupported('fixed anchor cuts through a prose row')
             key=(row['page_index'],row['baseline'])
             index=sum((a['page_index'],a['baseline'])<key for m in source_markers for a in [fixed[m]])
@@ -81,11 +107,13 @@ def expand_fixed_flow(units,plans,translations):
             if set(re.findall(r'⟦P:[^⟧]+⟧',source_text))!=set(assets):
                 raise SourcePreservingUnsupported('source interval and native object boundaries disagree')
             uid=f'{unit.unit_id}-flow{i:02d}'
+            frame=side_by_side_frame(rows,anchor_rows)
             subset=tuple(s for s in unit.protected if s.marker in assets)
             newunit=unit.model_copy(update={'unit_id':uid,'source_text':source_text.strip(),'source_hash':stable_hash(source_text.strip()),
                 'protected':subset,'protected_literal_hints':{m:unit.protected_literal_hints[m] for m in assets}})
             out_units.append(newunit);out_plans.append({**plan,'unit_id':uid,'parent_unit_id':unit.unit_id,'rows':rows,'chunks':chunks,
-                'assets':assets,'code_context':any(s.kind=='code' and s.marker in fixed for s in unit.protected),'source_pages':sorted({r['page_index']+1 for r in rows})})
+                'assets':assets,'code_context':any(s.kind=='code' and s.marker in fixed for s in unit.protected),'source_pages':sorted({r['page_index']+1 for r in rows}),
+                **({'local_inline_frame':frame} if frame else {})})
             out_text[uid]=target_text.strip()
         all_ids={gid for row in plan['rows'] for slot in row['slots'] for gid in slot['glyph_ids']}
         if allocated&fixed_ids or allocated|fixed_ids!=all_ids:

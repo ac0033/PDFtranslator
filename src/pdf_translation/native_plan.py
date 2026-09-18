@@ -37,6 +37,48 @@ def column(glyph):
     return 'body' if glyph.origin[0] < 395 or glyph.font in PRIMARY and glyph.size>=9.5 else 'margin'
 
 
+GUTTER_MULTIPLE = 3.0
+
+
+def split_layout_gutters(glyphs, multiple: float = GUTTER_MULTIPLE):
+    """Split a cluster wherever a layout gutter runs through it.
+
+    Leftover glyphs are clustered by vertical overlap alone, with no regard for
+    where they sit across the page. In a multi-column table that chain hops
+    from one column to the next and never breaks: on val.pdf page 94 a diagram
+    label, a formula and two lines of code became one row whose text is two
+    strings zippered together. The table row was then left with one native
+    neighbour where it has two.
+
+    Vertical position cannot separate them - the code and the diagram label sit
+    a quarter of a point apart - but horizontal position can, because a table
+    puts a gutter between its columns and a formula does not. The width is
+    judged against the tallest glyph in the cluster: spacing inside one object
+    is a couple of line heights at most, a gutter is several. Counting the
+    whole cluster rather than one baseline is what makes that gap real: a
+    diagram's axis labels look separated until the symbol sitting between them
+    at another baseline is counted.
+    """
+    if not glyphs:
+        return []
+    limit = max(g.size for g in glyphs) * multiple
+    ordered = sorted(glyphs, key=lambda g: g.origin[0])
+    group_of = {ordered[0].index: 0}
+    right = ordered[0].origin[0] + ordered[0].advance * ordered[0].size / 1000
+    for glyph in ordered[1:]:
+        if glyph.origin[0] - right > limit:
+            right = glyph.origin[0]
+            group_of[glyph.index] = max(group_of.values()) + 1
+        else:
+            group_of[glyph.index] = max(group_of.values())
+        right = max(right, glyph.origin[0] + glyph.advance * glyph.size / 1000)
+    # Keep each group in the order it arrived. A row's baseline is read off the
+    # largest glyph, and equal sizes break the tie by position, so reordering a
+    # group that was never split still moves its baseline.
+    count = max(group_of.values()) + 1
+    return [[g for g in glyphs if group_of[g.index] == index] for index in range(count)]
+
+
 def native_page_plan(page):
     native = inspect_native_page(page)
     geometry=infer_columns(page)
@@ -133,15 +175,21 @@ def native_page_plan(page):
                         and any(abs(r['baseline']-g.origin[1])<=.6 for g in stack)]
             if len(stack)>=2 and len(stack_rows)==1:
                 row=stack_rows[0];row['glyphs'].append(glyph);assigned_rows[glyph.index]=row;continue
+        def shares_baseline(row):
+            return glyph.font in PRIMARY and glyph.size >= row['size']*0.95
         candidates = [r for r in rows if r['column'] == page_column(glyph)
-            and abs(r['baseline']-glyph.origin[1]) <= (0.6 if glyph.font in PRIMARY and glyph.size >= r['size']*0.95 else 8)]
-        if glyph.font not in PRIMARY:
-            # A high delimiter in a centered display can share the previous
-            # short prose line's construction y coordinate. It belongs there
-            # only if it is horizontally adjacent to that line's anchors.
-            candidates=[r for r in candidates if not r['anchor_ids'] or
-                min(native.glyphs[i].origin[0] for i in r['anchor_ids'])-r['size']*1.5<=glyph.origin[0]<=
-                max(native.glyphs[i].origin[0]+native.glyphs[i].advance*native.glyphs[i].size/1000 for i in r['anchor_ids'])+r['size']*1.5]
+            and abs(r['baseline']-glyph.origin[1]) <= (0.6 if shares_baseline(r) else 8)]
+        # A high delimiter in a centered display can share the previous short
+        # prose line's construction y coordinate, and a diagram label on the
+        # far side of a table can share a row's. Either belongs to that row
+        # only if it is horizontally adjacent to the row's anchors. What makes
+        # the check necessary is the loose baseline window, not the font: a
+        # small roman '/4' in a diagram was joining a table row 100 points away
+        # through it, which is how page 94's left neighbour ended up in three
+        # pieces across three different rows.
+        candidates=[r for r in candidates if shares_baseline(r) or not r['anchor_ids'] or
+            min(native.glyphs[i].origin[0] for i in r['anchor_ids'])-r['size']*1.5<=glyph.origin[0]<=
+            max(native.glyphs[i].origin[0]+native.glyphs[i].advance*native.glyphs[i].size/1000 for i in r['anchor_ids'])+r['size']*1.5]
         if candidates:
             row = min(candidates,key=lambda r:abs(r['baseline']-glyph.origin[1]))
             row['glyphs'].append(glyph)
@@ -219,7 +267,8 @@ def native_page_plan(page):
             if not clusters or g.bbox[1]>max(x.bbox[3] for x in clusters[-1])+0.1:
                 clusters.append([])
             clusters[-1].append(g)
-        for gs in clusters:
+        for cluster in clusters:
+          for gs in split_layout_gutters(cluster):
             bounds=[min(g.origin[0] for g in gs),min(g.bbox[1] for g in gs),max(g.origin[0]+g.advance*g.size/1000 for g in gs),max(g.bbox[3] for g in gs)]
             base=max(gs,key=lambda g:g.size).origin[1]
             result.append({'column':col,'baseline':base,'size':max(g.size for g in gs),'anchor_ids':[],
