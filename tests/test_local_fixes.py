@@ -9,6 +9,7 @@ from pdf_translation.pipeline import make_request
 from pdf_translation.quality import check_quality
 from pdf_translation.schemas import TranslationDraft, TranslationResult, TranslationUnit, Usage
 from pdf_translation.storage import StateStore
+from pdf_translation import local_fixes
 from scripts import apply_local_fixes as fixes
 
 RUN_ID = "local-fixes-test"
@@ -52,8 +53,8 @@ def book(tmp_path: Path, monkeypatch):
                                    usage=Usage(input_tokens=0, output_tokens=0, cost_usd=0, usage_source="estimated"))
         store.commit(RUN_ID, result, check_quality(unit, result), f"key-{unit.unit_id}")
     store.mark_exhausted(RUN_ID, "u3")
-    monkeypatch.setattr(fixes, "_write_content_review_queue", lambda *args: None)
-    monkeypatch.setattr(fixes, "pages_of", lambda capture, ids: [1])
+    monkeypatch.setattr(local_fixes, "_write_content_review_queue", lambda *args: None)
+    monkeypatch.setattr(local_fixes, "pages_of", lambda capture, ids: [1])
     return store, capture, tmp_path / "runs", config
 
 
