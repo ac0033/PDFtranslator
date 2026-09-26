@@ -30,10 +30,15 @@ This skill drives the PDF translation runtime in this repository. It produces tw
    - `not_deliverable`: do not present it as finished. `result.major_problems` says why (for example a paragraph that was never translated). See "When something goes wrong".
 4. **Say what was checked.** The acceptance report checks completeness, protected numbers and formulas, and capture coverage. It does not prove every sentence is a faithful translation; say so if the user relies on the text.
 
+## Improving a finished job
+
+1. `pdftrans jobs units <job_id> --with-issues` (MCP: `get_units`) lists the units the checks flagged, with source, translation and warnings.
+2. Judge them yourself and write fixes. Delegate with `pdftrans jobs ask <job_id> <task>` (MCP: `ask_model`) only when the job's own model is the better tool: many units, retranslation that must match the book's glossary and style, or page images you cannot see. It returns candidate fixes and writes nothing.
+3. `pdftrans jobs revise <job_id> fixes.json --editor agent:<name> --wait` (MCP: `apply_fixes`) writes them, renders only the changed pages again and repeats acceptance. No model is called.
+
 ## When something goes wrong
 
-- `status: failed` → read `pdftrans jobs log <job_id>`. HTTP 402 or "Insufficient Balance" means the model account needs funds; tell the user, do not retry in a loop.
-- Missing or wrong paragraphs → the `content_review` file lists every paragraph with its source, translation and warnings. Fix translations with `scripts/apply_local_fixes.py` (no model call, only the changed pages are rendered again).
-- Layout mismatches after rendering → `scripts/review_layout.py` has a model compare each page with the original and repair mismatches; it runs automatically unless `--layout-review off`.
+- `status: failed` → read `pdftrans jobs log <job_id>`. HTTP 402 or "Insufficient Balance" means the model account needs funds; tell the user, do not retry in a loop. Once topped up, `pdftrans jobs resume <job_id>` (MCP: `resume_job`) continues the same job; nothing already paid for is paid again. Do not submit a new job for it.
+- A translation that never came out (`not_deliverable`) → `jobs units <job_id> --state exhausted`, then translate it yourself or with `jobs ask <job_id> retranslate --unit <id>`, and `jobs revise`.
 
-For the full pipeline, every artefact, and when to call a model yourself, read `docs/agent_guide.md` in the repository.
+For the full pipeline, every artefact, and when to delegate to a model, read `docs/agent_guide.md` (also `pdftrans guide`, the MCP resource `pdftrans://docs/agent_guide`, or `GET /v1/guide`).
