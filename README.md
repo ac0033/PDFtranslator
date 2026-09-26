@@ -67,6 +67,37 @@ DEEPSEEK_API_KEY=<你的 key>
 
 4. 看验收单：`deliverable` / `deliverable_with_known_issues` 可以交付；`not_deliverable` 会列出原因（例如某段三次都没译出）。人工核对后用 `scripts/apply_local_fixes.py` 写回修正并只重渲染受影响的页，不调用模型。
 
+## 接入方式
+
+翻译能力以“任务”为单位对外提供：提交后立即返回任务编号，任务在独立进程中运行，状态和产物都在磁盘上，调用方断开或服务重启都不会丢失。四种方式调用的是同一套任务服务。
+
+**命令行**（输出均为 JSON，进度写到标准错误）：
+
+```powershell
+uv run pdftrans translate <文件.pdf 或 https://...> --budget-usd 1 --out-dir <目录>   # 等待完成并复制成品
+uv run pdftrans translate <文件.pdf> --estimate-only                                   # 只估价，不调用模型
+uv run pdftrans jobs list | status <job_id> [--wait] | log <job_id> | fetch <job_id> mono <保存路径> | cancel <job_id>
+uv run pdftrans providers                                                              # 可用的模型服务商
+```
+
+加上 `--server <服务地址> --token <令牌>`（或环境变量 `PDFTRANS_SERVER`、`PDFTRANS_TOKEN`），同样的命令改为调用另一台主机上的服务。
+
+**HTTP 服务**（供任意主机调用）：
+
+```powershell
+$env:PDFTRANS_TOKEN = "<一个足够长的随机串>"
+uv run pdftrans serve --host 0.0.0.0 --port 8766 --public-url https://<对外地址>
+```
+
+监听本机以外的地址必须设置令牌，否则拒绝启动。接口：`GET /health`、`GET /v1/providers`、`POST /v1/jobs`（请求体为 PDF 字节，选项放在 `X-Job-Options` 头里；或 JSON `{"pdf_base64"|"pdf_url", "options"}`）、`GET /v1/jobs/{id}`、`GET /v1/jobs/{id}/log`、`GET /v1/jobs/{id}/files/{mono|dual|acceptance|layout_review|content_review|log}`、`POST /v1/jobs/{id}/cancel`。除 `/health` 外都要带 `Authorization: Bearer <令牌>`。某个任务要用调用方自己的模型 Key 时放在 `X-LLM-API-Key` 头里：它只进入该任务的进程环境，不写入磁盘。服务本身不提供 HTTPS，对公网开放时请放在反向代理后面。
+
+**MCP**（供 Claude、Cursor 等 AI 工具调用；工具：`translate_pdf`、`get_job`、`get_job_file`、`list_jobs`、`cancel_job`、`list_providers`）：
+
+- 本机（stdio）：Claude Code 执行 `claude mcp add pdf-translation -- uv --directory <项目目录> run pdftrans mcp`；Claude Desktop 在配置文件的 `mcpServers` 里加入 `{"pdf-translation": {"command": "uv", "args": ["--directory", "<项目目录>", "run", "pdftrans", "mcp"]}}`。
+- 远程（HTTP）：连接 `https://<对外地址>/mcp`，请求头带 `Authorization: Bearer <令牌>`。远程调用方只能上传 PDF 或给网址，不能指定服务器上的文件路径（除非以 `--allow-local-paths` 启动）。
+
+**Skill**：把 `skills/pdf-translate/` 复制到 `~/.claude/skills/`（所有项目可用）或某个项目的 `.claude/skills/` 下，Claude Code 在用户要求翻译 PDF 时会按其中的步骤调用上述能力。
+
 ## 换用其他模型
 
 配置里的 `provider` 选一个预设，填 `model_id`，把对应的 API Key 写进 `.env`：
