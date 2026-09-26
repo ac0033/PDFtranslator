@@ -3,12 +3,14 @@ from __future__ import annotations
 import os
 import math
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from uuid import uuid4
 
 from openai import APIStatusError
 
-from .budget import estimate_cost, reserve_budget
+from .budget import BudgetExceeded, estimate_cost, reserve_budget
 from .config import RunConfig
 from .context_router import build_context_packet, select_exact_tm
 from .context_store import ContextStore
@@ -191,6 +193,79 @@ def retry_feedback_request(request: TranslationRequest, candidate: TranslationRe
     )
 
 
+class _RunStopped(RuntimeError):
+    """A queued unit was not sent because another unit already stopped the run."""
+
+
+class _SerializedStore:
+    """One StateStore shared by provider threads, one call at a time.
+
+    Each call opens its own SQLite connection, so serializing calls is enough
+    to keep concurrent writers from tripping over the database lock.
+    """
+
+    def __init__(self, store: StateStore, lock: threading.RLock):
+        self._store = store
+        self._lock = lock
+
+    def __getattr__(self, name: str):
+        attribute = getattr(self._store, name)
+        if not callable(attribute):
+            return attribute
+
+        def locked(*args, **kwargs):
+            with self._lock:
+                return attribute(*args, **kwargs)
+        return locked
+
+
+class _BudgetGuard:
+    """Reserve a request's cost ceiling before sending it.
+
+    The ledger only learns what a request cost after it returns, so with several
+    requests in flight the check must also count the ceilings of those still
+    outstanding, or N threads could each pass against the same headroom.
+    """
+
+    def __init__(self, store, config: RunConfig, lock: threading.RLock):
+        self._store = store
+        self._config = config
+        self._lock = lock
+        self._in_flight = 0.0
+
+    def reserve(self, estimate: float | None) -> float:
+        with self._lock:
+            reserve_budget(self._store.spent(self._config.run_id), self._in_flight, estimate, self._config.budget_usd)
+            self._in_flight += estimate
+            return estimate
+
+    def release(self, reservation: float) -> None:
+        with self._lock:
+            self._in_flight -= reservation
+
+
+def _run_concurrently(jobs: list[tuple], work, workers: int, stop: threading.Event) -> None:
+    """Run provider jobs in parallel; a run-wide failure stops jobs not yet sent.
+
+    An account or budget failure stops everything, as in the serial loop. A unit
+    that exhausts its own attempts does not: the others finish, and the first
+    such unit is raised afterwards so the caller can mark it and resume.
+    """
+    failures: list[BaseException] = []
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        for future in as_completed([pool.submit(work, *job) for job in jobs]):
+            error = future.exception()
+            if error is None or isinstance(error, _RunStopped):
+                continue
+            if isinstance(error, (ProviderUnavailable, BudgetExceeded)):
+                stop.set()
+            failures.append(error)
+    if failures:
+        severity = (ProviderUnavailable, BudgetExceeded)
+        raise next((e for kind in severity for e in failures if isinstance(e, kind)),
+                   next((e for e in failures if not isinstance(e, ProviderAttemptsExhausted)), failures[0]))
+
+
 def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path, *, context_units: list[TranslationUnit] | None = None) -> dict:
     run_dir = runs_root / config.run_id
     store = StateStore(run_dir / "state.sqlite")
@@ -228,119 +303,44 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path, 
         validate_semantic_evidence(semantics, set(units_by_id))
         glossary_snapshot_id = stable_hash([entry for entry in glossary if entry.status == "approved"])
         style_snapshot_id = stable_hash([rule for rule in styles if rule.status == "approved"])
-    for unit in units:
-        ledger_source = None
-        provider_usage_recorded = False
-        tm_entry = None
-        if context_store:
-            base_packet, _ = build_context_packet(unit, glossary, styles, semantics, units_by_id, token_budget=config.context_token_budget, glossary_snapshot_id=glossary_snapshot_id, style_snapshot_id=style_snapshot_id)
-            tm_entry = select_exact_tm(unit, context_store.exact_tm(unit.source_hash), base_packet.packet_hash, glossary_snapshot_id, style_snapshot_id)
-            packet, _ = build_context_packet(unit, glossary, styles, semantics, units_by_id, token_budget=config.context_token_budget, glossary_snapshot_id=glossary_snapshot_id, style_snapshot_id=style_snapshot_id, tm_entry=tm_entry)
-            context_store.replace_dependencies(f"unit:{unit.unit_id}", [item.item_id for item in packet.items])
-            request = make_request(unit, config, packet)
+    serial = config.translation_concurrency <= 1 or config.provider == "mock"
+    lock = threading.RLock()
+    if not serial:
+        store = _SerializedStore(store, lock)
+    budget = _BudgetGuard(store, config, lock)
+    stop = threading.Event()
+
+    def call_provider(unit: TranslationUnit, request: TranslationRequest) -> tuple[TranslationResult, TranslationRequest, bool]:
+        """Translate one unit through the provider; returns (result, final request, usage already recorded)."""
+        usage_recorded = False
+        estimated_input = estimated_input_token_ceiling(request)
+        estimate = estimate_cost(estimated_input, request.model.max_output_tokens, config.input_usd_per_million, config.output_usd_per_million)
+        if config.provider == "mock":
+            result = provider.translate(request)
         else:
-            request = make_request(unit, config)
-        validate_request(request)
-        if store.state(config.run_id, unit.unit_id) == "exhausted" and tm_entry is None:
-            continue
-        store.prepare(config.run_id, unit.unit_id, request.cache_key)
-        original_cache_key = request.cache_key
-        state = store.state(config.run_id, unit.unit_id)
-        if state == "accepted":
-            previous = store.result(config.run_id, unit.unit_id)
-            if previous is not None and previous.draft is not None:
-                repaired_text, layout_repaired = restore_and_rebalance_layout_markers(
-                    unit.source_text, previous.draft.translated_text
+            prior_attempts = store.provider_attempt_count(config.run_id, unit.unit_id)
+            if prior_attempts >= config.provider_max_attempts:
+                raise ProviderAttemptsExhausted(
+                    f"provider attempt limit already reached for {unit.unit_id}: {prior_attempts}/{config.provider_max_attempts}",
+                    unit_id=unit.unit_id,
                 )
-                if not layout_repaired:
-                    store.commit(config.run_id, previous, check_quality(unit, previous, glossary), request.cache_key,
-                                 cached=True, source="accepted_quality_recheck", record_usage=False)
-                if layout_repaired:
-                    repaired_result = previous.model_copy(
-                        update={
-                            "request_id": request.request_id,
-                            "draft": previous.draft.model_copy(update={"translated_text": repaired_text}),
-                        }
-                    )
-                    validate_result(request, repaired_result)
-                    repaired_report = check_quality(unit, repaired_result, glossary)
-                    store.commit(
-                        config.run_id,
-                        repaired_result,
-                        repaired_report,
-                        request.cache_key,
-                        cached=True,
-                        source="deterministic_layout_repair",
-                    )
-            continue
-        if state in {"blocked", "needs_review"}:
-            previous = store.result(config.run_id, unit.unit_id)
-            if previous is not None and previous.draft is not None:
-                repaired_text, repaired = repair_boundary_markers(unit.source_text, previous.draft.translated_text)
-                repaired_text, layout_repaired = restore_and_rebalance_layout_markers(unit.source_text, repaired_text)
-                repaired = repaired or layout_repaired
-                if repaired:
-                    repaired_draft = previous.draft.model_copy(update={"translated_text": repaired_text})
-                    repaired_result = previous.model_copy(update={"request_id": request.request_id, "draft": repaired_draft})
-                    validate_result(request, repaired_result)
-                    repaired_report = check_quality(unit, repaired_result, glossary)
-                    store.commit(
-                        config.run_id,
-                        repaired_result,
-                        repaired_report,
-                        request.cache_key,
-                        cached=True,
-                        source="deterministic_layout_repair" if layout_repaired else "deterministic_boundary_repair",
-                    )
-                    if repaired_report.status == "pass":
-                        continue
-            continue
-        cached = store.cached(request.cache_key)
-        if cached:
-            result = cached.model_copy(update={"request_id": request.request_id})
-            result = result.model_copy(update={"usage": Usage(input_tokens=0, output_tokens=0, cost_usd=0.0, usage_source="estimated")})
-            from_cache = True
-        elif tm_entry:
-            result = TranslationResult(request_id=request.request_id, unit_id=unit.unit_id, draft=TranslationDraft(unit_id=unit.unit_id, translated_text=tm_entry.target_text), finish="complete", provider_response_id=None, model=request.model, usage=Usage(input_tokens=0, output_tokens=0, cost_usd=0.0, usage_source="estimated"))
-            from_cache = True
-        elif (unit.unit_type in {"code", "protected"} or is_formula_only(unit.source_text)):
-            result = TranslationResult(
-                request_id=request.request_id,
-                unit_id=unit.unit_id,
-                draft=TranslationDraft(unit_id=unit.unit_id, translated_text=unit.source_text),
-                finish="complete",
-                provider_response_id=None,
-                model=request.model,
-                usage=Usage(input_tokens=0, output_tokens=0, cost_usd=0.0, usage_source="estimated"),
-            )
-            from_cache = False
-            ledger_source = "protected_passthrough"
-        else:
-            estimated_input = estimated_input_token_ceiling(request)
-            estimate = estimate_cost(estimated_input, request.model.max_output_tokens, config.input_usd_per_million, config.output_usd_per_million)
-            if config.provider == "mock":
-                result = provider.translate(request)
-            else:
-                prior_attempts = store.provider_attempt_count(config.run_id, unit.unit_id)
-                if prior_attempts >= config.provider_max_attempts:
-                    raise ProviderAttemptsExhausted(
-                        f"provider attempt limit already reached for {unit.unit_id}: {prior_attempts}/{config.provider_max_attempts}",
-                        unit_id=unit.unit_id,
-                    )
-                last_attempt = store.last_provider_attempt(config.run_id, unit.unit_id)
-                if last_attempt and str(last_attempt.get("error_category") or "").startswith("truncated:max_output_tokens"):
-                    previous_limit = int(last_attempt.get("max_output_tokens") or request.model.max_output_tokens)
-                    expanded_limit = expanded_output_token_limit(previous_limit, config.max_output_tokens)
-                    if expanded_limit <= previous_limit:
-                        raise ProviderAttemptsExhausted(f"configured output limit exhausted for {unit.unit_id}: {previous_limit}", unit_id=unit.unit_id)
-                    request = make_request(unit, config, request.context, max_output_tokens_override=expanded_limit)
-                    validate_request(request)
-                    store.prepare(config.run_id, unit.unit_id, request.cache_key)
-                    estimated_input = estimated_input_token_ceiling(request)
-                    estimate = estimate_cost(estimated_input, request.model.max_output_tokens, config.input_usd_per_million, config.output_usd_per_million)
-                result = None
-                for attempt_no in range(prior_attempts + 1, config.provider_max_attempts + 1):
-                    reserve_budget(store.spent(config.run_id), 0.0, estimate, config.budget_usd)
+            last_attempt = store.last_provider_attempt(config.run_id, unit.unit_id)
+            if last_attempt and str(last_attempt.get("error_category") or "").startswith("truncated:max_output_tokens"):
+                previous_limit = int(last_attempt.get("max_output_tokens") or request.model.max_output_tokens)
+                expanded_limit = expanded_output_token_limit(previous_limit, config.max_output_tokens)
+                if expanded_limit <= previous_limit:
+                    raise ProviderAttemptsExhausted(f"configured output limit exhausted for {unit.unit_id}: {previous_limit}", unit_id=unit.unit_id)
+                request = make_request(unit, config, request.context, max_output_tokens_override=expanded_limit)
+                validate_request(request)
+                store.prepare(config.run_id, unit.unit_id, request.cache_key)
+                estimated_input = estimated_input_token_ceiling(request)
+                estimate = estimate_cost(estimated_input, request.model.max_output_tokens, config.input_usd_per_million, config.output_usd_per_million)
+            result = None
+            for attempt_no in range(prior_attempts + 1, config.provider_max_attempts + 1):
+                if stop.is_set():
+                    raise _RunStopped()
+                reservation = budget.reserve(estimate)
+                try:
                     try:
                         candidate = provider.translate(request)
                     except ProviderCallError as exc:
@@ -463,11 +463,15 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path, 
                         provider_response_id=candidate.provider_response_id,
                     )
                     result = candidate
-                    provider_usage_recorded = True
+                    usage_recorded = True
                     break
-                if result is None:
-                    raise ProviderAttemptsExhausted(f"provider attempts exhausted for {unit.unit_id}", unit_id=unit.unit_id)
-            from_cache = False
+                finally:
+                    budget.release(reservation)
+            if result is None:
+                raise ProviderAttemptsExhausted(f"provider attempts exhausted for {unit.unit_id}", unit_id=unit.unit_id)
+        return result, request, usage_recorded
+
+    def finalize(unit, request, original_cache_key, result, from_cache, ledger_source, provider_usage_recorded):
         if result.draft is not None:
             repaired_text, repaired = repair_boundary_markers(unit.source_text, result.draft.translated_text)
             repaired_text, _ = restore_and_rebalance_layout_markers(unit.source_text, repaired_text)
@@ -488,4 +492,105 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path, 
         )
         if request.cache_key != original_cache_key:
             store.alias_cache_key(config.run_id, unit.unit_id, original_cache_key, result, report.status)
+
+    def translate_one(unit, request, original_cache_key):
+        result, request, usage_recorded = call_provider(unit, request)
+        finalize(unit, request, original_cache_key, result, False, None, usage_recorded)
+
+    pending: list[tuple[TranslationUnit, TranslationRequest, str]] = []
+    for unit in units:
+        ledger_source = None
+        tm_entry = None
+        if context_store:
+            base_packet, _ = build_context_packet(unit, glossary, styles, semantics, units_by_id, token_budget=config.context_token_budget, glossary_snapshot_id=glossary_snapshot_id, style_snapshot_id=style_snapshot_id)
+            tm_entry = select_exact_tm(unit, context_store.exact_tm(unit.source_hash), base_packet.packet_hash, glossary_snapshot_id, style_snapshot_id)
+            packet, _ = build_context_packet(unit, glossary, styles, semantics, units_by_id, token_budget=config.context_token_budget, glossary_snapshot_id=glossary_snapshot_id, style_snapshot_id=style_snapshot_id, tm_entry=tm_entry)
+            context_store.replace_dependencies(f"unit:{unit.unit_id}", [item.item_id for item in packet.items])
+            request = make_request(unit, config, packet)
+        else:
+            request = make_request(unit, config)
+        validate_request(request)
+        if store.state(config.run_id, unit.unit_id) == "exhausted" and tm_entry is None:
+            continue
+        store.prepare(config.run_id, unit.unit_id, request.cache_key)
+        original_cache_key = request.cache_key
+        state = store.state(config.run_id, unit.unit_id)
+        if state == "accepted":
+            previous = store.result(config.run_id, unit.unit_id)
+            if previous is not None and previous.draft is not None:
+                repaired_text, layout_repaired = restore_and_rebalance_layout_markers(
+                    unit.source_text, previous.draft.translated_text
+                )
+                if not layout_repaired:
+                    store.commit(config.run_id, previous, check_quality(unit, previous, glossary), request.cache_key,
+                                 cached=True, source="accepted_quality_recheck", record_usage=False)
+                if layout_repaired:
+                    repaired_result = previous.model_copy(
+                        update={
+                            "request_id": request.request_id,
+                            "draft": previous.draft.model_copy(update={"translated_text": repaired_text}),
+                        }
+                    )
+                    validate_result(request, repaired_result)
+                    repaired_report = check_quality(unit, repaired_result, glossary)
+                    store.commit(
+                        config.run_id,
+                        repaired_result,
+                        repaired_report,
+                        request.cache_key,
+                        cached=True,
+                        source="deterministic_layout_repair",
+                    )
+            continue
+        if state in {"blocked", "needs_review"}:
+            previous = store.result(config.run_id, unit.unit_id)
+            if previous is not None and previous.draft is not None:
+                repaired_text, repaired = repair_boundary_markers(unit.source_text, previous.draft.translated_text)
+                repaired_text, layout_repaired = restore_and_rebalance_layout_markers(unit.source_text, repaired_text)
+                repaired = repaired or layout_repaired
+                if repaired:
+                    repaired_draft = previous.draft.model_copy(update={"translated_text": repaired_text})
+                    repaired_result = previous.model_copy(update={"request_id": request.request_id, "draft": repaired_draft})
+                    validate_result(request, repaired_result)
+                    repaired_report = check_quality(unit, repaired_result, glossary)
+                    store.commit(
+                        config.run_id,
+                        repaired_result,
+                        repaired_report,
+                        request.cache_key,
+                        cached=True,
+                        source="deterministic_layout_repair" if layout_repaired else "deterministic_boundary_repair",
+                    )
+                    if repaired_report.status == "pass":
+                        continue
+            continue
+        cached = store.cached(request.cache_key)
+        if cached:
+            result = cached.model_copy(update={"request_id": request.request_id})
+            result = result.model_copy(update={"usage": Usage(input_tokens=0, output_tokens=0, cost_usd=0.0, usage_source="estimated")})
+            from_cache = True
+        elif tm_entry:
+            result = TranslationResult(request_id=request.request_id, unit_id=unit.unit_id, draft=TranslationDraft(unit_id=unit.unit_id, translated_text=tm_entry.target_text), finish="complete", provider_response_id=None, model=request.model, usage=Usage(input_tokens=0, output_tokens=0, cost_usd=0.0, usage_source="estimated"))
+            from_cache = True
+        elif (unit.unit_type in {"code", "protected"} or is_formula_only(unit.source_text)):
+            result = TranslationResult(
+                request_id=request.request_id,
+                unit_id=unit.unit_id,
+                draft=TranslationDraft(unit_id=unit.unit_id, translated_text=unit.source_text),
+                finish="complete",
+                provider_response_id=None,
+                model=request.model,
+                usage=Usage(input_tokens=0, output_tokens=0, cost_usd=0.0, usage_source="estimated"),
+            )
+            from_cache = False
+            ledger_source = "protected_passthrough"
+        else:
+            if serial:
+                translate_one(unit, request, original_cache_key)
+            else:
+                pending.append((unit, request, original_cache_key))
+            continue
+        finalize(unit, request, original_cache_key, result, from_cache, ledger_source, False)
+    if pending:
+        _run_concurrently(pending, translate_one, config.translation_concurrency, stop)
     return store.summary(config.run_id)

@@ -84,3 +84,37 @@ def test_an_unmeasurable_platform_skips_rather_than_guesses(monkeypatch):
     result = chunk_driver.require_memory()
     assert result['checked'] is False
     assert 'not measurable' in result['reason']
+
+
+def test_parallel_chunks_overlap_and_report_in_chunk_order():
+    import threading
+    import time
+    lock = threading.Lock()
+    state = {"active": 0, "peak": 0}
+    tries = {}
+
+    def run_chunk(first, last):
+        with lock:
+            state["active"] += 1
+            state["peak"] = max(state["peak"], state["active"])
+            tries[first] = tries.get(first, 0) + 1
+        time.sleep(0.05 if first != 1 else 0.15)  # the first chunk finishes last
+        with lock:
+            state["active"] -= 1
+        return 1 if first == 11 and tries[first] == 1 else 0
+
+    outcomes = drive_chunks(chunk_ranges(1, 40, 10), run_chunk, max_retries=2, workers=3)
+    assert state["peak"] > 1
+    assert [o["from_page"] for o in outcomes] == [1, 11, 21, 31]
+    assert all(o["ok"] for o in outcomes) and outcomes[1]["attempts"] == 2
+
+
+def test_workers_are_capped_by_what_memory_can_hold(monkeypatch):
+    from pdf_translation import chunk_driver
+    gib = 1024 ** 3
+    monkeypatch.setattr(chunk_driver, "available_commit_bytes", lambda: 5 * gib)
+    assert chunk_driver.affordable_workers(4, 2 * gib) == 2
+    monkeypatch.setattr(chunk_driver, "available_commit_bytes", lambda: 1 * gib)
+    assert chunk_driver.affordable_workers(4, 2 * gib) == 1
+    monkeypatch.setattr(chunk_driver, "available_commit_bytes", lambda: None)
+    assert chunk_driver.affordable_workers(4, 2 * gib) == 4

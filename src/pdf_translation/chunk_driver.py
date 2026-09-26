@@ -21,6 +21,7 @@ a for-loop over subprocesses:
 """
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import os
 import subprocess
 import sys
@@ -42,15 +43,21 @@ def chunk_ranges(first: int, last: int, chunk_size: int) -> list[tuple[int, int]
     return [(start, min(start + chunk_size - 1, last)) for start in range(first, last + 1, chunk_size)]
 
 
-def drive_chunks(chunks: list[tuple[int, int]], run_chunk, max_retries: int = DEFAULT_MAX_RETRIES) -> list[dict]:
+def drive_chunks(chunks: list[tuple[int, int]], run_chunk, max_retries: int = DEFAULT_MAX_RETRIES,
+                 workers: int = 1) -> list[dict]:
     """Run each chunk, retrying a failure, and never abandon the rest.
 
-    ``run_chunk(first, last)`` returns a process exit code.
+    ``run_chunk(first, last)`` returns a process exit code. With ``workers`` > 1
+    that many chunks run at once; chunks write disjoint pages, so the order they
+    finish in does not matter, and outcomes are still reported in chunk order.
     """
     if max_retries < 1:
         raise ValueError("max retries must be at least 1")
-    outcomes: list[dict] = []
-    for first, last in chunks:
+    if workers < 1:
+        raise ValueError("workers must be at least 1")
+
+    def drive(chunk: tuple[int, int]) -> dict:
+        first, last = chunk
         attempts = 0
         exit_code = None
         while attempts < max_retries:
@@ -58,11 +65,28 @@ def drive_chunks(chunks: list[tuple[int, int]], run_chunk, max_retries: int = DE
             exit_code = run_chunk(first, last)
             if exit_code == 0:
                 break
-        outcomes.append({
+        return {
             "from_page": first, "to_page": last, "attempts": attempts,
             "exit_code": exit_code, "ok": exit_code == 0,
-        })
-    return outcomes
+        }
+
+    if workers == 1 or len(chunks) <= 1:
+        return [drive(chunk) for chunk in chunks]
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        return list(pool.map(drive, chunks))
+
+
+def affordable_workers(requested: int, required_bytes: int = REQUIRED_COMMIT_BYTES) -> int:
+    """How many chunk processes the machine can hold at once, at most ``requested``.
+
+    Every process loads its own layout model, so each needs the full per-chunk
+    headroom. Asking for more than fit trades a faster start for a crash inside
+    OpenBLAS partway through; this quietly runs fewer instead.
+    """
+    available = available_commit_bytes()
+    if available is None:
+        return requested
+    return max(1, min(requested, available // required_bytes))
 
 
 def run_subprocess_chunks(
@@ -71,6 +95,7 @@ def run_subprocess_chunks(
     *,
     max_retries: int = DEFAULT_MAX_RETRIES,
     announce: bool = True,
+    workers: int = 1,
 ) -> list[dict]:
     """Drive chunks where each one is a fresh process.
 
@@ -81,7 +106,7 @@ def run_subprocess_chunks(
             print(f"=== chunk {first}-{last} ===", flush=True)
         return subprocess.run(command_for(first, last)).returncode
 
-    return drive_chunks(chunks, run_chunk, max_retries=max_retries)
+    return drive_chunks(chunks, run_chunk, max_retries=max_retries, workers=workers)
 
 
 def summarise(outcomes: list[dict], missing: list[int] | None = None) -> dict:

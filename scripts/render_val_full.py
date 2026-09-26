@@ -20,7 +20,7 @@ import json
 import sys
 
 from pdf_translation.acceptance import captured_page_span, missing_rendered_pages, page_output_paths
-from pdf_translation.chunk_driver import DEFAULT_MAX_RETRIES, REQUIRED_COMMIT_BYTES, chunk_ranges, require_memory, run_subprocess_chunks, summarise
+from pdf_translation.chunk_driver import DEFAULT_MAX_RETRIES, REQUIRED_COMMIT_BYTES, affordable_workers, chunk_ranges, require_memory, run_subprocess_chunks, summarise
 from pdf_translation.babeldoc_adapter import (
     _injection_translator,
     _load_layout_model,
@@ -195,11 +195,14 @@ def run_auto(args, page_numbers: list[int]) -> int:
     """Drive every chunk in its own process, then merge. Returns an exit code."""
     require_memory(args.min_free_mb * 1024 * 1024)
     chunks = chunk_ranges(page_numbers[0], page_numbers[-1], args.chunk_size)
+    workers = affordable_workers(args.workers, args.min_free_mb * 1024 * 1024)
     outcomes = run_subprocess_chunks(
         chunks, lambda first, last: chunk_command(args, first, last), max_retries=args.max_retries,
+        workers=workers,
     )
     still_missing = missing_pages(args.capture, args.source.stem, page_numbers)
     summary = summarise(outcomes, still_missing)
+    summary['workers'] = workers
     if still_missing:
         summary['status'] = 'incomplete'
         print(json.dumps(summary, ensure_ascii=True), flush=True)
@@ -224,6 +227,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument('--min-free-mb', type=int, default=REQUIRED_COMMIT_BYTES // 1024 // 1024,
                         help='Commit headroom required before --auto starts. Lower it only knowing the workload.')
     parser.add_argument('--max-retries', type=int, default=DEFAULT_MAX_RETRIES, help='Attempts per chunk in --auto mode.')
+    parser.add_argument('--workers', type=int, default=1,
+                        help='Chunks rendered at once in --auto mode; lowered to what memory allows.')
     parser.add_argument('--merge-only', action='store_true')
     return parser
 

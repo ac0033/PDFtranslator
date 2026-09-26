@@ -26,7 +26,7 @@ import argparse
 import json
 import sys
 from pdf_translation.babeldoc_adapter import capture_pdf_sample
-from pdf_translation.chunk_driver import DEFAULT_MAX_RETRIES, REQUIRED_COMMIT_BYTES, require_memory, run_subprocess_chunks, summarise
+from pdf_translation.chunk_driver import DEFAULT_MAX_RETRIES, REQUIRED_COMMIT_BYTES, affordable_workers, require_memory, run_subprocess_chunks, summarise
 from pdf_translation.document_context import enrich_pdf_units_with_context
 from pdf_translation.schemas import TranslationUnit
 
@@ -62,6 +62,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument('--min-free-mb', type=int, default=REQUIRED_COMMIT_BYTES // 1024 // 1024,
                         help='Commit headroom required before --auto starts. Lower it only knowing the workload.')
     parser.add_argument('--max-retries', type=int, default=DEFAULT_MAX_RETRIES, help='Attempts per chunk in --auto mode.')
+    parser.add_argument('--workers', type=int, default=1,
+                        help='Chunks captured at once in --auto mode; lowered to what memory allows.')
     parser.add_argument('--merge-only', action='store_true', help='only merge existing chunk outputs')
     parser.add_argument('--capture-only', action='store_true', help='capture this range and stop; leave merging to the caller')
     parser.add_argument('--output', type=Path, required=True)
@@ -80,8 +82,11 @@ def main(argv: list[str] | None = None) -> int:
         require_memory(args.min_free_mb * 1024 * 1024)
         starts = list(range(args.from_page, last_page + 1, args.chunk_size))
         chunks = [(start, min(start + args.chunk_size - 1, last_page)) for start in starts]
-        outcomes = run_subprocess_chunks(chunks, lambda first, last: chunk_command(args, first, last), max_retries=args.max_retries)
+        workers = affordable_workers(args.workers, args.min_free_mb * 1024 * 1024)
+        outcomes = run_subprocess_chunks(chunks, lambda first, last: chunk_command(args, first, last),
+                                         max_retries=args.max_retries, workers=workers)
         summary = summarise(outcomes)
+        summary['workers'] = workers
         summary['status'] = 'chunks_complete' if not summary['failed_chunks'] else 'chunks_incomplete'
         print(json.dumps(summary, ensure_ascii=True), flush=True)
         if summary['failed_chunks']:

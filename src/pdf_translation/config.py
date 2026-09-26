@@ -34,10 +34,18 @@ class RunConfig(StrictModel):
     context_engine: Literal["v0-fixed", "v1"] = "v0-fixed"
     context_db: str | None = None
     join_cross_page_words: bool = False
+    # How many provider requests may be in flight at once. It changes how fast
+    # a run finishes, not what it produces, so it is left out of config_hash:
+    # raising it must not refuse to resume a run started with a lower value.
+    translation_concurrency: int = Field(default=1, ge=1, le=32)
 
     @property
     def config_hash(self) -> str:
-        return stable_hash(self)
+        return stable_hash(self.model_dump(mode="json", exclude=EXECUTION_ONLY_FIELDS))
+
+
+#: Settings that affect speed only; excluded from the run identity.
+EXECUTION_ONLY_FIELDS = frozenset({"translation_concurrency"})
 
 
 def load_config(path: Path) -> RunConfig:

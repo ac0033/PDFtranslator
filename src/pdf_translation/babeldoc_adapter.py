@@ -331,9 +331,54 @@ def _purge_working_dir(working_dir, attempts: int = 5) -> bool:
     return True
 
 
-def _run_babeldoc_page(source: Path, page_index: int, output_dir: Path, translator, layout=None):
+_BABELDOC_TUNED = False
+
+
+def _tune_babeldoc_for_local_translators() -> None:
+    """Remove two per-page costs that buy nothing here. Idempotent, per process.
+
+    Every translator this project hands BabelDOC is local - capture records the
+    text, rendering injects stored translations - so no provider sits behind
+    BabelDOC. Two of its defaults assume one does:
+
+    * The global translate rate limiter (5 calls/s) sleeps 0.2 s before each
+      paragraph, about 9 s of a typical page, waiting on nothing.
+    * ``assets.get_font_and_metadata`` re-hashes the font file (SHA3-256) and
+      starts a thread plus event loop on every call, about 200 calls and 23 s
+      per page, re-verifying files already verified in this process.
+
+    The font lookup is memoised on success only, so a font that is missing or
+    corrupt is still found, downloaded and verified exactly as before.
+    """
+    global _BABELDOC_TUNED
+    if _BABELDOC_TUNED:
+        return
+    from babeldoc.assets import assets
+    from babeldoc.translator.translator import set_translate_rate_limiter
+
+    set_translate_rate_limiter(100_000)
+    lookup = assets.get_font_and_metadata
+    verified: dict[str, tuple] = {}
+
+    def get_font_and_metadata(font_file_name: str):
+        if font_file_name not in verified:
+            verified[font_file_name] = lookup(font_file_name)
+        return verified[font_file_name]
+
+    assets.get_font_and_metadata = get_font_and_metadata
+    _BABELDOC_TUNED = True
+
+
+def _run_babeldoc_page(source: Path, page_index: int, output_dir: Path, translator, layout=None, *, emit_pdf: bool = True):
+    """Run BabelDOC over one page with ``translator`` supplying the text.
+
+    ``emit_pdf=False`` is for capture, which only needs the paragraphs the
+    translator is handed: the PDFs would be thrown away, and writing them costs
+    font subsetting plus one fresh Python process per save on Windows.
+    """
     from babeldoc.format.pdf.translation_config import TranslationConfig
 
+    _tune_babeldoc_for_local_translators()
     output_dir.mkdir(parents=True, exist_ok=True)
     layout = layout or _load_layout_model()
     config = TranslationConfig(
@@ -354,6 +399,9 @@ def _run_babeldoc_page(source: Path, page_index: int, output_dir: Path, translat
         skip_scanned_detection=True,
         disable_rich_text_translate=True,
         disable_same_text_fallback=True,
+        no_mono=not emit_pdf,
+        no_dual=not emit_pdf,
+        skip_clean=not emit_pdf,
     )
     getattr(layout, "init_font_mapper", lambda _config: None)(config)
     try:
@@ -366,7 +414,7 @@ def _run_babeldoc_page(source: Path, page_index: int, output_dir: Path, translat
 def extract_page_units(source: Path, page_index: int, capture_dir: Path, layout=None) -> tuple[list[TranslationUnit], list[dict]]:
     """Capture layout fragments, then rebuild conservative semantic groups."""
     raw_records: list[dict] = []
-    _run_babeldoc_page(source, page_index, capture_dir, _capture_translator(raw_records), layout=layout)
+    _run_babeldoc_page(source, page_index, capture_dir, _capture_translator(raw_records), layout=layout, emit_pdf=False)
     document_sha256 = sha256_file(source)
     document_id = f"{source.stem}-{document_sha256[:16]}"
     records: list[dict] = []
