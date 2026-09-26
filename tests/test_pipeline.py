@@ -3,11 +3,13 @@ import json
 from types import SimpleNamespace
 
 import pytest
+import httpx
+from openai import APIStatusError
 
 from pdf_translation.budget import BudgetExceeded, reserve_budget
 from pdf_translation.config import RunConfig
 from pdf_translation.hashing import sha256_bytes, stable_hash
-from pdf_translation.pipeline import ProviderAttemptsExhausted, estimate_units, estimated_input_token_ceiling, make_request, output_token_limit, run_units
+from pdf_translation.pipeline import ProviderAttemptsExhausted, ProviderUnavailable, estimate_units, estimated_input_token_ceiling, make_request, output_token_limit, run_units
 from pdf_translation.providers import DeepSeekProvider, OpenAIProvider, ProviderCallError
 from pdf_translation.quality import check_quality, repair_boundary_markers
 from pdf_translation.schemas import ArtifactRef, ContextItem, ModelSpec, ProtectedSpan, SourceRef, TranslationDraft, TranslationResult, TranslationUnit, Usage
@@ -317,6 +319,57 @@ def test_provider_attempt_limit_survives_resume(tmp_path: Path, monkeypatch: pyt
     summary = StateStore(tmp_path / cfg.run_id / "state.sqlite").summary(cfg.run_id)
     assert summary["provider_attempts"] == 2
     assert summary["failed_provider_attempts"] == 2
+
+
+def test_exhaustion_cannot_hide_an_existing_qualified_result(tmp_path: Path):
+    cfg = config("existing-qualified-result")
+    source = unit("There are 42 examples")
+    store = StateStore(tmp_path / cfg.run_id / "state.sqlite")
+    store.prepare(cfg.run_id, source.unit_id, "source-key")
+    request = make_request(source, cfg)
+    result = TranslationResult(request_id=request.request_id, unit_id=source.unit_id,
+                               draft=TranslationDraft(unit_id=source.unit_id, translated_text="有43个例子"),
+                               finish="complete", model=request.model, usage=Usage(usage_source="estimated"))
+    report = check_quality(source, result)
+    assert report.status == "needs_review"
+    store.commit(cfg.run_id, result, report, "source-key", cached=True, record_usage=False)
+    store.mark_exhausted(cfg.run_id, source.unit_id)
+    assert store.state(cfg.run_id, source.unit_id) == "needs_review"
+    # Recover results stored by the older code without replacing their drafts.
+    with store.connect() as con:
+        con.execute("UPDATE tasks SET state='exhausted' WHERE run_id=? AND unit_id=?", (cfg.run_id, source.unit_id))
+    assert store.restore_exhausted_with_result(cfg.run_id) == [source.unit_id]
+    assert store.state(cfg.run_id, source.unit_id) == "needs_review"
+    assert store.result(cfg.run_id, source.unit_id).draft.translated_text == "有43个例子"
+
+
+def test_http_402_pauses_the_book_without_exhausting_or_billing_a_unit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    class DeniedProvider:
+        calls = 0
+
+        def translate(self, request):
+            self.calls += 1
+            response = httpx.Response(402, request=httpx.Request("POST", "https://api.deepseek.com/responses"))
+            raise APIStatusError("Insufficient Balance", response=response, body=None)
+
+    denied = DeniedProvider()
+    monkeypatch.setattr("pdf_translation.pipeline.DeepSeekProvider", lambda **_: denied)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-only")
+    cfg = config("funds-blocked").model_copy(update={"provider": "deepseek", "model_id": "deepseek-flash", "budget_usd": 1.0, "input_usd_per_million": 1.0, "output_usd_per_million": 1.0})
+    with pytest.raises(ProviderUnavailable, match="HTTP 402"):
+        run_units([unit(), unit("Another section").model_copy(update={"unit_id": "u2"})], cfg, tmp_path)
+    store = StateStore(tmp_path / cfg.run_id / "state.sqlite")
+    assert denied.calls == 1
+    assert store.state(cfg.run_id, "u1") == "prepared"
+    assert store.state(cfg.run_id, "u2") is None
+    assert store.provider_attempt_count(cfg.run_id, "u1") == 0
+    attempts = store.provider_attempts(cfg.run_id)
+    assert len(attempts) == 1 and attempts[0]["error_category"] == "http_402"
+    assert store.summary(cfg.run_id)["cost_usd"] == 0
+    store.mark_exhausted(cfg.run_id, "u1")
+    assert store.requeue_provider_failures(cfg.run_id) == ["u1"]
+    assert store.state(cfg.run_id, "u1") == "prepared"
+    assert store.provider_attempts(cfg.run_id) == attempts
 
 
 def test_critical_marker_failure_is_recorded_and_retried(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

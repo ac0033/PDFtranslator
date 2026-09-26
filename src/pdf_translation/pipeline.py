@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from uuid import uuid4
 
+from openai import APIStatusError
+
 from .budget import estimate_cost, reserve_budget
 from .config import RunConfig
 from .context_router import build_context_packet, select_exact_tm
@@ -24,6 +26,10 @@ class ProviderAttemptsExhausted(RuntimeError):
     def __init__(self, message: str, unit_id: str | None = None):
         super().__init__(message)
         self.unit_id = unit_id
+
+
+class ProviderUnavailable(RuntimeError):
+    """Account/service failure: stop the book, not the next hundred units."""
 
 
 DEFAULT_TRANSLATION_STYLE = "忠实保留否定、量词、条件和概率程度；采用自然教材中文；不扩写。"
@@ -365,6 +371,27 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path, 
                             estimated_input = estimated_input_token_ceiling(request)
                             estimate = estimate_cost(estimated_input, request.model.max_output_tokens, config.input_usd_per_million, config.output_usd_per_million)
                         continue
+                    except APIStatusError as exc:
+                        # 402 means the account, not this paragraph, is blocked.
+                        # It must not consume a unit's translation retry budget or
+                        # charge a fictitious output bill, then fail every following
+                        # paragraph in the book. Pause the whole run immediately.
+                        denied = 400 <= exc.status_code < 500
+                        failed_usage = Usage(
+                            input_tokens=0 if denied else estimated_input,
+                            output_tokens=0 if denied else request.model.max_output_tokens,
+                            cost_usd=0.0 if denied else estimate,
+                            usage_source="provider" if denied else "estimated",
+                        )
+                        store.record_provider_attempt(
+                            config.run_id, unit.unit_id, request.request_id, attempt_no,
+                            "error", failed_usage,
+                            max_output_tokens=request.model.max_output_tokens,
+                            error_category=f"http_{exc.status_code}",
+                        )
+                        raise ProviderUnavailable(
+                            f"provider HTTP {exc.status_code}; translation paused for {unit.unit_id}"
+                        ) from exc
                     except Exception as exc:
                         # The provider may have accepted a request without returning
                         # usage. Charge the reserved ceiling so retries remain bounded.

@@ -85,6 +85,40 @@ def test_reuse_capture_checks_files_before_loading_layout_model(tmp_path: Path, 
         )
 
 
+def test_translate_only_writes_review_without_starting_pdf_render(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    source = tmp_path / "source.pdf"
+    with pymupdf.open() as document:
+        document.new_page().insert_text((40, 60), "This is a source sentence.")
+        document.save(source)
+    text = "This is a source sentence."
+    unit = TranslationUnit(unit_id="u1", document_id="doc", ir_revision="test", unit_type="paragraph", source_lang="en", target_lang="zh-CN", source_text=text, source_hash=stable_hash(text))
+    capture = tmp_path / "capture"
+    capture.mkdir()
+    (capture / "units.jsonl").write_text(unit.model_dump_json() + "\n", encoding="utf-8")
+    record = {"page_index": 0, "unit_id": "u1", "group_size": 1, "layout_marker": None, "marker_map": {}, "bbox_confidence": 1.0}
+    (capture / "capture-map.jsonl").write_text(json.dumps(record) + "\n", encoding="utf-8")
+    monkeypatch.setattr(babeldoc_adapter, "validate_capture_identity", lambda *args: None)
+    monkeypatch.setattr(babeldoc_adapter, "enrich_units_with_protected_literals", lambda source, units, records: units)
+    monkeypatch.setattr(babeldoc_adapter, "run_units", lambda *args: {"states": {"accepted": 1}})
+    monkeypatch.setattr(babeldoc_adapter, "_write_content_review_queue", lambda units, store, run_id, path: path.write_text("review", encoding="utf-8"))
+    monkeypatch.setattr(babeldoc_adapter, "_load_layout_model", lambda: pytest.fail("translate-only tried to load the renderer"))
+
+    class Store:
+        def __init__(self, *args):
+            pass
+
+        def result(self, *args):
+            return SimpleNamespace(draft=SimpleNamespace(translated_text="一条源句子。"))
+
+    monkeypatch.setattr(babeldoc_adapter, "StateStore", Store)
+    config = load_config(Path("configs/v0.5.mock.toml")).model_copy(update={"context_engine": "v0-fixed"})
+    report = babeldoc_adapter.run_smoke_document(source, (0,), config, capture, tmp_path / "runs", tmp_path / "scratch", reuse_capture=True, translate_only=True)
+    assert report["status"] == "translation_complete"
+    assert report["translated_units"] == 1
+    assert (capture / "content-review.jsonl").exists()
+    assert not list(capture.glob("*.pdf"))
+
+
 def test_reused_capture_rejects_wrong_pdf_identity(tmp_path: Path):
     source = tmp_path / "source.pdf"
     source.write_bytes(b"pdf identity A")
@@ -149,13 +183,23 @@ def test_content_review_queue_exposes_known_and_unknown_formula_literals(tmp_pat
     assert row["unresolved_formula_markers"] == [protected[1].marker]
 
 
-def test_page_is_verifiably_empty_distinguishes_blank_and_content_pages(tmp_path: Path):
+def test_page_is_verifiably_empty_distinguishes_blank_folio_and_content_pages(tmp_path: Path):
     source = tmp_path / "empty-check.pdf"
     document = pymupdf.open()
     document.new_page()
     text_page = document.new_page()
     text_page.insert_text((72, 72), "not empty")
+    folio = document.new_page()
+    folio.insert_text((72, 120), "ii")
+    middle = document.new_page()
+    middle.insert_text((72, 420), "ii")
+    figure = document.new_page()
+    figure.insert_text((72, 120), "ii")
+    figure.draw_rect(pymupdf.Rect(100, 200, 200, 250))
     document.save(source)
     document.close()
     assert babeldoc_adapter._page_is_verifiably_empty(source, 0) is True
     assert babeldoc_adapter._page_is_verifiably_empty(source, 1) is False
+    assert babeldoc_adapter._page_is_verifiably_empty(source, 2) is True
+    assert babeldoc_adapter._page_is_verifiably_empty(source, 3) is False
+    assert babeldoc_adapter._page_is_verifiably_empty(source, 4) is False

@@ -45,6 +45,12 @@ def write_capture_map(path, per_page):
 def test_code_and_formula_fonts_are_not_prose():
     assert is_prose_font("TeXGyrePagella-Regular")
     assert is_prose_font("URWPalladioL-Roma")
+    # Computer Modern text faces are not mathematical glyphs just because
+    # their names begin with CM; otherwise LaTeX textbooks escape the audit.
+    for font in ("CMR10", "CMBX12", "CMTI10", "CMSL10"):
+        assert is_prose_font(font)
+    assert not is_prose_font("CMMI10")
+    assert not is_prose_font("CMEX10")
     assert not is_prose_font("JuliaMono-Medium")
     assert not is_prose_font("Courier")
     assert not is_prose_font("CMSY10")

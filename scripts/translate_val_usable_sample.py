@@ -15,6 +15,8 @@ not inherit each other's wording decisions.
 """
 import argparse
 import json
+import os
+from contextlib import contextmanager
 from pathlib import Path
 from dotenv import load_dotenv
 from pdf_translation.babeldoc_adapter import run_smoke_document
@@ -37,7 +39,39 @@ def build_parser() -> argparse.ArgumentParser:
                         help='Read --style-note from this UTF-8 file. A batch file cannot carry non-ASCII text safely.')
     parser.add_argument('--style-version', default='usable-v1', help='Version stamped on the stored style rule.')
     parser.add_argument('--execute-paid', action='store_true')
+    parser.add_argument('--translate-only', action='store_true', help='Only translate and write review data; render separately in short-lived page chunks.')
     return parser
+
+
+@contextmanager
+def exclusive_translation_lock(path: Path):
+    """Prevent two scheduled/manual workers from writing one run concurrently.
+
+    File locks release automatically on process death, unlike a stale PID file.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("r+b" if path.exists() else "w+b") as stream:
+        if stream.seek(0, 2) == 0:
+            stream.write(b"0")
+            stream.flush()
+        stream.seek(0)
+        try:
+            if os.name == "nt":
+                import msvcrt
+                msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as exc:
+            raise RuntimeError(f"translation already running for {path.parent}; refusing concurrent writer") from exc
+        try:
+            yield
+        finally:
+            stream.seek(0)
+            if os.name == "nt":
+                msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
 
 
 def load_units(capture: Path) -> list[TranslationUnit]:
@@ -78,6 +112,7 @@ def main(argv: list[str] | None = None) -> int:
             args.source, pages, config, args.capture, Path('runs'), scratch,
             execute_paid=execute_paid, reuse_capture=True,
             sample_name=args.sample_name, render_review_draft=render_review_draft,
+            translate_only=args.translate_only,
         )
 
     report = run(False)
@@ -92,7 +127,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.execute_paid:
         if report['estimated_max_cost_usd'] > config.budget_usd:
             raise ValueError('estimated cost exceeds the configured ceiling; no API call made')
-        report = run(True, render_review_draft=True)
+        with exclusive_translation_lock(Path('runs') / config.run_id / 'translation.lock'):
+            report = run(True, render_review_draft=True)
         print(json.dumps(report, ensure_ascii=True), flush=True)
     return 0
 

@@ -537,12 +537,29 @@ def _merge_pdfs(inputs: list[Path], output: Path) -> None:
 
 
 def _page_is_verifiably_empty(source: Path, page_index: int) -> bool:
-    """Confirm a page BabelDOC rejected as paragraph-less really carries no content."""
+    """Allow only a blank page or a page containing a marginal folio to pass through.
+
+    Some front-matter leaves contain just a roman page number (e.g. ``ii``).
+    BabelDOC returns no records for them, but refusing to copy that page
+    blocks the entire 603-page render. Any prose, diagram or image must still
+    block rather than be silently passed off as translated.
+    """
     import pymupdf
 
     with pymupdf.open(source) as document:
         page = document[page_index]
-        return not page.get_text().strip() and not page.get_images() and not page.get_drawings()
+        if page.get_images() or page.get_drawings():
+            return False
+        text = page.get_text().strip()
+        if not text:
+            return True
+        if not re.fullmatch(r"(?:[ivxlcdm]+|[0-9]+)", text, flags=re.I):
+            return False
+        blocks = [block for block in page.get_text("dict")["blocks"] if block.get("lines")]
+        return len(blocks) == 1 and (
+            blocks[0]["bbox"][3] <= page.rect.height * 0.2
+            or blocks[0]["bbox"][1] >= page.rect.height * 0.8
+        )
 
 
 def capture_pdf_sample(
@@ -659,8 +676,9 @@ def run_smoke_document(
     reuse_capture: bool = False,
     sample_name: str = "smoke",
     render_review_draft: bool = False,
+    translate_only: bool = False,
 ) -> dict:
-    """Capture, translate, quality-check and inject a frozen PDF sample."""
+    """Capture, translate, quality-check and optionally inject a PDF sample."""
     output_dir.mkdir(parents=True, exist_ok=True)
     units_path = output_dir / "units.jsonl"
     capture_map_path = output_dir / "capture-map.jsonl"
@@ -769,6 +787,20 @@ def run_smoke_document(
     if exhausted_units:
         base_report = {**base_report, "exhausted_units": exhausted_units}
     _write_content_review_queue(all_units, store, config.run_id, review_queue_path)
+    if translate_only:
+        # Large documents must render in isolated page chunks rather than keep
+        # BabelDOC alive for hundreds of pages in the translation process.
+        translated = sum(
+            result is not None and result.draft is not None
+            for result in (store.result(config.run_id, unit.unit_id) for unit in all_units)
+        )
+        report = {
+            **base_report, "status": "translation_complete" if translated == len(all_units) else "translation_incomplete",
+            "translated_units": translated, "run_summary": summary,
+            "content_review_jsonl": review_queue_path.name,
+        }
+        report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        return report
     draft_allowed = render_review_draft and review_draft_renderable(store.quality_reports(config.run_id), len(all_units))
     if summary.get("states") != {"accepted": len(all_units)} and not draft_allowed:
         report = {**base_report, "status": "quality_gate_blocked", "run_summary": summary, "content_review_jsonl": review_queue_path.name}

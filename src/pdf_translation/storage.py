@@ -78,9 +78,27 @@ class StateStore:
         """Pin a unit whose provider attempts are exhausted so reruns skip it."""
         with self.connect() as con:
             con.execute(
-                "UPDATE tasks SET state='exhausted', updated_at=CURRENT_TIMESTAMP WHERE run_id=? AND unit_id=?",
+                "UPDATE tasks SET state='exhausted', updated_at=CURRENT_TIMESTAMP "
+                "WHERE run_id=? AND unit_id=? AND result_json IS NULL",
                 (run_id, unit_id),
             )
+
+    def restore_exhausted_with_result(self, run_id: str) -> list[str]:
+        """Repair stale exhausted state when an existing result already passed quality checks."""
+        restored: list[str] = []
+        with self.connect() as con:
+            rows = con.execute("SELECT unit_id,quality_json FROM tasks WHERE run_id=? AND state='exhausted' "
+                               "AND result_json IS NOT NULL AND quality_json IS NOT NULL", (run_id,)).fetchall()
+            for row in rows:
+                status = json.loads(row['quality_json']).get('status')
+                if status not in {'pass', 'needs_review'}:
+                    continue
+                con.execute("UPDATE tasks SET state=?,updated_at=CURRENT_TIMESTAMP WHERE run_id=? AND unit_id=?",
+                            ('accepted' if status == 'pass' else 'needs_review', run_id, row['unit_id']))
+                con.execute("INSERT INTO events(run_id,unit_id,event,detail) VALUES(?,?,?,?)",
+                            (run_id, row['unit_id'], 'restore_existing_qualified_result', '{}'))
+                restored.append(row['unit_id'])
+        return restored
 
     def clear_exhausted(self, run_id: str) -> list[str]:
         """Let exhausted units be attempted again, and say which ones.
@@ -158,8 +176,35 @@ class StateStore:
             )
 
     def provider_attempt_count(self, run_id: str, unit_id: str) -> int:
+        """Count content retries, not account outages that never returned a draft."""
         with self.connect() as con:
-            return int(con.execute("SELECT COUNT(*) FROM provider_attempts WHERE run_id=? AND unit_id=?", (run_id, unit_id)).fetchone()[0])
+            return int(con.execute(
+                "SELECT COUNT(*) FROM provider_attempts WHERE run_id=? AND unit_id=? "
+                "AND (error_category IS NULL OR (error_category NOT LIKE 'http_%' AND error_category != 'APIStatusError'))",
+                (run_id, unit_id),
+            ).fetchone()[0])
+
+    def requeue_provider_failures(self, run_id: str) -> list[str]:
+        """Unpin only units whose entire failure history is transport/account errors.
+
+        Unlike clear_exhausted, keep the attempts and ledger for audit. Call
+        only after connectivity/funds are verified: a retry while the provider
+        is still unavailable would simply pause the book again.
+        """
+        with self.connect() as con:
+            rows = con.execute(
+                "SELECT t.unit_id FROM tasks t WHERE t.run_id=? AND t.state='exhausted' AND t.result_json IS NULL "
+                "AND EXISTS (SELECT 1 FROM provider_attempts a WHERE a.run_id=t.run_id AND a.unit_id=t.unit_id) "
+                "AND NOT EXISTS (SELECT 1 FROM provider_attempts a WHERE a.run_id=t.run_id AND a.unit_id=t.unit_id "
+                "AND (a.outcome!='error' OR (COALESCE(a.error_category,'')!='APIStatusError' AND COALESCE(a.error_category,'') NOT LIKE 'http_%')))",
+                (run_id,),
+            ).fetchall()
+            units = [row['unit_id'] for row in rows]
+            for unit_id in units:
+                con.execute("UPDATE tasks SET state='prepared',updated_at=CURRENT_TIMESTAMP WHERE run_id=? AND unit_id=?", (run_id, unit_id))
+                con.execute("INSERT INTO events(run_id,unit_id,event,detail) VALUES(?,?,?,?)",
+                            (run_id, unit_id, 'provider_outage_requeued', '{\"reason\":\"external provider access restored\"}'))
+            return units
 
     def provider_attempts(self, run_id: str) -> list[dict]:
         with self.connect() as con:

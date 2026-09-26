@@ -42,7 +42,10 @@ import pymupdf
 
 WORD = re.compile(r"[A-Za-z]{3,}")
 CODE_FONT = re.compile(r"mono|courier|consol|typewriter|cmtt|inconsolata", re.I)
-MATH_FONT = re.compile(r"^(?:cm(?:sy|mi|ex|r|b|bx|ti)|msam|msbm|eur|rsfs|stmary|wasy)|math|pazo", re.I)
+# CM Roman, bold, and italic are ordinary Computer Modern prose fonts in
+# LaTeX books (CMR10/CMBX12/CMTI10). Excluding them made an entire textbook
+# appear to contain only three prose words in a two-page coverage check.
+MATH_FONT = re.compile(r"^(?:cm(?:sy|mi|ex)|msam|msbm|eur|rsfs|stmary|wasy)|math|pazo", re.I)
 
 #: Standard LaTeX operator names, plus the words that turn up in \text{} inside
 #: a cases environment. Set in the body font, but part of the formula.
