@@ -1,1 +1,0 @@
-本书为 Algorithms for Optimization（优化算法教材）。逐段完整翻译，不总结、不删减、不添加原文没有的解释；保留公式标记、数字、变量名、算法名和条件/否定关系；同一术语全书一致（如 objective function 目标函数、design point 设计点、feasible 可行、convergence 收敛、gradient 梯度、Hessian 海森矩阵）；算法伪代码与代码块中的标识符保持英文原样。

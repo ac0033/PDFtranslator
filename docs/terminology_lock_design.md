@@ -25,7 +25,7 @@
 ## Current candidate coverage revision
 
 The approved glossary currently contains 53 entries. The latest candidate scan is
-`reports/v0.7_rc13_term_candidates_r2.json`, bound to the source PDF and current
+a per-document term-candidates report, bound to the source PDF and current
 extracted-unit file hashes. It contains 727 review candidates; this count includes
 ordinary words and nested phrases and is not a count of confirmed technical terms.
 Historical 22/25-entry and 575-candidate counts above describe earlier snapshots.

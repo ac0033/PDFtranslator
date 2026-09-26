@@ -10,7 +10,7 @@
 
 ## 为什么需要这一步
 
-val.pdf（442 页）的中文版与双语版已交付，但那份"可用"是人工兜底出来的：一次完整生成之后又做了约 6 轮人工复核修补（详见 `v0.7_rc14_current_status.md`）。去掉那 6 轮，一次跑完的成品会带着误译和漏译交付。第 ① 步要解决的是其中两件事——让渲染能自己跑完，让"能不能交付"这个判断不再依赖人。
+val.pdf（442 页）的中文版与双语版已交付，但那份"可用"是人工兜底出来的：一次完整生成之后又做了约 6 轮人工复核修补。去掉那 6 轮，一次跑完的成品会带着误译和漏译交付。第 ① 步要解决的是其中两件事——让渲染能自己跑完，让"能不能交付"这个判断不再依赖人。
 
 ## A：渲染驱动（`scripts/render_val_full.py`）
 
@@ -121,14 +121,14 @@ uv run pdftrans acceptance-report \
 
 ```bash
 # 一次性：把 2026-09 的人工复核转成台账（provenance 见脚本 docstring）
-uv run python scripts/seed_val_review_ledger.py
+# 按书目准备复核台账（JSON，见下文格式）
 
 # 验收时带上运行库与台账
 uv run pdftrans acceptance-report \
   --source pdf/val.pdf \
   --render-dir output/pdf/val-usable-babeldoc-full-r1 \
   --run-id val-usable-full-r1 \
-  --review-ledger reports/val_review_ledger.json
+  --review-ledger <review-ledger>.json
 ```
 
 ## C：捕获层覆盖度对账（第 ③ 步）
@@ -173,7 +173,7 @@ uv run pdftrans capture-coverage --source pdf/<book>.pdf --capture-map output/pd
 
 ### 多样性语料标定
 
-捕获是**本地操作、零 API 成本**，所以跨文档量化捕获层的通用性不需要花钱。每本书按确定性规则抽取中段 12 页（`scripts/capture_coverage_corpus.py`）：
+捕获是**本地操作、零 API 成本**，所以跨文档量化捕获层的通用性不需要花钱。每本书按确定性规则抽取中段 12 页（抽样脚本）：
 
 | 文档 | 页数 | 抽样 | 未捕获正文 | 占比 |
 |---|---|---|---|---|
@@ -244,7 +244,7 @@ cases: 23   （number 1 + untranslated_unit 21 + leaked_markup 1）
 ```bash
 # 默认只估算，什么都不发送
 uv run pdftrans review-warnings --source pdf/val.pdf --render-dir output/pdf/<dir> \
-  --config configs/<run>.toml --run-id <run_id> --review-ledger reports/val_review_ledger.json
+  --config configs/<run>.toml --run-id <run_id> --review-ledger <review-ledger>.json
 # 确认后才真的花钱
 uv run pdftrans review-warnings ... --execute-paid --update-ledger
 ```
@@ -344,7 +344,7 @@ neither the cause nor the cure.
 
 ## optimization.pdf 第 150–269 页：端到端实测结论（2026-09-18）
 
-第二本书，120 页，全程按无人值守路径跑（`run-capture-opt-slice.bat` → `run-deliver-opt-slice.bat`）。
+第二本书，120 页，全程按无人值守路径跑。
 
 | 项 | 结果 |
 |---|---|
@@ -448,7 +448,7 @@ review queue is stale for 25 units
 not machine checkable: 3998 个公式占位符，分布在 361 页，需人工对照原书
 ```
 
-报告存档：`reports/v0.7_rc14_val_acceptance.json`；台账：`reports/val_review_ledger.json`。
+报告存档：按书目保存的验收单；台账：`<review-ledger>.json`。
 
 **人工复核清单从 213 条原始告警降到约 23 条可操作项**（1 数字 + 21 疑似未译 + 1 标记泄漏），外加一份按术语分组的英文残留咨询清单。
 

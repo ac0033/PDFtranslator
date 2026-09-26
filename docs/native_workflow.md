@@ -54,7 +54,7 @@ The router checks that hash against the actual unit.source_text (not a potential
 stale unit.source_hash field) before including the rule. A reused ordinal with
 different source text raises an error. Other unit IDs do not inherit the feedback,
 and a source-bound rule cannot have document-wide scope. The two recorded page15
-revision rules now carry this binding; config/cs224n-live-review-styles.json stores
+revision rules now carry this binding; a per-document style file (not shipped with the repository) stores
 the reusable snapshot. Generic document style rules remain independent of a single
 source paragraph. This validates feedback identity; it does not discover semantic
 errors automatically or replace human review of a model's revised translation.

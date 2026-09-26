@@ -1,9 +1,0 @@
-{
-  "public_url": "https://web.stanford.edu/class/cs224n/readings/cs224n-2019-notes03-neuralnets.pdf",
-  "public_sha256": "1c29d0561e0051cbb265d064e0dffc16042d88a34bb5717bba8dd003967026ad",
-  "local_sha256": "1c29d0561e0051cbb265d064e0dffc16042d88a34bb5717bba8dd003967026ad",
-  "public_size": 598646,
-  "local_size": 598646,
-  "byte_identical": true,
-  "purpose": "verify public course handout before requested DeepSeek translation"
-}
