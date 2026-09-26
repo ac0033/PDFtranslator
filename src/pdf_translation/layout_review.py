@@ -58,9 +58,13 @@ SEVERITIES = ("wrong_meaning", "unreadable", "minor")
 #: Only these are applied; a model's stylistic preference is not a defect.
 APPLIED_SEVERITIES = frozenset({"wrong_meaning", "unreadable"})
 #: Problems a fix of this kind may introduce: dropping hidden text can drop its numbers;
-ALLOWED_NEW = {"extraction_garbage": {"number", "untranslated_unit"},
+ALLOWED_NEW = {"extraction_garbage": {"number", "untranslated_unit", "layout_boundary_unverifiable"},
+               # restored keywords are not a translation; emptied slots leave boundaries unverifiable
+               "code_translated": {"untranslated_unit", "layout_boundary_unverifiable"},
                # moving a marker is exactly what changes marker order
                "symbol_misplaced": {"protected_marker_order"}}
+#: Fix kinds whose job can be to bring back the source's own English words.
+RESTORES_SOURCE_WORDS = frozenset({"code_translated", "extraction_garbage"})
 #: Formula notation belongs inside the markers, which render the original glyphs;
 #: written out in the translation it prints twice, or as raw ^{...} syntax.
 FORMULA_CHARS = set("=+^_{}\\≈≤≥≠∑∏∫σ∂∇−×·→←∈")
@@ -289,8 +293,12 @@ def detect_page_issues(source_pdf: Path, capture: Path, stem: str, rows: list[di
 
 # --- review and validation --------------------------------------------------------
 
-def validate_fix(unit: TranslationUnit, current: TranslationResult, new_text: str, kind: str) -> tuple[bool, str, list[str]]:
-    """Accept a replacement only if it is no worse than what it replaces."""
+def validate_fix(unit: TranslationUnit, current: TranslationResult, new_text: str, kind: str,
+                 hidden: list[str] | None = None) -> tuple[bool, str, list[str]]:
+    """Accept a replacement only if it is no worse than what it replaces.
+
+    ``hidden`` are stretches of the source drawn off the page; a fix may not keep them.
+    """
     new_text = new_text.strip()
     if not new_text or new_text == current.draft.translated_text:
         return False, "empty or unchanged", []
@@ -309,15 +317,28 @@ def validate_fix(unit: TranslationUnit, current: TranslationResult, new_text: st
     # The gate checks form, not meaning, so bound how much a fix may rewrite.
     if kind == "symbol_misplaced" and old_cjk and difflib.SequenceMatcher(None, old_cjk, new_cjk).ratio() < MOVE_SIMILARITY:
         return False, "rewrites the wording; moving a marker keeps the words", []
-    if kind in ("mistranslation", "code_translated", "other") and len(new_cjk) < KEEP_SHARE * len(old_cjk):
+    if kind in ("mistranslation", "other") and len(new_cjk) < KEEP_SHARE * len(old_cjk):
         return False, "drops too much of the text", []
+    strip = lambda text: re.sub(r"⟦[^⟧]*⟧", "", text)
     if kind != "code_translated":
-        strip = lambda text: re.sub(r"⟦[^⟧]*⟧", "", text)
         added = sorted(set(strip(new_text)) & FORMULA_CHARS - set(strip(old_text)))
         if added:
             return False, "writes formula notation outside the markers: " + "".join(added), []
-        if len(LATIN_WORDS.findall(strip(new_text))) > len(LATIN_WORDS.findall(strip(old_text))):
-            return False, "puts English back into the Chinese", []
+    if kind in RESTORES_SOURCE_WORDS:
+        # Restoring code keywords is the fix; only words the source lacks are invented.
+        source_words = {w.lower() for w in LATIN_WORDS.findall(unit.source_text)}
+        invented = [w for w in LATIN_WORDS.findall(strip(new_text)) if w.lower() not in source_words]
+        if invented:
+            return False, "adds English the source does not have: " + ", ".join(invented[:5]), []
+        if hidden:
+            visible_words = {w.lower() for part in re.split(r"⟦[^⟧]*⟧", unit.source_text)
+                             if part.strip() not in hidden for w in LATIN_WORDS.findall(part)}
+            hidden_only = {w.lower() for part in hidden for w in LATIN_WORDS.findall(part)} - visible_words
+            kept = [w for w in LATIN_WORDS.findall(strip(new_text)) if w.lower() in hidden_only]
+            if kept:
+                return False, "keeps text that is not visible on the page: " + ", ".join(kept[:5]), []
+    elif len(LATIN_WORDS.findall(strip(new_text))) > len(LATIN_WORDS.findall(strip(old_text))):
+        return False, "puts English back into the Chinese", []
     allowed = sorted({i.category for i in after.issues} - {i.category for i in before.issues})
     return True, "accepted", allowed
 
@@ -426,7 +447,8 @@ def review_pages(pages: dict[int, list[UnitView]], *, client: LLMClient, config:
             if severity not in APPLIED_SEVERITIES:
                 accepted, reason, new_issues = False, f"severity {severity}: not applied", []
             else:
-                accepted, reason, new_issues = validate_fix(units[uid], current, problem.get("fixed_translation", ""), kind)
+                accepted, reason, new_issues = validate_fix(units[uid], current, problem.get("fixed_translation", ""), kind,
+                                                            view.hidden_segments)
             decisions.append(Decision(number, uid, kind, problem.get("explanation", ""), view.translation,
                                       problem.get("fixed_translation", "").strip(), accepted, reason, new_issues, severity))
         with lock:

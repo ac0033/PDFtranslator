@@ -183,3 +183,19 @@ def test_a_model_that_cannot_read_images_is_asked_again_with_text_only(book):
     report = review_pages(book[0], client=model, config=config(), **book[1])
     assert model.requests[0].images and not model.requests[1].images
     assert report.vision is False and not report.errors
+
+
+CODE_SOURCE = f"⟦P:layout-a⟧if {M1} threshold then ⟦P:layout-b⟧teacher forcing. ⟦P:layout-c⟧end if"
+CODE_OLD = f"⟦P:layout-a⟧如果 {M1} 阈值，则 教师强制。⟦P:layout-b⟧⟦P:layout-c⟧"
+
+
+def test_code_may_get_its_own_keywords_back_but_nothing_invented_or_hidden():
+    u = unit("u", CODE_SOURCE)
+    current = result(u, CODE_OLD)
+    hidden = ["teacher forcing."]
+    restored = f"⟦P:layout-a⟧if {M1} threshold then ⟦P:layout-b⟧⟦P:layout-c⟧end if"
+    assert validate_fix(u, current, restored, "code_translated", hidden)[0]
+    kept_hidden = f"⟦P:layout-a⟧if {M1} threshold then ⟦P:layout-b⟧teacher forcing ⟦P:layout-c⟧end if"
+    assert "not visible" in validate_fix(u, current, kept_hidden, "extraction_garbage", hidden)[1]
+    invented = f"⟦P:layout-a⟧if {M1} threshold then clip ⟦P:layout-b⟧⟦P:layout-c⟧end if"
+    assert "does not have" in validate_fix(u, current, invented, "code_translated", hidden)[1]

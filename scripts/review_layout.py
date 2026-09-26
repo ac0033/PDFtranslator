@@ -35,6 +35,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output-prefix", required=True)
     parser.add_argument("--pages", choices=("all", "flagged"), default="all",
                         help="Review every page, or only pages with an automatic hint.")
+    parser.add_argument("--only-pages", type=int, nargs="+", default=None, help="Review just these one-based pages.")
     parser.add_argument("--no-vision", action="store_true", help="Send text only (for models that cannot read images).")
     parser.add_argument("--dpi", type=int, default=72, help="Resolution of the page images sent to the model.")
     parser.add_argument("--workers", type=int, default=1, help="Pages rendered again at once.")
@@ -48,6 +49,8 @@ def main(argv: list[str] | None = None) -> int:
     rows = [json.loads(line) for line in (args.capture / "content-review.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
     units = load_units(args.capture)
     pages = detect_page_issues(args.source, args.capture, stem, rows, units)
+    if args.only_pages:
+        pages = {n: views for n, views in pages.items() if n in set(args.only_pages)}
     if args.pages == "flagged":
         pages = {n: views for n, views in pages.items() if any(v.flags for v in views)}
     vision = not args.no_vision
