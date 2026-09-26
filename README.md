@@ -91,7 +91,7 @@ $env:PDFTRANS_TOKEN = "<一个足够长的随机串>"
 uv run pdftrans serve --host 0.0.0.0 --port 8766 --public-url https://<对外地址>
 ```
 
-监听本机以外的地址必须设置令牌，否则拒绝启动。接口：`GET /health`、`GET /v1/providers`、`POST /v1/jobs`（请求体为 PDF 字节，选项放在 `X-Job-Options` 头里；或 JSON `{"pdf_base64"|"pdf_url", "options"}`）、`GET /v1/jobs/{id}`、`GET /v1/jobs/{id}/log`、`GET /v1/jobs/{id}/files/{mono|dual|acceptance|layout_review|content_review|log}`、`POST /v1/jobs/{id}/cancel`、`POST /v1/jobs/{id}/resume`，以及下面“继续改进”用到的 `GET /v1/jobs/{id}/units`、`POST /v1/jobs/{id}/assist`、`POST /v1/jobs/{id}/revise` 和 `GET /v1/guide`。除 `/health` 外都要带 `Authorization: Bearer <令牌>`。某个任务要用调用方自己的模型 Key 时放在 `X-LLM-API-Key` 头里：它只进入该任务的进程环境，不写入磁盘。服务本身不提供 HTTPS，对公网开放时请放在反向代理后面。
+监听本机以外的地址必须设置令牌，否则拒绝启动。接口：`GET /health`、`GET /v1/providers`、`POST /v1/jobs`（请求体为 PDF 字节，选项放在 `X-Job-Options` 头里；或 JSON `{"pdf_base64"|"pdf_url", "options"}`）、`GET /v1/jobs/{id}`、`GET /v1/jobs/{id}/log`、`GET /v1/jobs/{id}/files/{mono|dual|acceptance|layout_review|content_review|log}`、`POST /v1/jobs/{id}/cancel`、`POST /v1/jobs/{id}/resume`，以及下面“继续改进”用到的 `GET /v1/jobs/{id}/units`、`POST /v1/jobs/{id}/assist`、`POST /v1/jobs/{id}/revise` 和 `GET /v1/guide`。完整的接口描述（OpenAPI 3.1，可用来生成客户端）在 `GET /v1/openapi.json`。除 `/health` 外都要带 `Authorization: Bearer <令牌>`。某个任务要用调用方自己的模型 Key 时放在 `X-LLM-API-Key` 头里：它只进入该任务的进程环境，不写入磁盘。服务本身不提供 HTTPS，对公网开放时请放在反向代理后面。
 
 **MCP**（供 Claude、Cursor 等 AI 工具调用；工具：`translate_pdf`、`get_job`、`get_job_file`、`list_jobs`、`cancel_job`、`resume_job`、`list_providers`、`get_units`、`ask_model`、`apply_fixes`；接入指南以资源 `pdftrans://docs/agent_guide` 提供）：
 

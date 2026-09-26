@@ -199,8 +199,10 @@ class JobManager:
             command += ["--resume-from", meta["resume_from"], "--layout-review", "off"]
         env = {**os.environ, "PYTHONIOENCODING": "utf-8", **self._pending_env.pop(job_id, {})}
         flags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        # stdin is closed: under MCP stdio the server's stdin carries JSON-RPC, and a runner that
+        # inherited it could swallow the client's messages.
         with (job_dir / "runner.log").open("ab") as log:
-            process = subprocess.Popen(command, cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT,
+            process = subprocess.Popen(command, cwd=ROOT, env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
                                        creationflags=flags, start_new_session=os.name != "nt")
         meta["pid"] = process.pid
         meta["started_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")

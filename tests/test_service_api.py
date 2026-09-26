@@ -24,8 +24,8 @@ class FakeRunner:
 
     started: list = []
 
-    def __init__(self, command, cwd=None, env=None, stdout=None, stderr=None, creationflags=0, start_new_session=False):
-        self.command, self.env = command, env
+    def __init__(self, command, cwd=None, env=None, stdin=None, stdout=None, stderr=None, creationflags=0, start_new_session=False):
+        self.command, self.env, self.stdin = command, env, stdin
         self.pid = 4242 + len(FakeRunner.started)
         FakeRunner.started.append(self)
 
@@ -79,6 +79,12 @@ def test_a_job_runs_with_a_valid_config_and_its_key_never_touches_disk(jobs):
     view = jobs.get(job["job_id"])
     assert view["status"] == "succeeded" and view["result"]["verdict"] == "deliverable"
     assert set(view["files"]) >= {"mono", "acceptance"}
+
+
+def test_the_runner_cannot_read_the_callers_stdin(jobs):
+    # Under MCP stdio the server's stdin is the JSON-RPC channel; a runner inheriting it could eat messages.
+    jobs.submit(PDF, "a.pdf", JobOptions())
+    assert FakeRunner.started[0].stdin is service.subprocess.DEVNULL
 
 
 def test_jobs_beyond_the_limit_wait_their_turn(jobs):
@@ -189,6 +195,23 @@ def test_http_carries_mcp(api):
     reply = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"}).json()
     assert any(tool["name"] == "translate_pdf" for tool in reply["result"]["tools"])
     assert client.post("/mcp", json={"jsonrpc": "2.0", "method": "notifications/initialized"}).status_code == 202
+
+
+def test_openapi_describes_every_route_and_every_tool(api):
+    import re
+    from pdf_translation import http_api
+    from pdf_translation.mcp_server import TOOLS, _OPTION_SCHEMA
+
+    _, client = api
+    spec = client.get("/v1/openapi.json").json()
+    assert spec["openapi"].startswith("3.1") and spec["servers"][0]["url"] == client.base_url.__str__().rstrip("/")
+    documented = {(method.lower(), path.split("?")[0])
+                  for method, path in re.findall(r"^\s+(GET|POST)\s+(/\S+)", http_api.__doc__, re.M)}
+    described = {(method, path) for path, item in spec["paths"].items() for method in item}
+    assert documented == described
+    operation_ids = {op.get("operationId") for item in spec["paths"].values() for op in item.values()}
+    assert {tool["name"] for tool in TOOLS} <= operation_ids
+    assert set(_OPTION_SCHEMA) <= set(JobOptions.model_fields)
 
 
 def test_listening_beyond_loopback_requires_a_token(jobs):

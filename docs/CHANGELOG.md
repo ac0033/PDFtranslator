@@ -2,6 +2,12 @@
 
 版本号规则见 `docs/versioning.md`。
 
+## 未发布
+
+- HTTP 服务提供 OpenAPI 3.1 描述：`GET /v1/openapi.json`。参数说明与 MCP 工具共用同一份定义，测试保证两者和实际路由一致。
+- 通过 MCP stdio 提交的任务，翻译进程不再继承服务的标准输入，避免它读走客户端发来的 JSON-RPC 消息。
+- `httpx`（远程客户端用）改为显式依赖。
+
 ## 0.9.0 — 2026-09-26 · 任意模型、排版复核、对外接入
 
 - **换用任意大模型**：配置里的 `provider` 选一个预设即可（DeepSeek、OpenAI、Claude、Gemini、通义千问、Kimi、智谱、豆包、硅基流动、OpenRouter、Groq、Mistral、xAI、Ollama，以及任何兼容 OpenAI 接口的服务；装上 LiteLLM 后还可用它支持的全部模型）。翻译、告警复核、排版复核都走同一个调用层；服务不支持指定的结构化输出方式时自动降一级，返回的 JSON 始终在本地校验。已有运行的身份不变，可直接续跑。

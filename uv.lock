@@ -831,6 +831,7 @@ version = "0.9.0"
 source = { editable = "." }
 dependencies = [
     { name = "babeldoc" },
+    { name = "httpx" },
     { name = "openai" },
     { name = "psutil" },
     { name = "pydantic" },
@@ -847,6 +848,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "babeldoc", specifier = "==0.6.4" },
+    { name = "httpx", specifier = ">=0.27" },
     { name = "openai", specifier = ">=2.0.0" },
     { name = "psutil", specifier = ">=5.9" },
     { name = "pydantic", specifier = ">=2.10.0" },

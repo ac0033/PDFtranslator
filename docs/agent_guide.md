@@ -91,6 +91,7 @@
 | 委托模型做一件事 | `ask_model` | `POST /v1/jobs/{id}/assist` | `jobs ask <id> <task>` |
 | 写回修正并重出版面 | `apply_fixes` | `POST /v1/jobs/{id}/revise` | `jobs revise <id> <fixes.json>` |
 | 本指南 | 资源 `pdftrans://docs/agent_guide` | `GET /v1/guide` | `guide` |
+| 接口描述 | 工具的 `inputSchema` | `GET /v1/openapi.json`（OpenAPI 3.1） | 各子命令 `--help` |
 
 命令行加 `--server <地址> --token <令牌>` 就改为调用远程服务。HTTP 除 `/health` 外都要带 `Authorization: Bearer <令牌>`。模型 Key 可以随任务或随单次委托调用传入（MCP 参数 `api_key`，HTTP 头 `X-LLM-API-Key`）；只在内存中使用，不写入磁盘。
 

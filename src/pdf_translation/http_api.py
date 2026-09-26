@@ -19,6 +19,7 @@ token is set, and the server refuses to listen beyond loopback without one.
     POST /v1/jobs/{job_id}/assist       JSON {"task", ...}: the job's model does one task
     POST /v1/jobs/{job_id}/revise       JSON {"fixes": [...], "editor"}: write fixes, render again
     GET  /v1/guide                      docs/agent_guide.md
+    GET  /v1/openapi.json               OpenAPI 3.1 description of these routes
     POST /mcp                           MCP streamable HTTP (JSON responses)
 
 A model API key for one job or one assist call may be sent in
@@ -43,6 +44,7 @@ from pydantic import ValidationError
 from . import __version__
 from .budget import BudgetExceeded
 from .mcp_server import GUIDE, McpServer
+from .openapi import openapi_spec
 from .service import FILE_NAMES, MAX_PDF_BYTES, JobError, JobManager, JobOptions, fetch_pdf, providers
 
 JOB_ROUTE = re.compile(r"^/v1/jobs/([^/]+)(?:/(log|cancel|resume|units|assist|revise|files/([a-z_]+)))?$")
@@ -147,6 +149,8 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
+        if url.path == "/v1/openapi.json":
+            return self._send(HTTPStatus.OK, openapi_spec(self.server.public_url))
         if url.path == "/mcp":  # no server-initiated stream is offered
             return self._fail(HTTPStatus.METHOD_NOT_ALLOWED, "this server answers MCP over POST only")
         query = parse_qs(url.query)
