@@ -10,6 +10,7 @@ tmp/
 inputs/
 data/
 output/
+jobs/
 *.pdf
 .env
 .workbuddy/

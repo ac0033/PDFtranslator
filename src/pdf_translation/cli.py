@@ -861,3 +861,8 @@ def pdf_native(
     from .native_pipeline import run_native_pdf
     report=run_native_pdf(input,load_config(config),output_dir,runs_root,font,pages=source_page,execute_paid=execute_paid)
     typer.echo(json.dumps(report,ensure_ascii=False,indent=2))
+
+
+from .service_cli import register as _register_service_commands  # noqa: E402
+
+_register_service_commands(app)

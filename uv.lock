@@ -832,6 +832,7 @@ source = { editable = "." }
 dependencies = [
     { name = "babeldoc" },
     { name = "openai" },
+    { name = "psutil" },
     { name = "pydantic" },
     { name = "pymupdf" },
     { name = "python-dotenv" },
@@ -847,6 +848,7 @@ dev = [
 requires-dist = [
     { name = "babeldoc", specifier = "==0.6.4" },
     { name = "openai", specifier = ">=2.0.0" },
+    { name = "psutil", specifier = ">=5.9" },
     { name = "pydantic", specifier = ">=2.10.0" },
     { name = "pymupdf", specifier = ">=1.25.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3.0" },
