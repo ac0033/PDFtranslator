@@ -14,10 +14,16 @@ token is set, and the server refuses to listen beyond loopback without one.
     GET  /v1/jobs/{job_id}/log?lines=40
     GET  /v1/jobs/{job_id}/files/{name}  mono | dual | acceptance | layout_review | content_review | log
     POST /v1/jobs/{job_id}/cancel
+    POST /v1/jobs/{job_id}/resume       run a failed or cancelled job again; paid work is reused
+    GET  /v1/jobs/{job_id}/units?page=3&unit_id=...&with_issues=1&state=...&limit=200
+    POST /v1/jobs/{job_id}/assist       JSON {"task", ...}: the job's model does one task
+    POST /v1/jobs/{job_id}/revise       JSON {"fixes": [...], "editor"}: write fixes, render again
+    GET  /v1/guide                      docs/agent_guide.md
     POST /mcp                           MCP streamable HTTP (JSON responses)
 
-A model API key for one job may be sent in ``X-LLM-API-Key``; it reaches only
-that job's runner process and is never stored.
+A model API key for one job or one assist call may be sent in
+``X-LLM-API-Key``; it reaches only that job's runner process or that call and
+is never stored.
 """
 from __future__ import annotations
 
@@ -35,10 +41,11 @@ from urllib.parse import parse_qs, urlparse
 from pydantic import ValidationError
 
 from . import __version__
-from .mcp_server import McpServer
+from .budget import BudgetExceeded
+from .mcp_server import GUIDE, McpServer
 from .service import FILE_NAMES, MAX_PDF_BYTES, JobError, JobManager, JobOptions, fetch_pdf, providers
 
-JOB_ROUTE = re.compile(r"^/v1/jobs/([^/]+)(?:/(log|cancel|files/([a-z_]+)))?$")
+JOB_ROUTE = re.compile(r"^/v1/jobs/([^/]+)(?:/(log|cancel|resume|units|assist|revise|files/([a-z_]+)))?$")
 CONTENT_TYPES = {".pdf": "application/pdf", ".json": "application/json", ".jsonl": "application/x-ndjson",
                  ".log": "text/plain; charset=utf-8"}
 
@@ -132,6 +139,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(HTTPStatus.OK, {"status": "ok", "version": __version__})
         if not self._authorised():
             return
+        if url.path == "/v1/guide":
+            body = GUIDE.read_bytes()
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "text/markdown; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if url.path == "/mcp":  # no server-initiated stream is offered
             return self._fail(HTTPStatus.METHOD_NOT_ALLOWED, "this server answers MCP over POST only")
         query = parse_qs(url.query)
@@ -149,6 +164,11 @@ class Handler(BaseHTTPRequestHandler):
             if action == "log":
                 lines = int(query.get("lines", ["40"])[0])
                 return self._send(HTTPStatus.OK, {"job_id": job_id, "log": self.server.manager.log_tail(job_id, lines)})
+            if action == "units":
+                return self._send(HTTPStatus.OK, self.server.manager.units(
+                    job_id, pages=[int(p) for p in query.get("page", [])], unit_ids=query.get("unit_id"),
+                    with_issues=query.get("with_issues", ["0"])[0] in {"1", "true"}, states=query.get("state"),
+                    limit=int(query.get("limit", ["200"])[0])))
             if file_name:
                 return self._file(job_id, file_name)
             return self._fail(HTTPStatus.METHOD_NOT_ALLOWED, "use POST")
@@ -188,9 +208,36 @@ class Handler(BaseHTTPRequestHandler):
             match = JOB_ROUTE.match(url.path)
             if match and match.group(2) == "cancel":
                 return self._send(HTTPStatus.OK, self.server.manager.cancel(match.group(1)))
+            if match and match.group(2) == "resume":
+                secrets_env = {}
+                key = self.headers.get("X-LLM-API-Key")
+                if key:
+                    options = JobOptions.model_validate(self.server.manager._meta(match.group(1))["options"])
+                    variable = options.api_key_variable()
+                    if not variable:
+                        raise JobError(f"provider {options.provider} takes no API key")
+                    secrets_env[variable] = key
+                return self._send(HTTPStatus.ACCEPTED, self.server.manager.resume(match.group(1), secrets_env=secrets_env))
+            if match and match.group(2) == "assist":
+                arguments = json.loads(body or b"{}")
+                task = arguments.pop("task", None)
+                arguments.pop("api_key", None)  # keys travel in the header only
+                budget = arguments.pop("budget_usd", None)
+                return self._send(HTTPStatus.OK, self.server.manager.assist(
+                    match.group(1), task, api_key=self.headers.get("X-LLM-API-Key"), budget_usd=budget, **arguments))
+            if match and match.group(2) == "revise":
+                request = json.loads(body or b"{}")
+                return self._send(HTTPStatus.ACCEPTED, self.server.manager.revise(
+                    match.group(1), request.get("fixes") or [], request.get("editor") or ""))
             return self._fail(HTTPStatus.NOT_FOUND, "no such route")
+        except BudgetExceeded as problem:
+            return self._fail(HTTPStatus.PAYMENT_REQUIRED, str(problem))
+        except TypeError as problem:  # an argument the task does not take
+            return self._fail(HTTPStatus.BAD_REQUEST, str(problem))
         except (JobError, ValidationError, ValueError) as problem:
             return self._fail(HTTPStatus.BAD_REQUEST, str(problem))
+        except Exception as problem:  # the model service failed
+            return self._fail(HTTPStatus.BAD_GATEWAY, f"{type(problem).__name__}: {problem}"[:500])
 
     def _submit(self, body: bytes) -> None:
         content_type = (self.headers.get("Content-Type") or "").split(";")[0].strip()

@@ -9,6 +9,11 @@ A job is a directory under the jobs root::
     <job_id>/runner.log          the runner's console output
     <job_id>/work/               capture, per-page and merged output
     <job_id>/work.timings.json   stage timings and final status (written by the runner)
+    <job_id>/assist.jsonl        model calls made for an agent after the run (task, cost)
+
+After a job succeeds an agent may keep working on it: read its units, ask the
+job's model for help (:mod:`pdf_translation.assist`), and write fixes back,
+which renders the changed pages again and repeats acceptance (``revise``).
 
 The runner is ``scripts/deliver_pdf.py`` in its own process, so a job keeps
 running if the caller disconnects and its state is on disk if the server
@@ -134,10 +139,12 @@ class JobError(ValueError):
 
 
 class JobManager:
-    def __init__(self, root: Path | None = None, *, max_running: int = 2):
+    def __init__(self, root: Path | None = None, *, max_running: int = 2, runs_root: Path | None = None):
         self.root = Path(root or ROOT / "jobs").resolve()
         self.root.mkdir(parents=True, exist_ok=True)
         self.max_running = max_running
+        # Where the runner keeps each run's ledger (scripts/deliver_pdf.py uses runs/).
+        self.runs_root = Path(runs_root or ROOT / "runs").resolve()
         # API keys given with a job, held in memory only until its runner starts.
         # A queued job whose server restarts starts with the server's own keys.
         self._pending_env: dict[str, dict[str, str]] = {}
@@ -187,6 +194,9 @@ class JobManager:
             command.append("--estimate-only")
         if (job_dir / "style.txt").is_file():
             command += ["--style-note-file", str(job_dir / "style.txt")]
+        if meta.get("resume_from"):
+            # A revision: translations are already fixed; render and accept again, no model call.
+            command += ["--resume-from", meta["resume_from"], "--layout-review", "off"]
         env = {**os.environ, "PYTHONIOENCODING": "utf-8", **self._pending_env.pop(job_id, {})}
         flags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(subprocess, "CREATE_NO_WINDOW", 0)
         with (job_dir / "runner.log").open("ab") as log:
@@ -217,6 +227,10 @@ class JobManager:
         }
         if timings.get("result"):
             view["result"] = timings["result"]
+        if meta.get("revisions"):
+            view["revisions"] = meta["revisions"]
+        if meta.get("budget_usd"):
+            view["budget_usd"] = meta["budget_usd"]
         if detail:
             view["error"] = detail
         return view
@@ -263,6 +277,148 @@ class JobManager:
             process.kill()
         meta["cancelled"] = True
         self._write_meta(job_id, meta)
+        return self.get(job_id)
+
+    # --- working on a finished job ------------------------------------------------------
+
+    def units(self, job_id: str, *, pages: list[int] | None = None, unit_ids: list[str] | None = None,
+              with_issues: bool = False, states: list[str] | None = None, limit: int = 200) -> dict:
+        """Rows of the content review (source, translation, warnings per unit), filtered.
+
+        ``issues`` also holds what acceptance judges over the whole text (a unit
+        left in English, leaked markup), so every unit behind a verdict can be found here.
+        """
+        from .triage import leaked_markup, unit_is_untranslated
+
+        path = self.root / self._checked(job_id) / "work" / "content-review.jsonl"
+        if not path.is_file():
+            raise JobError("this job has no translation yet")
+        wanted_pages, wanted_ids = set(pages or []), set(unit_ids or [])
+        rows, matched = [], 0
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            source, target = row.get("source_text") or "", row.get("translated_text") or ""
+            if target and unit_is_untranslated(source, target):
+                row.setdefault("issues", []).append({"category": "untranslated_unit", "severity": "major",
+                                                     "explanation": "the translation is still mostly English"})
+            if leaked_markup(source, target):
+                row.setdefault("issues", []).append({"category": "leaked_markup", "severity": "major",
+                                                     "explanation": f"markup renders literally: {leaked_markup(source, target)}"})
+            if wanted_pages and not wanted_pages & set(row.get("source_pages", [])):
+                continue
+            if wanted_ids and row["unit_id"] not in wanted_ids:
+                continue
+            if with_issues and not row.get("issues") and row.get("state") != "exhausted":
+                continue
+            if states and row.get("state") not in states:
+                continue
+            matched += 1
+            if len(rows) < limit:
+                view = {key: row.get(key) for key in (
+                    "unit_id", "source_pages", "source_hash", "state", "source_text", "translated_text")}
+                view["issues"] = [f"{i['category']} ({i['severity']}): {i['explanation']}" for i in row.get("issues", [])]
+                rows.append(view)
+        return {"job_id": job_id, "matched": matched, "returned": len(rows), "units": rows}
+
+    def resume(self, job_id: str, *, secrets_env: dict[str, str] | None = None) -> dict:
+        """Run a failed or cancelled job again from where it stopped.
+
+        Capture on disk is kept and every paid translation is read back from the
+        run's cache, so only what was never done is done (and paid for) now.
+        """
+        meta = self._meta(job_id)
+        status = self._status(meta)[0]
+        if status not in {"failed", "cancelled"}:
+            raise JobError(f"job {job_id} is {status}; only a failed or cancelled job can be resumed")
+        timings = self._timings(job_id)
+        if timings is not None:
+            # The runner writes its own status once it starts; until then the job is queued or starting.
+            for key in ("status", "error", "current_stage", "result"):
+                timings.pop(key, None)
+            (self.root / job_id / "work.timings.json").write_text(json.dumps(timings, ensure_ascii=False, indent=2),
+                                                                encoding="utf-8")
+        meta.update(pid=None, cancelled=False, resume_from=None)
+        meta.setdefault("resumed", []).append(datetime.now(timezone.utc).isoformat(timespec="seconds"))
+        self._write_meta(job_id, meta)
+        self._pending_env[job_id] = dict(secrets_env or {})
+        self.dispatch()
+        return self.get(job_id)
+
+    def _finished(self, job_id: str) -> dict:
+        meta = self._meta(job_id)
+        status = self._status(meta)[0]
+        if status != "succeeded":
+            raise JobError(f"job {job_id} is {status}; this needs a job that finished translating")
+        return meta
+
+    def assist(self, job_id: str, task: str, *, api_key: str | None = None, budget_usd: float | None = None,
+               **arguments) -> dict:
+        """Run an :mod:`pdf_translation.assist` task with the job's model, within its budget."""
+        from .assist import JobContext, run_task
+        from .config import load_config
+        from .llm import config_client
+
+        meta = self._finished(job_id)
+        job_dir = self.root / job_id
+        if budget_usd is not None:
+            if not 0 < budget_usd <= 1000:
+                raise JobError("budget_usd must be between 0 and 1000")
+            # Raising the ceiling is the caller's decision and is remembered for later calls.
+            meta["budget_usd"] = budget_usd
+            self._write_meta(job_id, meta)
+        config = load_config(job_dir / "config.toml")
+        context = JobContext.load(config, job_dir / "work", job_dir / "source.pdf", self.runs_root,
+                                  log=job_dir / "assist.jsonl")
+        ceiling = meta.get("budget_usd") or config.budget_usd
+        return run_task(context, config_client(config, api_key=api_key), task, budget_usd=ceiling, **arguments)
+
+    def revise(self, job_id: str, fixes: list[dict], editor: str) -> dict:
+        """Write fixes into a finished job, then render the changed pages and run acceptance again.
+
+        A fix is ``{unit_id, old_translated_text, new_translated_text, reason}``
+        (``source_hash`` is filled in when missing). ``old_translated_text`` must be
+        the translation the fix replaces (null for a unit never translated), so a
+        fix written against an older text is refused. The whole batch is checked
+        before anything is written. No model is called.
+        """
+        from .config import load_config
+        from .local_fixes import apply_fixes
+
+        meta = self._finished(job_id)
+        if not fixes:
+            raise JobError("no fixes given")
+        if not editor or not editor.strip():
+            raise JobError("say who made these fixes (editor), e.g. 'agent:claude-opus-5-5'")
+        job_dir = self.root / job_id
+        rows = {row["unit_id"]: row for row in self.units(job_id, limit=10 ** 9)["units"]}
+        prepared = []
+        for fix in fixes:
+            if not isinstance(fix, dict) or not {"unit_id", "old_translated_text", "new_translated_text"} <= set(fix):
+                raise JobError("each fix needs unit_id, old_translated_text and new_translated_text")
+            if fix["unit_id"] not in rows:
+                raise JobError(f"unknown unit: {fix['unit_id']}")
+            prepared.append({"source_hash": rows[fix["unit_id"]]["source_hash"], "reason": "agent fix", **fix})
+        try:
+            pages = apply_fixes(prepared, editor.strip(), capture=job_dir / "work",
+                                config=load_config(job_dir / "config.toml"), runs_root=self.runs_root)
+        except (KeyError, ValueError) as problem:
+            raise JobError(f"fixes refused, nothing written: {problem}") from problem
+        for page in pages:
+            for label in ("mono", "dual"):
+                (job_dir / "work" / f"page-{page:04d}" / f"source.zh.{label}.pdf").unlink(missing_ok=True)
+        # Mark the job busy before its runner starts, so no caller takes the old verdict as current.
+        timings = self._timings(job_id) or {}
+        timings.update(status="running", current_stage="render")
+        timings.pop("result", None)
+        (job_dir / "work.timings.json").write_text(json.dumps(timings, ensure_ascii=False, indent=2), encoding="utf-8")
+        meta.setdefault("revisions", []).append({
+            "at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "editor": editor.strip(),
+            "units": [fix["unit_id"] for fix in prepared], "pages": pages})
+        meta.update(pid=None, resume_from="render")
+        self._write_meta(job_id, meta)
+        self.dispatch()
         return self.get(job_id)
 
     # --- internals ----------------------------------------------------------------------

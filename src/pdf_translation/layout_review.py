@@ -248,12 +248,13 @@ def hidden_segments(source: str, visible: str, hidden: str) -> list[str]:
 
 
 def detect_page_issues(source_pdf: Path, capture: Path, stem: str, rows: list[dict],
-                       units: dict[str, TranslationUnit]) -> dict[int, list[UnitView]]:
-    """Every page with its units and automatic flags. One-based page numbers."""
+                       units: dict[str, TranslationUnit], only: set[int] | None = None) -> dict[int, list[UnitView]]:
+    """Every page (or just the ``only`` pages) with its units and automatic flags. One-based page numbers."""
     records = [json.loads(line) for line in (capture / "capture-map.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
     by_page: dict[int, list[dict]] = {}
     for record in records:
-        by_page.setdefault(record["page_index"] + 1, []).append(record)
+        if only is None or record["page_index"] + 1 in only:
+            by_page.setdefault(record["page_index"] + 1, []).append(record)
     rows_by_id = {row["unit_id"]: row for row in rows}
     pages: dict[int, list[UnitView]] = {}
     with pymupdf.open(source_pdf) as source:

@@ -195,6 +195,9 @@ def run_auto(args, page_numbers: list[int]) -> int:
     """Drive every chunk in its own process, then merge. Returns an exit code."""
     require_memory(args.min_free_mb * 1024 * 1024)
     chunks = chunk_ranges(page_numbers[0], page_numbers[-1], args.chunk_size)
+    # A chunk whose pages are all on disk would only load the layout model to skip them.
+    chunks = [(first, last) for first, last in chunks
+              if missing_pages(args.capture, args.source.stem, list(range(first, last + 1)))]
     workers = affordable_workers(args.workers, args.min_free_mb * 1024 * 1024)
     outcomes = run_subprocess_chunks(
         chunks, lambda first, last: chunk_command(args, first, last), max_retries=args.max_retries,

@@ -30,7 +30,7 @@ from __future__ import annotations
 import base64
 import json
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Literal, Protocol
 
 from .schemas import Usage
@@ -123,6 +123,9 @@ class Endpoint:
     api_key_env: str | None
     structured_output: str
     strict_schema: bool
+    #: A key given for this client only (e.g. by a remote caller); never stored.
+    #: When unset the key is read from ``api_key_env``.
+    api_key: str | None = field(default=None, repr=False, compare=False)
 
 
 def known_providers() -> list[str]:
@@ -146,9 +149,11 @@ def resolve_endpoint(provider: str, *, api_protocol: str | None = None, base_url
 
 
 def make_llm_client(provider: str, *, api_protocol: str | None = None, base_url: str | None = None,
-                    api_key_env: str | None = None, structured_output: str = "auto") -> LLMClient:
+                    api_key_env: str | None = None, structured_output: str = "auto", api_key: str | None = None) -> LLMClient:
     endpoint = resolve_endpoint(provider, api_protocol=api_protocol, base_url=base_url,
                                 api_key_env=api_key_env, structured_output=structured_output)
+    if api_key:
+        endpoint = replace(endpoint, api_key=api_key)
     return client_for(endpoint)
 
 
@@ -165,10 +170,10 @@ def client_for(endpoint: Endpoint) -> LLMClient:
     return kinds[endpoint.protocol](endpoint)
 
 
-def config_client(config) -> LLMClient:
-    """The client a run config asks for."""
+def config_client(config, *, api_key: str | None = None) -> LLMClient:
+    """The client a run config asks for; ``api_key`` overrides the key variable."""
     return make_llm_client(config.provider, api_protocol=config.api_protocol, base_url=config.base_url,
-                           api_key_env=config.api_key_env, structured_output=config.structured_output)
+                           api_key_env=config.api_key_env, structured_output=config.structured_output, api_key=api_key)
 
 
 def schema_instruction(schema: dict) -> str:
@@ -186,6 +191,8 @@ def strip_json_fence(text: str) -> str:
 
 
 def _api_key(endpoint: Endpoint) -> str:
+    if endpoint.api_key:
+        return endpoint.api_key
     if endpoint.api_key_env is None:
         return "not-needed"  # local servers such as Ollama accept any key
     key = os.environ.get(endpoint.api_key_env)
@@ -439,7 +446,7 @@ class LiteLLMClient(_Base):
                          {"role": "user", "content": user}],
             "max_tokens": request.max_output_tokens,
         }
-        if self.api_key_env:
+        if self.api_key_env or self.endpoint.api_key:
             arguments["api_key"] = _api_key(self.endpoint)
         if self.base_url:
             arguments["api_base"] = self.base_url

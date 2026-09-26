@@ -137,6 +137,19 @@ def jobs_cancel(job_id: str, server: Server = None, token: Token = None, jobs_ro
     _print(_backend(server, token, jobs_root).cancel(job_id))
 
 
+@jobs_app.command("resume")
+def jobs_resume(job_id: str, wait: Annotated[bool, typer.Option("--wait")] = False, poll: float = 10.0,
+                server: Server = None, token: Token = None, jobs_root: JobsRoot = None) -> None:
+    """Run a failed or cancelled job again from where it stopped; paid work is reused."""
+    backend = _backend(server, token, jobs_root)
+    try:
+        job = backend.resume(job_id)
+    except Exception as error:
+        _print({"error": str(error)})
+        raise typer.Exit(1)
+    _print(_wait(backend, job_id, poll) if wait else job)
+
+
 @jobs_app.command("fetch")
 def jobs_fetch(job_id: str, name: Annotated[str, typer.Argument(help="mono | dual | acceptance | layout_review | content_review | log")],
                destination: Path, server: Server = None, token: Token = None, jobs_root: JobsRoot = None) -> None:
@@ -152,6 +165,77 @@ def jobs_fetch(job_id: str, name: Annotated[str, typer.Argument(help="mono | dua
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(files[name], destination)
     _print({"job_id": job_id, "name": name, "saved": str(destination)})
+
+
+@jobs_app.command("units")
+def jobs_units(job_id: str,
+               page: Annotated[Optional[list[int]], typer.Option("--page", help="One-based page; repeatable.")] = None,
+               unit: Annotated[Optional[list[str]], typer.Option("--unit", help="Unit id; repeatable.")] = None,
+               with_issues: Annotated[bool, typer.Option("--with-issues", help="Only flagged or untranslated units.")] = False,
+               state: Annotated[Optional[list[str]], typer.Option("--state", help="accepted | needs_review | exhausted")] = None,
+               limit: int = 200, server: Server = None, token: Token = None, jobs_root: JobsRoot = None) -> None:
+    """A finished job's units: source, translation, state and warnings."""
+    _print(_backend(server, token, jobs_root).units(job_id, pages=page, unit_ids=unit, with_issues=with_issues,
+                                                    states=state, limit=limit))
+
+
+@jobs_app.command("ask")
+def jobs_ask(
+    job_id: str,
+    task: Annotated[str, typer.Argument(help="retranslate | shorten | review_units | review_pages | ask")],
+    unit: Annotated[Optional[list[str]], typer.Option("--unit", help="Unit id; repeatable.")] = None,
+    page: Annotated[Optional[list[int]], typer.Option("--page", help="One-based page; repeatable.")] = None,
+    instruction: Annotated[Optional[str], typer.Option(help="What to do differently.")] = None,
+    prompt: Annotated[Optional[str], typer.Option(help="ask: the question.")] = None,
+    system: Annotated[Optional[str], typer.Option(help="ask: replaces the default system prompt.")] = None,
+    schema_file: Annotated[Optional[Path], typer.Option("--schema-file", help="ask: JSON Schema the reply must follow.")] = None,
+    images: Annotated[bool, typer.Option("--images", help="ask: attach original and rendered page images.")] = False,
+    no_vision: Annotated[bool, typer.Option("--no-vision", help="review_pages: text only.")] = False,
+    shorten_to: Annotated[float, typer.Option("--shorten-to", help="shorten: target share of the current length.")] = 0.8,
+    max_output_tokens: Annotated[Optional[int], typer.Option("--max-output-tokens")] = None,
+    budget_usd: Annotated[Optional[float], typer.Option("--budget-usd", help="Raise the job's spend ceiling.")] = None,
+    fixes_out: Annotated[Optional[Path], typer.Option("--fixes-out", help="Also save the applicable fixes, for `jobs revise`.")] = None,
+    server: Server = None, token: Token = None, jobs_root: JobsRoot = None,
+) -> None:
+    """Have the job's own model do one task; returns candidate fixes, writes nothing."""
+    arguments = {"unit_ids": unit, "pages": page, "instruction": instruction, "prompt": prompt, "system": system,
+                 "json_schema": json.loads(schema_file.read_text(encoding="utf-8")) if schema_file else None,
+                 "images": images or None, "vision": False if no_vision else None,
+                 "shorten_to": shorten_to if task == "shorten" else None, "max_output_tokens": max_output_tokens}
+    arguments = {k: v for k, v in arguments.items() if v is not None}
+    try:
+        answer = _backend(server, token, jobs_root).assist(job_id, task, budget_usd=budget_usd, **arguments)
+    except Exception as error:
+        _print({"error": f"{type(error).__name__}: {error}"})
+        raise typer.Exit(1)
+    if fixes_out:
+        fixes = [item["fix"] for item in answer.get("candidates", answer.get("problems", [])) if "fix" in item]
+        fixes_out.parent.mkdir(parents=True, exist_ok=True)
+        fixes_out.write_text(json.dumps(fixes, ensure_ascii=False, indent=2), encoding="utf-8")
+        answer["fixes_saved"] = {"path": str(fixes_out), "count": len(fixes)}
+    _print(answer)
+
+
+@jobs_app.command("revise")
+def jobs_revise(job_id: str, fixes: Annotated[Path, typer.Argument(help="JSON list of fixes.")],
+                editor: Annotated[str, typer.Option(help="Who made the fixes, e.g. 'agent:claude-opus-5-5'.")],
+                wait: Annotated[bool, typer.Option("--wait", help="Wait for the pages to be rendered again.")] = False,
+                poll: float = 10.0, server: Server = None, token: Token = None, jobs_root: JobsRoot = None) -> None:
+    """Write fixes into a finished job, render the changed pages again, repeat acceptance."""
+    backend = _backend(server, token, jobs_root)
+    try:
+        job = backend.revise(job_id, json.loads(fixes.read_text(encoding="utf-8")), editor)
+    except Exception as error:
+        _print({"error": str(error)})
+        raise typer.Exit(1)
+    _print(_wait(backend, job_id, poll) if wait else job)
+
+
+def guide_command() -> None:
+    """Print the guide for agents: the pipeline, its files, and when to delegate to a model."""
+    from .mcp_server import GUIDE
+
+    typer.echo(GUIDE.read_text(encoding="utf-8"))
 
 
 def providers_command() -> None:
@@ -205,5 +289,6 @@ def register(app: typer.Typer) -> None:
     app.command("translate")(translate)
     app.add_typer(jobs_app, name="jobs")
     app.command("providers")(providers_command)
+    app.command("guide")(guide_command)
     app.command("serve")(serve_command)
     app.command("mcp")(mcp_command)

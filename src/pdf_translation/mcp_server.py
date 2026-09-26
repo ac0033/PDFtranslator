@@ -9,7 +9,10 @@ is shared by both transports:
   hosts, behind the server's bearer token.
 
 Translation takes minutes to hours, so the tools follow a job pattern: submit,
-poll, fetch. Reading a PDF from a path on the server is allowed only to a local
+poll, fetch. After a job succeeds the agent can keep working on it: read units
+(``get_units``), have the job's model do a task (``ask_model``) and write fixes
+back (``apply_fixes``). The guide for all of this, docs/agent_guide.md, is
+offered as a resource. Reading a PDF from a path on the server is allowed only to a local
 client (or when the operator enables it): a remote caller who could name any
 server path could have that file's contents translated and handed back.
 """
@@ -23,7 +26,8 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from . import __version__
-from .service import FILE_NAMES, JobError, JobManager, JobOptions, fetch_pdf, providers
+from .assist import TASKS
+from .service import FILE_NAMES, ROOT, JobError, JobManager, JobOptions, fetch_pdf, providers
 
 PROTOCOL_VERSIONS = ("2025-06-18", "2025-03-26", "2024-11-05")
 MAX_INLINE_BYTES = 25 * 1024 * 1024
@@ -32,8 +36,14 @@ INSTRUCTIONS = (
     "and bookmarks. Call translate_pdf (it returns a job at once), then poll get_job every 30-60 s until "
     "status is succeeded, estimated, failed or cancelled, then get_job_file for 'mono' (Chinese) or "
     "'dual' (bilingual). Set estimate_only first to learn the price without spending. result.verdict "
-    "'not_deliverable' lists major_problems; read the acceptance file before handing the PDF to a user."
+    "'not_deliverable' lists major_problems; read the acceptance file before handing the PDF to a user. "
+    "To improve a finished job: get_units (with_issues) to see what the checks flagged, fix what you can judge "
+    "yourself, use ask_model when the job's own model is the better tool (many units, retranslation consistent "
+    "with the book, page images you cannot see), then apply_fixes, which renders the changed pages again. "
+    "Read the resource pdftrans://docs/agent_guide for the whole pipeline and when to delegate."
 )
+GUIDE = ROOT / "docs" / "agent_guide.md"
+GUIDE_URI = "pdftrans://docs/agent_guide"
 
 _OPTION_SCHEMA = {
     "provider": {"type": "string", "description": "Model vendor preset (see list_providers). Default deepseek."},
@@ -80,6 +90,57 @@ TOOLS = [
      "inputSchema": _schema({"limit": {"type": "integer"}})},
     {"name": "cancel_job", "description": "Stop a queued or running job.",
      "inputSchema": _schema({"job_id": {"type": "string"}}, ("job_id",))},
+    {"name": "resume_job",
+     "description": "Run a failed or cancelled job again from where it stopped (e.g. after the model account was "
+                    "topped up). Work already done and paid for is reused, not paid again.",
+     "inputSchema": _schema({"job_id": {"type": "string"},
+                             "api_key": {"type": "string", "description": "Model API key for this run only; never stored."}},
+                            ("job_id",))},
+    {"name": "get_units",
+     "description": "A finished job's units (paragraph-sized passages): source, translation, state and the automatic "
+                    "checks' warnings. Filter by pages, unit_ids, with_issues (only flagged or untranslated units) "
+                    "or states (accepted, needs_review, exhausted).",
+     "inputSchema": _schema({"job_id": {"type": "string"},
+                             "pages": {"type": "array", "items": {"type": "integer"}, "description": "One-based pages."},
+                             "unit_ids": {"type": "array", "items": {"type": "string"}},
+                             "with_issues": {"type": "boolean"},
+                             "states": {"type": "array", "items": {"type": "string"}},
+                             "limit": {"type": "integer", "description": "Most units returned. Default 200."}},
+                            ("job_id",))},
+    {"name": "ask_model",
+     "description": "Have the job's own translation model do one task on a finished job; it is priced first, counts "
+                    "against the job's budget and is logged. Nothing is written: the answer holds candidate fixes "
+                    "(each with the quality gate's verdict; 'fix' is present only when it may be applied) to pass "
+                    "to apply_fixes. Tasks: " + "; ".join(f"{name}: {text}" for name, text in TASKS.items()),
+     "inputSchema": _schema({
+         "job_id": {"type": "string"},
+         "task": {"type": "string", "enum": list(TASKS)},
+         "unit_ids": {"type": "array", "items": {"type": "string"},
+                      "description": "retranslate, shorten, review_units; optional context for ask. At most 40."},
+         "pages": {"type": "array", "items": {"type": "integer"},
+                   "description": "review_pages; optional for ask. One-based, at most 5."},
+         "instruction": {"type": "string", "description": "What to do differently, e.g. 'policy 译为 策略'."},
+         "prompt": {"type": "string", "description": "ask: the question."},
+         "system": {"type": "string", "description": "ask: replaces the default system prompt."},
+         "json_schema": {"type": "object", "description": "ask: the reply must be a JSON object of this schema."},
+         "images": {"type": "boolean", "description": "ask: attach the original and rendered image of each page."},
+         "vision": {"type": "boolean", "description": "review_pages: send page images. Default true."},
+         "shorten_to": {"type": "number", "description": "shorten: target share of the current length. Default 0.8."},
+         "max_output_tokens": {"type": "integer"},
+         "budget_usd": {"type": "number", "description": "Raise the job's spend ceiling for this and later calls."},
+         "api_key": {"type": "string", "description": "Model API key for this call only; never stored."},
+     }, ("job_id", "task"))},
+    {"name": "apply_fixes",
+     "description": "Write corrected translations into a finished job, then render the changed pages again and repeat "
+                    "acceptance (the job runs again for a minute or so; poll get_job). Each fix is {unit_id, "
+                    "old_translated_text (the translation it replaces, null for an untranslated unit), "
+                    "new_translated_text, reason}. The whole batch is checked first; a fix against an outdated "
+                    "text, or one the quality gate blocks, refuses the batch. No model is called.",
+     "inputSchema": _schema({
+         "job_id": {"type": "string"},
+         "fixes": {"type": "array", "items": {"type": "object"}},
+         "editor": {"type": "string", "description": "Who made the fixes, e.g. 'agent:claude-opus-5-5'."},
+     }, ("job_id", "fixes", "editor"))},
     {"name": "get_job_file",
      "description": "Where to get a job's output: 'mono' Chinese PDF, 'dual' bilingual PDF, 'acceptance' report, "
                     "'layout_review', 'content_review' (per-paragraph source, translation, warnings), 'log'. "
@@ -118,7 +179,7 @@ class McpServer:
                 asked = (message.get("params") or {}).get("protocolVersion")
                 result = {
                     "protocolVersion": asked if asked in PROTOCOL_VERSIONS else PROTOCOL_VERSIONS[0],
-                    "capabilities": {"tools": {"listChanged": False}},
+                    "capabilities": {"tools": {"listChanged": False}, "resources": {"listChanged": False}},
                     "serverInfo": {"name": "pdf-translation", "version": __version__},
                     "instructions": INSTRUCTIONS,
                 }
@@ -126,6 +187,15 @@ class McpServer:
                 result = {}
             elif method == "tools/list":
                 result = {"tools": list(self.tools.values())}
+            elif method == "resources/list":
+                result = {"resources": [{"uri": GUIDE_URI, "name": "agent_guide", "mimeType": "text/markdown",
+                                         "description": "The whole pipeline, every artefact, and when to delegate to a model."}]}
+            elif method == "resources/read":
+                uri = (message.get("params") or {}).get("uri")
+                if uri != GUIDE_URI:
+                    return _error(msg_id, -32002, f"resource not found: {uri}")
+                result = {"contents": [{"uri": GUIDE_URI, "mimeType": "text/markdown",
+                                        "text": GUIDE.read_text(encoding="utf-8")}]}
             elif method == "tools/call":
                 params = message.get("params") or {}
                 result = self.call_tool(params.get("name"), params.get("arguments") or {})
@@ -144,6 +214,8 @@ class McpServer:
         except (JobError, ValidationError, ValueError) as problem:
             # Tool failures are results the model can read and act on, not protocol errors.
             return _tool_result({"error": str(problem)}, error=True)
+        except Exception as problem:  # the model service failing, the budget reached, ...
+            return _tool_result({"error": f"{type(problem).__name__}: {problem}"}, error=True)
 
     # --- tools --------------------------------------------------------------------------
 
@@ -183,6 +255,29 @@ class McpServer:
 
     def _tool_cancel_job(self, args: dict) -> dict:
         return self.manager.cancel(args["job_id"])
+
+    def _tool_resume_job(self, args: dict) -> dict:
+        secrets_env = {}
+        if args.get("api_key"):
+            options = JobOptions.model_validate(self.manager._meta(args["job_id"])["options"])
+            variable = options.api_key_variable()
+            if not variable:
+                raise JobError(f"provider {options.provider} takes no API key")
+            secrets_env[variable] = args["api_key"]
+        return self.manager.resume(args["job_id"], secrets_env=secrets_env)
+
+    def _tool_get_units(self, args: dict) -> dict:
+        return self.manager.units(args["job_id"], pages=args.get("pages"), unit_ids=args.get("unit_ids"),
+                                  with_issues=bool(args.get("with_issues")), states=args.get("states"),
+                                  limit=int(args.get("limit") or 200))
+
+    def _tool_ask_model(self, args: dict) -> dict:
+        arguments = {k: v for k, v in args.items() if k not in {"job_id", "task", "api_key", "budget_usd"} and v is not None}
+        return self.manager.assist(args["job_id"], args["task"], api_key=args.get("api_key"),
+                                   budget_usd=args.get("budget_usd"), **arguments)
+
+    def _tool_apply_fixes(self, args: dict) -> dict:
+        return self.manager.revise(args["job_id"], args["fixes"], args["editor"])
 
     def _tool_get_job_file(self, args: dict) -> dict:
         files = self.manager.files(args["job_id"])

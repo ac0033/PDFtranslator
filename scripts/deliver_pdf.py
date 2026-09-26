@@ -13,6 +13,10 @@ document and makes no API call if the ceiling is above it. Layout review (a
 model compares each rendered page with the original and repairs mismatches,
 see pdf_translation.layout_review) spends from the same budget.
 
+--resume-from render starts at rendering: after fixes were written into a
+finished run, the pages whose output was removed are rendered again, the books
+merged, and acceptance repeated; nothing is captured or sent to a model.
+
 Speed settings, none of which change the output:
     --workers              parallel capture/render processes (each needs ~2 GB)
     translation_concurrency in the config: provider requests in flight
@@ -48,6 +52,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-vision", action="store_true", help="Layout review sends text only, no page images.")
     parser.add_argument("--estimate-only", action="store_true",
                         help="Capture and price the translation, then stop; no model is called.")
+    parser.add_argument("--resume-from", choices=("start", "render"), default="start",
+                        help="render: skip capture and translation (after fixes were written into a finished run).")
     parser.add_argument("--chunk-size", type=int, default=None,
                         help="Pages per process. Defaults to spreading the document evenly over --workers, at most 10.")
     return parser
@@ -73,6 +79,12 @@ def main(argv: list[str] | None = None) -> int:
     timings_path = capture.parent / f"{capture.name}.timings.json"
     timings: dict = {"source": str(args.source), "pages": pages, "workers": args.workers, "chunk_size": chunk,
                      "translation_concurrency": config.translation_concurrency, "stages": {}}
+    if args.resume_from != "start":
+        # Keep the earlier stages' record; the stages run now overwrite their own entries.
+        earlier = _read(timings_path) or {}
+        timings["stages"] = earlier.get("stages", {})
+        timings["resumed_from"] = args.resume_from
+        timings.pop("error", None)
     env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     parallel = ["--workers", str(args.workers)] if args.workers > 1 else []
 
@@ -120,8 +132,15 @@ class StageFailed(RuntimeError):
 
 def run_stages(args, config, capture: Path, chunk: int, scratch: Path, parallel: list[str], stage) -> int:
     cli = ["-c", "from pdf_translation.cli import app; app()"]
-    stage("capture", ["scripts/capture_val_full.py", "--source", str(args.source), "--chunk-size", str(chunk), "--auto",
-                      "--capture-root", str(scratch), "--output", str(capture), *parallel])
+    if args.resume_from == "render":
+        return render_and_accept(args, config, capture, chunk, parallel, stage, cli)
+    if (capture / "capture.report.json").is_file():
+        # Captured by an earlier attempt (the merge writes this file last);
+        # capturing again would refuse to overwrite it.
+        print("[capture] already on disk", flush=True)
+    else:
+        stage("capture", ["scripts/capture_val_full.py", "--source", str(args.source), "--chunk-size", str(chunk), "--auto",
+                          "--capture-root", str(scratch), "--output", str(capture), *parallel])
     stage("coverage", [*cli, "capture-coverage", "--source", str(args.source),
                        "--capture-map", str(capture / "capture-map.jsonl"),
                        "--output", str(capture / "capture-coverage.json")], fatal=False)
@@ -135,6 +154,10 @@ def run_stages(args, config, capture: Path, chunk: int, scratch: Path, parallel:
     stage("estimate" if args.estimate_only else "translate", translate)
     if args.estimate_only:
         return 0
+    return render_and_accept(args, config, capture, chunk, parallel, stage, cli)
+
+
+def render_and_accept(args, config, capture: Path, chunk: int, parallel: list[str], stage, cli: list[str]) -> int:
     stage("render", ["scripts/render_val_full.py", "--auto", "--capture", str(capture), "--source", str(args.source),
                      "--config", str(args.config), "--output-prefix", args.output_prefix,
                      "--chunk-size", str(chunk), *parallel])
