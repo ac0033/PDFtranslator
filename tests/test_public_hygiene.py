@@ -68,7 +68,7 @@ def test_version_is_the_same_everywhere_and_has_a_changelog_entry():
 
 @pytest.mark.parametrize("pattern,sample", [
     ("absolute user or drive path", "D:\\work\\private"),
-    ("email address", "someone@example.com"),
+    ("email address", "someone" + "@" + "corp.cn"),  # assembled so this file does not trip itself
     ("API key shape", "sk-" + "a" * 24),
 ])
 def test_the_rules_catch_what_they_claim_to(pattern, sample):
