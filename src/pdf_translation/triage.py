@@ -226,7 +226,16 @@ def unit_is_untranslated(source_text: str, translated_text: str, *, latin_cutoff
         return False
     if looks_like_reference(source_text):
         return False
-    return latin_share(prose(translated_text)) >= latin_cutoff
+    target = prose(translated_text)
+    if CJK.search(target):
+        # Names and acronyms stay in Latin letters by design ("课程讲师：Christopher
+        # Manning", "双向RNN"). Words the source writes capitalised are not counted
+        # as leftover English once the unit is in Chinese; a sentence left in
+        # English is mostly lower-case words and still counts. A unit with no
+        # Chinese at all is judged on every letter.
+        proper = {word for word in ENGLISH_WORD.findall(source) if word[0].isupper()}
+        target = ENGLISH_WORD.sub(lambda m: " " if m.group(0) in proper else m.group(0), target)
+    return latin_share(target) >= latin_cutoff
 
 
 def leaked_markup(source_text: str, translated_text: str) -> list[str]:

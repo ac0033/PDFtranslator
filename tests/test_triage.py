@@ -146,6 +146,16 @@ def test_a_properly_translated_paragraph_is_not_reported():
     assert not unit_is_untranslated(source, '对分解中的每个可达集计算区间余项的多项式近似，从而界定传播误差。')
 
 
+def test_names_and_acronyms_kept_in_latin_letters_are_not_untranslated_text():
+    names = '⟦P:bd-p0001-u0004-o000⟧Authors: Milad Mohammadi, Rohit Mundra, Richard Socher, Lisa Wang, Amita Kamath'
+    assert not unit_is_untranslated(names, '⟦P:bd-p0001-u0004-o000⟧作者：Milad Mohammadi、Rohit Mundra、Richard Socher、Lisa Wang、Amita Kamath')
+    keys = 'Keyphrases: Language Models. RNN. Bi-directional RNN. Deep RNN. GRU. LSTM.'
+    assert not unit_is_untranslated(keys, '关键词：语言模型。RNN。双向RNN。深度RNN。GRU。LSTM。')
+    # The same names do not excuse English left untranslated around them, nor a unit with no Chinese at all.
+    assert unit_is_untranslated(names, '作者：Milad Mohammadi, Rohit Mundra, Richard Socher, Lisa Wang, Amita Kamath and others wrote these notes')
+    assert unit_is_untranslated(names, names)
+
+
 def test_a_short_source_is_not_judged():
     assert not unit_is_untranslated('Figure 2.1', 'Figure 2.1')
 
