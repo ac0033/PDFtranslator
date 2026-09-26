@@ -35,5 +35,6 @@ Snapshot mapping:
 | `v0.7.0-rc.13` | Source-native assets, approved terminology locks, source-bound review context and accepted 18-page Chinese/bilingual CS224n delivery | local working candidate; not tagged or pushed |
 | `v0.8.0` | Unattended whole-document delivery with graded acceptance; parallel translation, capture and rendering; one-command driver | local snapshot |
 | `v0.9.0` | Any LLM by provider preset; model layout review against the original page; translation jobs over CLI, HTTP and MCP; agents can delegate tasks to the job's model and write fixes back | local snapshot |
+| `v0.10.0` | OpenAPI 3.1 description of the HTTP API; job runners start with stdin closed; httpx declared | local snapshot |
 
 Intermediate v0.6 rc.3 and rc.4 were experimental local run revisions, not Git snapshots. The `v` prefix is a Git tag convention. Python packaging normalizes candidate suffixes, so tag `v0.7.0-rc.10` is stored as package version `0.7.0rc10`.

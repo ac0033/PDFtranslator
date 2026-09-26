@@ -2,7 +2,7 @@
 
 版本号规则见 `docs/versioning.md`。
 
-## 未发布
+## 0.10.0 — 2026-09-27 · OpenAPI 描述与接入修复
 
 - HTTP 服务提供 OpenAPI 3.1 描述：`GET /v1/openapi.json`。参数说明与 MCP 工具共用同一份定义，测试保证两者和实际路由一致。
 - 通过 MCP stdio 提交的任务，翻译进程不再继承服务的标准输入，避免它读走客户端发来的 JSON-RPC 消息。

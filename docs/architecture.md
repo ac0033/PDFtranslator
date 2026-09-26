@@ -1,6 +1,6 @@
 # 架构
 
-版本 0.9.0。早期（v0.1–v0.7）的逐版设计记录见 `archive/docs/architecture_v0.7.md`。
+版本 0.10.0。早期（v0.1–v0.7）的逐版设计记录见 `archive/docs/architecture_v0.7.md`。
 
 ## 一份 PDF 的流程
 
