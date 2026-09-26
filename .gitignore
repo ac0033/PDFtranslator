@@ -25,3 +25,7 @@ benchmark.*.inspection.json
 .vscode/
 .idea/
 *.log
+
+# private notes and per-book working files; assistant-local config (root only)
+/.notes/
+/.claude/
