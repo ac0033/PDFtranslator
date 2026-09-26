@@ -46,6 +46,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--layout-review", choices=("all", "flagged", "off"), default="all",
                         help="Review every rendered page with the model, only pages with automatic hints, or none.")
     parser.add_argument("--no-vision", action="store_true", help="Layout review sends text only, no page images.")
+    parser.add_argument("--estimate-only", action="store_true",
+                        help="Capture and price the translation, then stop; no model is called.")
     parser.add_argument("--chunk-size", type=int, default=None,
                         help="Pages per process. Defaults to spreading the document evenly over --workers, at most 10.")
     return parser
@@ -74,8 +76,14 @@ def main(argv: list[str] | None = None) -> int:
     env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     parallel = ["--workers", str(args.workers)] if args.workers > 1 else []
 
+    def save() -> None:
+        timings["total_seconds"] = round(sum(s["seconds"] for s in timings["stages"].values()), 1)
+        timings_path.write_text(json.dumps(timings, ensure_ascii=False, indent=2), encoding="utf-8")
+
     def stage(name: str, command: list[str], *, fatal: bool = True) -> int:
         print(f"[{name}] ...", flush=True)
+        timings["current_stage"] = name
+        save()
         started = time.perf_counter()
         with log.open("a", encoding="utf-8") as stream:
             stream.write(f"\n=== {name}: {' '.join(command)}\n")
@@ -84,13 +92,33 @@ def main(argv: list[str] | None = None) -> int:
                                   stdout=stream, stderr=subprocess.STDOUT).returncode
         seconds = round(time.perf_counter() - started, 1)
         timings["stages"][name] = {"seconds": seconds, "exit_code": code}
-        timings["total_seconds"] = round(sum(s["seconds"] for s in timings["stages"].values()), 1)
-        timings_path.write_text(json.dumps(timings, ensure_ascii=False, indent=2), encoding="utf-8")
+        save()
         print(f"[{name}] {seconds}s exit={code}", flush=True)
         if code and fatal:
-            raise SystemExit(f"{name} failed (exit {code}); see {log}")
+            raise StageFailed(f"{name} failed (exit {code}); see {log}")
         return code
 
+    timings["status"] = "running"
+    save()
+    try:
+        code = run_stages(args, config, capture, chunk, scratch, parallel, stage)
+    except StageFailed as failure:
+        timings.update(status="failed", error=str(failure), current_stage=None)
+        save()
+        print(json.dumps(timings, ensure_ascii=False, indent=2))
+        return 1
+    timings.update(current_stage=None, result=summarise(capture, config, args))
+    timings["status"] = "estimated" if args.estimate_only else "succeeded"
+    save()
+    print(json.dumps(timings, ensure_ascii=False, indent=2))
+    return code
+
+
+class StageFailed(RuntimeError):
+    pass
+
+
+def run_stages(args, config, capture: Path, chunk: int, scratch: Path, parallel: list[str], stage) -> int:
     cli = ["-c", "from pdf_translation.cli import app; app()"]
     stage("capture", ["scripts/capture_val_full.py", "--source", str(args.source), "--chunk-size", str(chunk), "--auto",
                       "--capture-root", str(scratch), "--output", str(capture), *parallel])
@@ -99,10 +127,14 @@ def main(argv: list[str] | None = None) -> int:
                        "--output", str(capture / "capture-coverage.json")], fatal=False)
     translate = ["scripts/translate_val_usable_sample.py", "--capture", str(capture), "--source", str(args.source),
                  "--config", str(args.config), "--capture-root", str(scratch.parent), "--sample-name", config.run_id,
-                 "--translate-only", "--execute-paid"]
+                 "--translate-only"]
+    if not args.estimate_only:
+        translate.append("--execute-paid")
     if args.style_note_file:
         translate += ["--style-note-file", str(args.style_note_file)]
-    stage("translate", translate)
+    stage("estimate" if args.estimate_only else "translate", translate)
+    if args.estimate_only:
+        return 0
     stage("render", ["scripts/render_val_full.py", "--auto", "--capture", str(capture), "--source", str(args.source),
                      "--config", str(args.config), "--output-prefix", args.output_prefix,
                      "--chunk-size", str(chunk), *parallel])
@@ -113,10 +145,44 @@ def main(argv: list[str] | None = None) -> int:
         if args.no_vision:
             review.append("--no-vision")
         stage("layout-review", review, fatal=False)
-    code = stage("acceptance", [*cli, "acceptance-report", "--source", str(args.source), "--render-dir", str(capture),
+    return stage("acceptance", [*cli, "acceptance-report", "--source", str(args.source), "--render-dir", str(capture),
                                 "--run-id", config.run_id, "--output-prefix", args.output_prefix], fatal=False)
-    print(json.dumps(timings, ensure_ascii=False, indent=2))
-    return code
+
+
+def _read(path: Path) -> dict | None:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def summarise(capture: Path, config, args) -> dict:
+    """What a caller needs from a finished run: verdict, cost, where the books are."""
+    stem = args.source.stem
+    result: dict = {"output_dir": str(capture)}
+    estimate = _read(capture / "estimate.json")
+    if estimate:
+        result["estimated_max_cost_usd"] = estimate.get("estimated_max_cost_usd")
+        result["units"] = estimate.get("unit_count")
+    if args.estimate_only:
+        result["budget_usd"] = config.budget_usd
+        return result
+    books = {"mono": capture / f"{stem}.{args.output_prefix}.zh.mono.pdf",
+             "dual": capture / f"{stem}.{args.output_prefix}.zh.dual.pdf"}
+    result["books"] = {k: str(v) for k, v in books.items() if v.is_file()}
+    acceptance = _read(capture / "acceptance-report.json")
+    if acceptance:
+        result["verdict"] = acceptance.get("verdict")
+        result["major_problems"] = [p.get("detail") for p in acceptance.get("major_problems", [])]
+    review = _read(capture / "layout-review.json")
+    if review:
+        result["layout_review"] = {k: review.get(k) for k in ("pages", "accepted", "rejected", "cost_usd", "stopped")}
+    try:
+        from pdf_translation.storage import StateStore
+        result["cost_usd"] = round(StateStore(ROOT / "runs" / config.run_id / "state.sqlite").spent(config.run_id), 6)
+    except Exception:  # a failed run may have no store yet
+        pass
+    return result
 
 
 if __name__ == "__main__":
