@@ -38,3 +38,4 @@ Intermediate v0.6 rc.3 and rc.4 were experimental local run revisions, not Git s
 
 | `v0.7.0-rc.13` | Source-native assets, approved terminology locks, source-bound review context and accepted18-page Chinese/bilingual CS224n delivery | local working candidate; not tagged or pushed |
 | `v0.8.0` | Unattended whole-document delivery with graded acceptance; parallel translation, capture and rendering; one-command driver | local snapshot |
+| `v0.9.0` | Any LLM by provider preset; model layout review against the original page; translation jobs over CLI, HTTP and MCP; agents can delegate tasks to the job's model and write fixes back | local snapshot |

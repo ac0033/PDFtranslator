@@ -6,7 +6,7 @@
 - 付费前先估算整份文档的费用上限，超过配置里的 `budget_usd` 就不发任何请求。
 - 翻译后自动验收：漏译、公式与数字保护、捕获覆盖度等问题分级报告，大问题阻断交付。
 
-当前版本 `0.8.0`（0.x 阶段，接口仍可能调整）。
+当前版本 `0.9.0`（0.x 阶段，接口仍可能调整）。
 
 ## 安装
 
@@ -77,7 +77,9 @@ DEEPSEEK_API_KEY=<你的 key>
 uv run pdftrans translate <文件.pdf 或 https://...> --budget-usd 1 --out-dir <目录>   # 等待完成并复制成品
 uv run pdftrans translate <文件.pdf> --estimate-only                                   # 只估价，不调用模型
 uv run pdftrans jobs list | status <job_id> [--wait] | log <job_id> | fetch <job_id> mono <保存路径> | cancel <job_id>
+uv run pdftrans jobs resume <job_id>                                                   # 失败（如欠费）或取消后续跑，已付费部分不重复付费
 uv run pdftrans providers                                                              # 可用的模型服务商
+uv run pdftrans guide                                                                  # 给接入方的完整说明
 ```
 
 加上 `--server <服务地址> --token <令牌>`（或环境变量 `PDFTRANS_SERVER`、`PDFTRANS_TOKEN`），同样的命令改为调用另一台主机上的服务。
@@ -89,12 +91,14 @@ $env:PDFTRANS_TOKEN = "<一个足够长的随机串>"
 uv run pdftrans serve --host 0.0.0.0 --port 8766 --public-url https://<对外地址>
 ```
 
-监听本机以外的地址必须设置令牌，否则拒绝启动。接口：`GET /health`、`GET /v1/providers`、`POST /v1/jobs`（请求体为 PDF 字节，选项放在 `X-Job-Options` 头里；或 JSON `{"pdf_base64"|"pdf_url", "options"}`）、`GET /v1/jobs/{id}`、`GET /v1/jobs/{id}/log`、`GET /v1/jobs/{id}/files/{mono|dual|acceptance|layout_review|content_review|log}`、`POST /v1/jobs/{id}/cancel`。除 `/health` 外都要带 `Authorization: Bearer <令牌>`。某个任务要用调用方自己的模型 Key 时放在 `X-LLM-API-Key` 头里：它只进入该任务的进程环境，不写入磁盘。服务本身不提供 HTTPS，对公网开放时请放在反向代理后面。
+监听本机以外的地址必须设置令牌，否则拒绝启动。接口：`GET /health`、`GET /v1/providers`、`POST /v1/jobs`（请求体为 PDF 字节，选项放在 `X-Job-Options` 头里；或 JSON `{"pdf_base64"|"pdf_url", "options"}`）、`GET /v1/jobs/{id}`、`GET /v1/jobs/{id}/log`、`GET /v1/jobs/{id}/files/{mono|dual|acceptance|layout_review|content_review|log}`、`POST /v1/jobs/{id}/cancel`、`POST /v1/jobs/{id}/resume`，以及下面“继续改进”用到的 `GET /v1/jobs/{id}/units`、`POST /v1/jobs/{id}/assist`、`POST /v1/jobs/{id}/revise` 和 `GET /v1/guide`。除 `/health` 外都要带 `Authorization: Bearer <令牌>`。某个任务要用调用方自己的模型 Key 时放在 `X-LLM-API-Key` 头里：它只进入该任务的进程环境，不写入磁盘。服务本身不提供 HTTPS，对公网开放时请放在反向代理后面。
 
-**MCP**（供 Claude、Cursor 等 AI 工具调用；工具：`translate_pdf`、`get_job`、`get_job_file`、`list_jobs`、`cancel_job`、`list_providers`）：
+**MCP**（供 Claude、Cursor 等 AI 工具调用；工具：`translate_pdf`、`get_job`、`get_job_file`、`list_jobs`、`cancel_job`、`resume_job`、`list_providers`、`get_units`、`ask_model`、`apply_fixes`；接入指南以资源 `pdftrans://docs/agent_guide` 提供）：
 
 - 本机（stdio）：Claude Code 执行 `claude mcp add pdf-translation -- uv --directory <项目目录> run pdftrans mcp`；Claude Desktop 在配置文件的 `mcpServers` 里加入 `{"pdf-translation": {"command": "uv", "args": ["--directory", "<项目目录>", "run", "pdftrans", "mcp"]}}`。
 - 远程（HTTP）：连接 `https://<对外地址>/mcp`，请求头带 `Authorization: Bearer <令牌>`。远程调用方只能上传 PDF 或给网址，不能指定服务器上的文件路径（除非以 `--allow-local-paths` 启动）。
+
+**继续改进已完成的任务**：接入方读取被检查标记的单元（`jobs units <id> --with-issues` / `get_units`），自己判断并写出修正，或在合适时委托本任务的模型做一件事（`jobs ask <id> <task>` / `ask_model`：重译、压缩过长译文、复核一批单元、对照页面图像复核、自由提问；先估价、计入任务预算、只返回候选修正），然后写回（`jobs revise <id> fixes.json` / `apply_fixes`），服务只重渲染改动的页并重新验收，不调用模型。什么时候自己处理、什么时候委托模型，见 [`docs/agent_guide.md`](docs/agent_guide.md)。
 
 **Skill**：把 `skills/pdf-translate/` 复制到 `~/.claude/skills/`（所有项目可用）或某个项目的 `.claude/skills/` 下，Claude Code 在用户要求翻译 PDF 时会按其中的步骤调用上述能力。
 
@@ -127,7 +131,7 @@ uv run pdftrans serve --host 0.0.0.0 --port 8766 --public-url https://<对外地
 | `scripts/` | 可重复运行的驱动脚本：`deliver_pdf.py`（一键全流程）、`capture_val_full.py` / `translate_val_usable_sample.py` / `render_val_full.py`（各阶段）、`apply_local_fixes.py`（写回人工修正） |
 | `configs/` | 配置示例与测试用配置 |
 | `tests/` | 测试 |
-| `docs/` | 设计与使用文档：`architecture.md`、`unattended_delivery.md`（无人值守交付与验收规则）、`quality_fix_policy.md`、`versioning.md`、`CHANGELOG.md` |
+| `docs/` | 设计与使用文档：`agent_guide.md`（给接入的工具和 agent）、`architecture.md`、`unattended_delivery.md`（无人值守交付与验收规则）、`quality_fix_policy.md`、`versioning.md`、`CHANGELOG.md` |
 | `pdf/`、`output/`、`runs/`、`tmp/` | 输入、产物、运行库与临时文件，均被 Git 忽略 |
 
 ## 命令行
