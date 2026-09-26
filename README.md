@@ -131,7 +131,8 @@ uv run pdftrans serve --host 0.0.0.0 --port 8766 --public-url https://<对外地
 | `scripts/` | 可重复运行的驱动脚本：`deliver_pdf.py`（一键全流程）、`capture_val_full.py` / `translate_val_usable_sample.py` / `render_val_full.py`（各阶段）、`apply_local_fixes.py`（写回人工修正） |
 | `configs/` | 配置示例与测试用配置 |
 | `tests/` | 测试 |
-| `docs/` | 设计与使用文档：`agent_guide.md`（给接入的工具和 agent）、`architecture.md`、`unattended_delivery.md`（无人值守交付与验收规则）、`quality_fix_policy.md`、`versioning.md`、`CHANGELOG.md` |
+| `docs/` | 设计与使用文档：`agent_guide.md`（给接入的工具和 agent）、`architecture.md`（流程与模块）、`unattended_delivery.md`（无人值守交付与验收规则）、`terminology_lock_design.md`、`versioning.md`、`CHANGELOG.md` |
+| `archive/` | 已被取代的历史文档，仅供参考 |
 | `pdf/`、`output/`、`runs/`、`tmp/` | 输入、产物、运行库与临时文件，均被 Git 忽略 |
 
 ## 命令行
