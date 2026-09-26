@@ -427,7 +427,8 @@ class LiteLLMClient(_Base):
         try:
             import litellm
         except ImportError as exc:
-            raise RuntimeError("provider 'litellm' needs the optional package: uv pip install litellm") from exc
+            raise RuntimeError(("provider 'litellm' needs the optional package: uv pip install litellm "
+                               "(LiteLLM currently requires openai<3, so that environment moves to openai 2.x)")) from exc
         user: str | list = request.user
         if request.images:
             user = [{"type": "text", "text": request.user}, *[

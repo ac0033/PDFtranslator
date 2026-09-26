@@ -82,7 +82,7 @@ DEEPSEEK_API_KEY=<你的 key>
 | `siliconflow` / `openrouter` / `groq` / `mistral` / `xai` | 对应服务 | `SILICONFLOW_API_KEY` 等 |
 | `ollama` | 本机 Ollama，无需 Key | — |
 | `openai-compatible`（别名 `vllm`、`lmstudio`） | 任何兼容 OpenAI 接口的服务，必须填 `base_url` | 用 `api_key_env` 指定，本地服务可不填 |
-| `litellm` | LiteLLM 支持的任意模型（需先 `uv pip install litellm`），`model_id` 写成 `bedrock/...`、`azure/...` 等 | 按 LiteLLM 约定 |
+| `litellm` | LiteLLM 支持的任意模型（需先 `uv pip install litellm`；LiteLLM 目前要求 openai<3，该环境的 openai 会降到 2.x，本项目两者都兼容），`model_id` 写成 `bedrock/...`、`azure/...` 等 | 按 LiteLLM 约定 |
 
 可选覆盖项：`base_url`（换代理或私有部署地址）、`api_key_env`（换 Key 变量名）、`api_protocol`（`openai-responses` / `openai-chat` / `anthropic` / `gemini` / `litellm`）、`structured_output`（`json_schema` / `json_object` / `prompt`）。某个服务不支持指定的结构化输出方式时会自动降一级，返回的 JSON 始终在本地校验。费用上限按配置里的 `input_usd_per_million` / `output_usd_per_million` 计算，换模型时要一并改成该模型的价格。
 
