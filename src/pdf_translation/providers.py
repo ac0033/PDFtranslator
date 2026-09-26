@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 from typing import Protocol
 
 from pydantic import ValidationError
 
+from .llm import Endpoint, LLMClient, LLMRequest, OpenAIResponsesClient
 from .schemas import TranslationDraft, TranslationRequest, TranslationResult, Usage
 from .semantic_layout import rebalance_layout_markers
 from .term_lock import protect_terms, restore_terms
@@ -35,19 +35,6 @@ class ProviderCallError(RuntimeError):
         self.retryable = retryable
 
 
-def _response_usage(response) -> Usage:
-    usage_obj = response.usage
-    details = getattr(usage_obj, "output_tokens_details", None)
-    return Usage(
-        input_tokens=getattr(usage_obj, "input_tokens", None),
-        cached_input_tokens=getattr(getattr(usage_obj, "input_tokens_details", None), "cached_tokens", None),
-        output_tokens=getattr(usage_obj, "output_tokens", None),
-        reasoning_tokens=getattr(details, "reasoning_tokens", None),
-        cost_usd=None,
-        usage_source="provider",
-    )
-
-
 class MockProvider:
     def translate(self, request: TranslationRequest) -> TranslationResult:
         # Deliberately preserves every source token for deterministic offline contract tests.
@@ -56,18 +43,18 @@ class MockProvider:
         return TranslationResult(request_id=request.request_id, unit_id=request.unit.unit_id, draft=draft, finish="complete", provider_response_id=None, model=request.model, usage=Usage(input_tokens=0, output_tokens=0, cost_usd=0.0, usage_source="estimated"))
 
 
-class OpenAIProvider:
-    def __init__(self, api_key_env: str = "OPENAI_API_KEY", base_url: str | None = None, strict_schema: bool = True):
-        self.api_key_env = api_key_env
-        self.base_url = base_url
-        self.strict_schema = strict_schema
+class LLMTranslationProvider:
+    """Translate one unit through any :class:`~pdf_translation.llm.LLMClient`.
+
+    The prompt, the structured-output contract and the parsing are the same for
+    every model; only the client knows how to reach a particular vendor.
+    """
+
+    def __init__(self, client: LLMClient):
+        self.client = client
+        self.api_key_env = client.api_key_env
 
     def translate(self, request: TranslationRequest) -> TranslationResult:
-        from openai import OpenAI
-
-        api_key = os.environ.get(self.api_key_env)
-        if not api_key:
-            raise RuntimeError(f"missing API key environment variable: {self.api_key_env}")
         source_text,term_locks=protect_terms(request.unit.source_text,request.context.items)
         schema = TranslationDraft.model_json_schema()
         context = "\n\n".join(f"<context-item category=\"{item.category}\">{item.content}</context-item>" for item in request.context.items)
@@ -78,15 +65,7 @@ class OpenAIProvider:
             f"<protected-source-literals>\n{protected_literals}\n</protected-source-literals>\n"
             f"<source-to-translate>\n{source_text}\n</source-to-translate>"
         )
-        client_options = {"api_key": api_key}
-        if self.base_url:
-            client_options["base_url"] = self.base_url
-        client = OpenAI(**client_options)
-        response_format = {"type": "json_schema", "name": "translation_draft", "schema": schema}
-        if self.strict_schema:
-            response_format["strict"] = True
         arguments = {
-            "model": request.model.model_id,
             "instructions": (
                 "Translate the complete source into faithful, coherent, natural Simplified Chinese. "
                 "Translate only the text inside <source-to-translate>. The content inside "
@@ -108,9 +87,7 @@ class OpenAIProvider:
                 "\"uncertainties\": []}. Do not return or describe the JSON Schema definition."
             ),
             "input": prompt,
-            "max_output_tokens": request.model.max_output_tokens,
-            "store": False,
-            "text": {"format": response_format},
+            "schema": schema,
         }
         if "native_immutable_slots" in request.unit.risk_tags:
             readable = source_text
@@ -152,7 +129,7 @@ class OpenAIProvider:
             editable = {str(i): part.strip() for i, part in enumerate(native_parts) if i % 2 == 0 and part.strip()}
             segment_schema = {"type": "object", "properties": {key: {"type": "string"} for key in editable},
                               "required": list(editable), "additionalProperties": False}
-            arguments["text"]["format"]["schema"] = segment_schema
+            arguments["schema"] = segment_schema
             arguments["input"] += "\n<editable-segments>" + json.dumps(editable, ensure_ascii=False) + "</editable-segments>"
             sequence = [{"editable_id": str(i), "English": part.strip()} if i % 2 == 0 else
                         {"fixed_original": request.unit.protected_literal_hints.get(part, part)}
@@ -186,23 +163,28 @@ class OpenAIProvider:
         if term_locks:
             arguments["input"] += "\n<locked-terminology>"+json.dumps([t.model_dump() for t in term_locks],ensure_ascii=False)+"</locked-terminology>"
             arguments["instructions"] += " Preserve every ⟦T:...⟧ terminology marker exactly once at its semantic position. It represents a complete approved technical term. Do not translate, expand, paraphrase or duplicate it. The program inserts its exact target_term after translation. Use source_term and target_term only to construct grammatical surrounding Chinese."
-        if request.model.reasoning_effort:
-            arguments["reasoning"] = {"effort": request.model.reasoning_effort}
-        response = client.responses.create(**arguments)
-        usage = _response_usage(response)
-        if getattr(response, "status", None) == "incomplete":
-            details = getattr(response, "incomplete_details", None)
-            reason = getattr(details, "reason", None) or "unknown"
+        response = self.client.complete(LLMRequest(
+            system=arguments["instructions"],
+            user=arguments["input"],
+            model_id=request.model.model_id,
+            max_output_tokens=request.model.max_output_tokens,
+            json_schema=arguments["schema"],
+            schema_name="translation_draft",
+            reasoning_effort=request.model.reasoning_effort,
+        ))
+        usage = response.usage
+        if response.truncated_reason:
+            reason = response.truncated_reason
             raise ProviderCallError(
                 f"provider response was incomplete: {reason}",
                 category=f"truncated:{reason}",
                 usage=usage,
-                provider_response_id=getattr(response, "id", None),
+                provider_response_id=response.response_id,
                 retryable=reason == "max_output_tokens",
             )
         term_evidence=None
         try:
-            parsed = json.loads(response.output_text)
+            parsed = json.loads(response.text)
             if native_parts is not None:
                 if not isinstance(parsed, dict) or set(parsed) != set(editable) or any(not isinstance(v, str) or not v.strip() for v in parsed.values()):
                     raise ValueError("native segment IDs or translations missing")
@@ -220,9 +202,19 @@ class OpenAIProvider:
                 "provider response did not match TranslationDraft",
                 category="invalid_structured_output",
                 usage=usage,
-                provider_response_id=getattr(response, "id", None),
+                provider_response_id=response.response_id,
             ) from exc
-        return TranslationResult(request_id=request.request_id, unit_id=request.unit.unit_id, draft=draft, finish="complete", provider_response_id=response.id, model=request.model, usage=usage, terminology_evidence=term_evidence)
+        return TranslationResult(request_id=request.request_id, unit_id=request.unit.unit_id, draft=draft, finish="complete", provider_response_id=response.response_id, model=request.model, usage=usage, terminology_evidence=term_evidence)
+
+
+class OpenAIProvider(LLMTranslationProvider):
+    """Translation through the OpenAI Responses API."""
+
+    def __init__(self, api_key_env: str = "OPENAI_API_KEY", base_url: str | None = None, strict_schema: bool = True):
+        self.base_url = base_url
+        self.strict_schema = strict_schema
+        super().__init__(OpenAIResponsesClient(Endpoint(
+            "openai", "openai-responses", base_url, api_key_env, "json_schema", strict_schema)))
 
 
 class DeepSeekProvider(OpenAIProvider):

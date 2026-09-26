@@ -70,7 +70,8 @@ def test_concurrency_is_not_part_of_the_run_identity():
     # Raising the setting on a half-finished book must resume it, not refuse it.
     assert config("same", 1).config_hash == config("same", 16).config_hash
     legacy = config("same", 1).model_dump(mode="json")
-    del legacy["translation_concurrency"]
+    for added_later in ("translation_concurrency", "api_protocol", "structured_output"):
+        del legacy[added_later]
     assert config("same", 1).config_hash == stable_hash(legacy)
 
 

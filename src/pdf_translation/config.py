@@ -38,14 +38,27 @@ class RunConfig(StrictModel):
     # a run finishes, not what it produces, so it is left out of config_hash:
     # raising it must not refuse to resume a run started with a lower value.
     translation_concurrency: int = Field(default=1, ge=1, le=32)
+    # Which wire protocol reaches the model; None takes the provider preset's
+    # (see pdf_translation.llm.PRESETS).
+    api_protocol: Literal["openai-responses", "openai-chat", "anthropic", "gemini", "litellm"] | None = None
+    # How strongly to ask for JSON: "auto" takes the preset's mode.
+    structured_output: Literal["auto", "json_schema", "json_object", "prompt"] = "auto"
 
     @property
     def config_hash(self) -> str:
-        return stable_hash(self.model_dump(mode="json", exclude=EXECUTION_ONLY_FIELDS))
+        identity = self.model_dump(mode="json", exclude=EXECUTION_ONLY_FIELDS)
+        for name, default in IDENTITY_FIELDS_OMITTED_AT_DEFAULT.items():
+            if identity.get(name) == default:
+                identity.pop(name)
+        return stable_hash(identity)
 
 
 #: Settings that affect speed only; excluded from the run identity.
 EXECUTION_ONLY_FIELDS = frozenset({"translation_concurrency"})
+#: Settings added after runs already existed. They change the output when set,
+#: so they belong to the identity then; at their default they are left out, so
+#: a run started before the field existed keeps its hash and can resume.
+IDENTITY_FIELDS_OMITTED_AT_DEFAULT = {"api_protocol": None, "structured_output": "auto"}
 
 
 def load_config(path: Path) -> RunConfig:

@@ -65,6 +65,27 @@ DEEPSEEK_API_KEY=<你的 key>
 
 4. 看验收单：`deliverable` / `deliverable_with_known_issues` 可以交付；`not_deliverable` 会列出原因（例如某段三次都没译出）。人工核对后用 `scripts/apply_local_fixes.py` 写回修正并只重渲染受影响的页，不调用模型。
 
+## 换用其他模型
+
+配置里的 `provider` 选一个预设，填 `model_id`，把对应的 API Key 写进 `.env`：
+
+| `provider` | 接口 | 默认 Key 变量 |
+|---|---|---|
+| `deepseek` | DeepSeek | `DEEPSEEK_API_KEY` |
+| `openai` | OpenAI | `OPENAI_API_KEY` |
+| `anthropic`（别名 `claude`） | Anthropic Claude | `ANTHROPIC_API_KEY` |
+| `gemini`（别名 `google`） | Google Gemini | `GEMINI_API_KEY` |
+| `qwen`（别名 `dashscope`） | 阿里云通义千问 | `DASHSCOPE_API_KEY` |
+| `moonshot`（别名 `kimi`） | 月之暗面 Kimi | `MOONSHOT_API_KEY` |
+| `zhipu`（别名 `glm`） | 智谱 GLM | `ZHIPUAI_API_KEY` |
+| `doubao`（别名 `volcengine`） | 火山引擎豆包 | `ARK_API_KEY` |
+| `siliconflow` / `openrouter` / `groq` / `mistral` / `xai` | 对应服务 | `SILICONFLOW_API_KEY` 等 |
+| `ollama` | 本机 Ollama，无需 Key | — |
+| `openai-compatible`（别名 `vllm`、`lmstudio`） | 任何兼容 OpenAI 接口的服务，必须填 `base_url` | 用 `api_key_env` 指定，本地服务可不填 |
+| `litellm` | LiteLLM 支持的任意模型（需先 `uv pip install litellm`），`model_id` 写成 `bedrock/...`、`azure/...` 等 | 按 LiteLLM 约定 |
+
+可选覆盖项：`base_url`（换代理或私有部署地址）、`api_key_env`（换 Key 变量名）、`api_protocol`（`openai-responses` / `openai-chat` / `anthropic` / `gemini` / `litellm`）、`structured_output`（`json_schema` / `json_object` / `prompt`）。某个服务不支持指定的结构化输出方式时会自动降一级，返回的 JSON 始终在本地校验。费用上限按配置里的 `input_usd_per_million` / `output_usd_per_million` 计算，换模型时要一并改成该模型的价格。
+
 ## 目录
 
 | 目录 | 内容 |

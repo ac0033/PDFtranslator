@@ -16,7 +16,8 @@ from .context_router import build_context_packet, select_exact_tm
 from .context_store import ContextStore
 from .analyzer import validate_semantic_evidence
 from .hashing import stable_hash
-from .providers import DeepSeekProvider, MockProvider, OpenAIProvider, ProviderCallError
+from .llm import LLMHTTPError, config_client
+from .providers import DeepSeekProvider, LLMTranslationProvider, MockProvider, OpenAIProvider, ProviderCallError
 from .quality import check_quality, repair_boundary_markers
 from .semantic_layout import restore_and_rebalance_layout_markers, is_formula_only
 from .schemas import ContextItem, ContextPacket, ModelSpec, TranslationDraft, TranslationRequest, TranslationResult, TranslationUnit, Usage
@@ -266,23 +267,29 @@ def _run_concurrently(jobs: list[tuple], work, workers: int, stop: threading.Eve
                    next((e for e in failures if not isinstance(e, ProviderAttemptsExhausted)), failures[0]))
 
 
+def translation_provider(config: RunConfig):
+    """The translation provider a run config names.
+
+    OpenAI and DeepSeek on their default protocol keep their dedicated classes;
+    every other provider, and any explicit protocol or structured-output
+    override, goes through the generic client for that vendor.
+    """
+    if config.provider == "mock":
+        return MockProvider()
+    defaults = config.api_protocol is None and config.structured_output == "auto"
+    if config.provider == "openai" and defaults:
+        return OpenAIProvider(api_key_env=config.api_key_env or "OPENAI_API_KEY", base_url=config.base_url)
+    if config.provider == "deepseek" and defaults:
+        return DeepSeekProvider(api_key_env=config.api_key_env or "DEEPSEEK_API_KEY", base_url=config.base_url or "https://api.deepseek.com")
+    return LLMTranslationProvider(config_client(config))
+
+
 def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path, *, context_units: list[TranslationUnit] | None = None) -> dict:
     run_dir = runs_root / config.run_id
     store = StateStore(run_dir / "state.sqlite")
     input_hash = stable_hash(units) if context_units is None else stable_hash({"units": units, "context_units": context_units})
     store.begin_run(config.run_id, input_hash, config.config_hash)
-    if config.provider == "mock":
-        provider = MockProvider()
-    elif config.provider == "openai":
-        provider = OpenAIProvider(api_key_env=config.api_key_env or "OPENAI_API_KEY", base_url=config.base_url)
-    elif config.provider == "deepseek":
-        if config.model_id not in {"deepseek-flash", "deepseek-v4-flash"}:
-            raise ValueError("DeepSeek V4.1 Flash API model_id must be deepseek-flash (recommended) or deepseek-v4-flash (legacy alias)")
-        provider = DeepSeekProvider(api_key_env=config.api_key_env or "DEEPSEEK_API_KEY", base_url=config.base_url or "https://api.deepseek.com")
-    else:
-        provider = None
-    if provider is None:
-        raise ValueError(f"unsupported provider: {config.provider}")
+    provider = translation_provider(config)
     api_key_env = getattr(provider, "api_key_env", None)
     if config.provider != "mock" and api_key_env and not os.environ.get(api_key_env):
         raise RuntimeError(f"missing API key environment variable: {api_key_env}")
@@ -371,7 +378,7 @@ def run_units(units: list[TranslationUnit], config: RunConfig, runs_root: Path, 
                             estimated_input = estimated_input_token_ceiling(request)
                             estimate = estimate_cost(estimated_input, request.model.max_output_tokens, config.input_usd_per_million, config.output_usd_per_million)
                         continue
-                    except APIStatusError as exc:
+                    except (APIStatusError, LLMHTTPError) as exc:
                         # 402 means the account, not this paragraph, is blocked.
                         # It must not consume a unit's translation retry budget or
                         # charge a fictitious output bill, then fail every following

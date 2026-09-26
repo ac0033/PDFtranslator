@@ -13,11 +13,11 @@ from .babeldoc_adapter import _write_content_review_queue, capture_pdf_sample, r
 from .ab_experiment import MAX_COMBINED_AB_BUDGET_USD, approved_execution_configs, build_blind_review, prepare_ab_manifest
 from .acceptance import NOT_DELIVERABLE, build_acceptance_report, captured_page_span, format_summary, load_review_queue, refresh_from_store
 from .triage import DocumentProfile, ReviewLedger, triage_rows
+from .llm import config_client
 from .warning_review import (
     UNREVIEWABLE_CATEGORIES,
-    DeepSeekWarningReviewProvider,
+    LLMWarningReviewProvider,
     MockWarningReviewProvider,
-    OpenAIWarningReviewProvider,
     build_warning_cases,
     ledger_entries,
     review_warnings,
@@ -314,15 +314,17 @@ def review_warnings_command(
     cases = build_warning_cases(rows, triage["residual"], categories=set(categories) if categories else None)
 
     chosen = (provider_name or cfg.provider).lower()
-    providers = {
-        "deepseek": lambda: DeepSeekWarningReviewProvider(api_key_env=cfg.api_key_env or "DEEPSEEK_API_KEY"),
-        "openai": lambda: OpenAIWarningReviewProvider(api_key_env=cfg.api_key_env or "OPENAI_API_KEY", base_url=cfg.base_url),
-        "mock": MockWarningReviewProvider,
-    }
-    if chosen not in providers:
-        raise typer.BadParameter(f"unknown provider for warning review: {chosen}")
+    if chosen == "mock":
+        reviewer = MockWarningReviewProvider()
+    else:
+        try:
+            # Another provider than the config's must not inherit its endpoint or key.
+            override = {} if chosen == cfg.provider else {"provider": chosen, "base_url": None, "api_key_env": None, "api_protocol": None}
+            reviewer = LLMWarningReviewProvider(config_client(cfg.model_copy(update=override)))
+        except ValueError as exc:
+            raise typer.BadParameter(str(exc)) from exc
 
-    result = review_warnings(cases, providers[chosen](), cfg, execute_paid=execute_paid)
+    result = review_warnings(cases, reviewer, cfg, execute_paid=execute_paid)
     result["source"] = str(source)
     result["not_asked"] = {
         category: sum(1 for item in triage["residual"] if item["category"] == category)

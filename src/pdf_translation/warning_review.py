@@ -281,33 +281,21 @@ class MockWarningReviewProvider:
         )
 
 
-class OpenAIWarningReviewProvider:
-    """Ask one short question per warning through the Responses API.
+class LLMWarningReviewProvider:
+    """Ask one short question per warning through any LLM client.
 
-    Mirrors :class:`pdf_translation.providers.OpenAIProvider`: same client, same
-    structured-output contract, same refusal to accept a truncated reply. The
-    question is much smaller - one warning, its unit, and why it was raised.
+    Same structured-output contract and the same refusal to accept a truncated
+    reply as translation; the question is much smaller - one warning, its unit,
+    and why it was raised.
     """
 
-    def __init__(self, api_key_env: str = "OPENAI_API_KEY", base_url: str | None = None, strict_schema: bool = True):
-        self.api_key_env = api_key_env
-        self.base_url = base_url
-        self.strict_schema = strict_schema
+    def __init__(self, client):
+        self.client = client
+        self.api_key_env = client.api_key_env
 
     def review(self, case: dict, model: ModelSpec) -> WarningVerdict:
-        import os
+        from .llm import LLMRequest
 
-        from openai import OpenAI
-
-        api_key = os.environ.get(self.api_key_env)
-        if not api_key:
-            raise RuntimeError(f"missing API key environment variable: {self.api_key_env}")
-        options = {"api_key": api_key}
-        if self.base_url:
-            options["base_url"] = self.base_url
-        response_format = {"type": "json_schema", "name": "warning_verdict", "schema": WarningVerdict.model_json_schema()}
-        if self.strict_schema:
-            response_format["strict"] = True
         prompt = "\n".join((
             f"<warning-id>{case['warning_id']}</warning-id>",
             f"<category>{case['category']}</category>",
@@ -316,21 +304,23 @@ class OpenAIWarningReviewProvider:
             "<source>", case["source"], "</source>",
             "<target>", case["target"], "</target>",
         ))
-        arguments = {
-            "model": model.model_id,
-            "instructions": REVIEW_INSTRUCTIONS,
-            "input": prompt,
-            "max_output_tokens": model.max_output_tokens,
-            "store": False,
-            "text": {"format": response_format},
-        }
-        if model.reasoning_effort:
-            arguments["reasoning"] = {"effort": model.reasoning_effort}
-        response = OpenAI(**options).responses.create(**arguments)
-        if getattr(response, "status", None) == "incomplete":
-            details = getattr(response, "incomplete_details", None)
-            raise RuntimeError(f"warning review response was incomplete: {getattr(details, 'reason', None) or 'unknown'}")
-        return WarningVerdict.model_validate_json(response.output_text)
+        response = self.client.complete(LLMRequest(
+            system=REVIEW_INSTRUCTIONS, user=prompt, model_id=model.model_id,
+            max_output_tokens=model.max_output_tokens, json_schema=WarningVerdict.model_json_schema(),
+            schema_name="warning_verdict", reasoning_effort=model.reasoning_effort,
+        ))
+        if response.truncated_reason:
+            raise RuntimeError(f"warning review response was incomplete: {response.truncated_reason}")
+        return WarningVerdict.model_validate_json(response.text)
+
+
+class OpenAIWarningReviewProvider(LLMWarningReviewProvider):
+    def __init__(self, api_key_env: str = "OPENAI_API_KEY", base_url: str | None = None, strict_schema: bool = True):
+        from .llm import Endpoint, OpenAIResponsesClient
+
+        self.base_url = base_url
+        self.strict_schema = strict_schema
+        super().__init__(OpenAIResponsesClient(Endpoint("openai", "openai-responses", base_url, api_key_env, "json_schema", strict_schema)))
 
 
 class DeepSeekWarningReviewProvider(OpenAIWarningReviewProvider):
