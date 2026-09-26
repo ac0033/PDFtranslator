@@ -1,6 +1,6 @@
 """Translate one PDF end to end with one command, and time every stage.
 
-    capture -> coverage -> translate -> render -> acceptance
+    capture -> coverage -> translate -> render -> layout review -> acceptance
 
 Each stage is the existing resumable script run in its own process, so a rerun
 of the same command resumes from what is already on disk rather than
@@ -9,7 +9,9 @@ re-capturing, re-paying or re-rendering. Stage wall-clock times are written to
 answered with a measurement instead of an estimate.
 
 The config's budget_usd guards the spend: translation first prices the whole
-document and makes no API call if the ceiling is above it.
+document and makes no API call if the ceiling is above it. Layout review (a
+model compares each rendered page with the original and repairs mismatches,
+see pdf_translation.layout_review) spends from the same budget.
 
 Speed settings, none of which change the output:
     --workers              parallel capture/render processes (each needs ~2 GB)
@@ -41,6 +43,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output", type=Path, default=None, help="Capture/render directory. Defaults to output/pdf/<run_id>.")
     parser.add_argument("--output-prefix", default="zh", help="Infix of the merged book filenames.")
     parser.add_argument("--workers", type=int, default=1, help="Parallel capture/render processes.")
+    parser.add_argument("--layout-review", choices=("all", "flagged", "off"), default="all",
+                        help="Review every rendered page with the model, only pages with automatic hints, or none.")
+    parser.add_argument("--no-vision", action="store_true", help="Layout review sends text only, no page images.")
     parser.add_argument("--chunk-size", type=int, default=None,
                         help="Pages per process. Defaults to spreading the document evenly over --workers, at most 10.")
     return parser
@@ -101,6 +106,13 @@ def main(argv: list[str] | None = None) -> int:
     stage("render", ["scripts/render_val_full.py", "--auto", "--capture", str(capture), "--source", str(args.source),
                      "--config", str(args.config), "--output-prefix", args.output_prefix,
                      "--chunk-size", str(chunk), *parallel])
+    if args.layout_review != "off":
+        review = ["-m", "scripts.review_layout", "--capture", str(capture), "--config", str(args.config),
+                  "--source", str(args.source), "--output-prefix", args.output_prefix, "--pages", args.layout_review,
+                  "--workers", str(args.workers), "--execute-paid"]
+        if args.no_vision:
+            review.append("--no-vision")
+        stage("layout-review", review, fatal=False)
     code = stage("acceptance", [*cli, "acceptance-report", "--source", str(args.source), "--render-dir", str(capture),
                                 "--run-id", config.run_id, "--output-prefix", args.output_prefix], fatal=False)
     print(json.dumps(timings, ensure_ascii=False, indent=2))

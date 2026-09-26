@@ -63,6 +63,8 @@ DEEPSEEK_API_KEY=<你的 key>
 
    同一条命令重跑会从磁盘上已有的结果继续，不会重复付费。14 页讲义在 4 核笔记本上约 5 分钟、费用约 USD 0.10。
 
+   渲染之后、验收之前，流程会自动做一轮**排版复核**：把每页的原文图、译文图和该页各段原文与译文交给模型，找出中英文对不上的地方并直接给出替换译文。例如混入了原页看不见的隐藏文字、伪代码被翻成了散文、公式符号放错了位置、译文太长被挤小。替换译文必须通过质量门且不带来新问题才会写回，只重渲染被修改的页；结果写在 `layout-review.json`，费用计入同一个 `budget_usd`。`--layout-review flagged` 只复核有自动线索的页，`off` 关闭；模型不能看图时自动改为只发文字，也可用 `--no-vision` 指定。也可以对已有译稿单独运行：`uv run python -m scripts.review_layout --capture ... --config ... --source ... --output-prefix ...`（不加 `--execute-paid` 时只检测并估算费用）。
+
 4. 看验收单：`deliverable` / `deliverable_with_known_issues` 可以交付；`not_deliverable` 会列出原因（例如某段三次都没译出）。人工核对后用 `scripts/apply_local_fixes.py` 写回修正并只重渲染受影响的页，不调用模型。
 
 ## 换用其他模型

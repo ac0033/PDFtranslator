@@ -236,6 +236,16 @@ class StateStore:
                 con.execute("INSERT OR REPLACE INTO cache(cache_key,result_json) VALUES(?,?)", (base_cache_key, result.model_dump_json()))
             con.execute("UPDATE tasks SET cache_key=? WHERE run_id=? AND unit_id=?", (base_cache_key, run_id, unit_id))
 
+    def record_usage(self, run_id: str, subject: str, usage: Usage, source: str) -> None:
+        """Book a model call that is not a unit's translation (review, layout repair).
+
+        It counts against the same budget as translation; ``subject`` names what
+        the call was about, e.g. ``page-0008``.
+        """
+        with self.connect() as con:
+            con.execute("INSERT INTO ledger(run_id,unit_id,cost_usd,input_tokens,output_tokens,source) VALUES(?,?,?,?,?,?)",
+                        (run_id, subject, usage.cost_usd or 0.0, usage.input_tokens, usage.output_tokens, source))
+
     def spent(self, run_id: str) -> float:
         with self.connect() as con:
             return float(con.execute("SELECT COALESCE(SUM(cost_usd),0) FROM ledger WHERE run_id=?", (run_id,)).fetchone()[0])
