@@ -1,29 +1,51 @@
 # PDF Translation Runtime
 
-把英文 PDF（教材、论文、讲义）翻译成中文，输出**中文单语版**和**中英双语对照版**，尽量保留原书版面、公式、图表和书签。
+把英文文档翻译成中文，输出**中文版**和**中英双语对照版**。支持 PDF、LaTeX（单个 `.tex` 或整个工程压缩包）、HTML、Markdown、DOCX、EPUB。
 
-- 版面解析与回写基于 [BabelDOC](https://github.com/funstory-ai/BabelDOC)；翻译由大模型完成，按段落调用，每次调用都记账、可断点续跑。
-- 付费前先估算整份文档的费用上限，超过配置里的 `budget_usd` 就不发任何请求。
-- 翻译后自动验收：漏译、公式与数字保护、捕获覆盖度等问题分级报告，大问题阻断交付。
+- **PDF** 的版面解析与回写基于 [BabelDOC](https://github.com/funstory-ai/BabelDOC)，尽量保留原书版面、公式、图表和书签。带版本号的 arXiv 论文会先取回 LaTeX 源码，编译结果与原 PDF 对得上时改从源码翻译，公式原样保留。
+- **LaTeX、HTML、Markdown、DOCX、EPUB** 直接在源文件里替换正文文字，公式、代码、链接、标签、引用和样式逐字保留，输出后逐项核对与原文一致；LaTeX 还会用 XeLaTeX 编译出 PDF。
+- 翻译由大模型按段落完成，每次调用都记账，可断点续跑；付费前先估算整份文档的费用上限，超过 `budget_usd` 就不发任何请求。
+- 翻译后自动验收，大问题阻断交付。验收不通过时，内置的 **AI OS**（开源 agent [pi](https://pi.dev)）在预算和轮次上限内修复；通过后先交付可用版，再生成**优化版**，优化版不比可用版差才发布。修不好时也会交出文件，并如实标明“不可交付”。
 
-当前版本 `0.10.0`（0.x 阶段，接口仍可能调整）。
+当前版本 `0.11.0`（0.x 阶段，接口仍可能调整）。
 
 ## 安装
 
-需要 Python 3.12 与 [uv](https://docs.astral.sh/uv/)。
+需要 Python 3.12 与 [uv](https://docs.astral.sh/uv/)；AI OS 需要 Node.js 22.19 或更新版本；翻译 LaTeX 需要 TeX 发行版（MiKTeX 或 TeX Live，带 `xelatex` 和 `ctex` 宏包）。
 
 ```powershell
 uv sync --extra dev
-uv run pytest            # 可选：跑测试
+uv run pdftrans setup        # 把固定版本的 pi agent 装进 agent/node_modules，并检查 Node.js、LaTeX 和密钥
+uv run pytest                # 可选：跑测试
 ```
 
-把模型 API Key 写进项目根目录的 `.env`（已被 Git 忽略，不要写进配置文件或提交记录）：
+`pdftrans setup` 装的是 `agent/package.json` 锁定的 pi 版本（`@earendil-works/pi-coding-agent`，MIT 许可），与系统里全局安装的 pi 互不影响。`uv run pdftrans setup --check` 只检查、不安装。没有 Node.js 时翻译照常进行，只是规则修不好的问题不会交给 agent。
+
+模型 API Key 写进项目根目录的 `.env`（已被 Git 忽略），或服务端的环境变量：
 
 ```text
 DEEPSEEK_API_KEY=<你的 key>
+TYPESAFE_API_KEY=<可选：Jev 告警分诊与修复路由>
 ```
 
-## 翻译一份 PDF
+## 翻译一份文档（推荐方式）
+
+```powershell
+# 第一次调用要指定翻译模型和 AI OS 模型，之后可以省略，默认沿用第一次的
+uv run pdftrans translate paper.pdf --provider deepseek --model deepseek-flash `
+  --agent-provider deepseek --agent-model deepseek-flash --budget-usd 2 --out-dir out/
+
+uv run pdftrans translate report.docx --out-dir out/            # 沿用默认模型
+uv run pdftrans translate project.zip --main-file main.tex      # LaTeX 工程
+uv run pdftrans translate page.html --no-optimized              # 只要可用版
+uv run pdftrans translate book.epub --estimate-only             # 只估价
+```
+
+命令等任务结束后，把推荐版本的文件复制到 `--out-dir`：中文版、双语版、验收单，LaTeX 另有译后工程压缩包。任务先发布可用版，再生成优化版；进度与结果见 `pdftrans jobs status <job_id>`。
+
+## 只跑 PDF 工作流（开发与调试用）
+
+不经过任务服务，直接用配置文件驱动 PDF 工作流：
 
 1. 复制一份配置，至少改 `run_id`、`budget_usd`、`context_db`：
 
@@ -69,38 +91,16 @@ DEEPSEEK_API_KEY=<你的 key>
 
 ## 接入方式
 
-翻译能力以“任务”为单位对外提供：提交后立即返回任务编号，任务在独立进程中运行，状态和产物都在磁盘上，调用方断开或服务重启都不会丢失。四种方式调用的是同一套任务服务。
+翻译以“任务”为单位对外提供：提交后立即返回任务编号，任务在独立进程中运行，状态、事件和各版本产物都在磁盘上，调用方断开或服务重启都不会丢失。命令行、HTTP、MCP 和 Skill 调用的是同一套任务服务。**完整的接口规范**（请求字段、模型规则、状态、事件与回调、错误码、两类宿主的标准流程）见 [`docs/agent_guide.md`](docs/agent_guide.md)。
 
-**命令行**（输出均为 JSON，进度写到标准错误）：
+- **命令行**：`pdftrans translate | jobs (list|status|events|log|fetch|cancel|resume|units|ask|revise) | profile | providers | setup | guide`，输出均为 JSON。加 `--server <地址> --token <令牌>` 改为调用远程服务。
+- **HTTP 服务**：`pdftrans serve --host 0.0.0.0 --port 8766 --public-url https://<对外地址>`，监听本机以外的地址必须设置 `PDFTRANS_TOKEN`。主要接口：`POST /v1/jobs`（提交）、`GET /v1/jobs/{id}`（状态）、`GET /v1/jobs/{id}/events?after=&wait=`（长轮询）、`GET /v1/jobs/{id}/files/[{version}/]{name}`（下载）、`GET/PUT /v1/profile`（默认模型）；提交时给 `callback_url` 则每个事件都会带 HMAC 签名推送过去。OpenAPI 3.1 描述在 `GET /v1/openapi.json`。服务本身不提供 HTTPS，对公网开放时请放在反向代理后面。
+- **MCP**（供 Claude、Cursor 等 AI 工具调用）：工具 `translate_document`、`wait_job`、`get_job`、`get_job_file`、`get_profile`、`set_profile` 等；任务结果里的 `for_agent` 给出可直接向用户汇报的中英文说明。
+  - 本机（stdio）：Claude Code 执行 `claude mcp add pdf-translation -- uv --directory <项目目录> run pdftrans mcp`。
+  - 远程（HTTP）：连接 `https://<对外地址>/mcp`，请求头带 `Authorization: Bearer <令牌>`。远程调用方只能上传文件或给网址，不能指定服务器上的文件路径（除非以 `--allow-local-paths` 启动）。
+- **Skill**：把 `skills/pdf-translate/` 复制到 `~/.claude/skills/` 或某个项目的 `.claude/skills/` 下。
 
-```powershell
-uv run pdftrans translate <文件.pdf 或 https://...> --budget-usd 1 --out-dir <目录>   # 等待完成并复制成品
-uv run pdftrans translate <文件.pdf> --estimate-only                                   # 只估价，不调用模型
-uv run pdftrans jobs list | status <job_id> [--wait] | log <job_id> | fetch <job_id> mono <保存路径> | cancel <job_id>
-uv run pdftrans jobs resume <job_id>                                                   # 失败（如欠费）或取消后续跑，已付费部分不重复付费
-uv run pdftrans providers                                                              # 可用的模型服务商
-uv run pdftrans guide                                                                  # 给接入方的完整说明
-```
-
-加上 `--server <服务地址> --token <令牌>`（或环境变量 `PDFTRANS_SERVER`、`PDFTRANS_TOKEN`），同样的命令改为调用另一台主机上的服务。
-
-**HTTP 服务**（供任意主机调用）：
-
-```powershell
-$env:PDFTRANS_TOKEN = "<一个足够长的随机串>"
-uv run pdftrans serve --host 0.0.0.0 --port 8766 --public-url https://<对外地址>
-```
-
-监听本机以外的地址必须设置令牌，否则拒绝启动。接口：`GET /health`、`GET /v1/providers`、`POST /v1/jobs`（请求体为 PDF 字节，选项放在 `X-Job-Options` 头里；或 JSON `{"pdf_base64"|"pdf_url", "options"}`）、`GET /v1/jobs/{id}`、`GET /v1/jobs/{id}/log`、`GET /v1/jobs/{id}/files/{mono|dual|acceptance|layout_review|content_review|log}`、`POST /v1/jobs/{id}/cancel`、`POST /v1/jobs/{id}/resume`，以及下面“继续改进”用到的 `GET /v1/jobs/{id}/units`、`POST /v1/jobs/{id}/assist`、`POST /v1/jobs/{id}/revise` 和 `GET /v1/guide`。完整的接口描述（OpenAPI 3.1，可用来生成客户端）在 `GET /v1/openapi.json`。除 `/health` 外都要带 `Authorization: Bearer <令牌>`。某个任务要用调用方自己的模型 Key 时放在 `X-LLM-API-Key` 头里：它只进入该任务的进程环境，不写入磁盘。服务本身不提供 HTTPS，对公网开放时请放在反向代理后面。
-
-**MCP**（供 Claude、Cursor 等 AI 工具调用；工具：`translate_pdf`、`get_job`、`get_job_file`、`list_jobs`、`cancel_job`、`resume_job`、`list_providers`、`get_units`、`ask_model`、`apply_fixes`；接入指南以资源 `pdftrans://docs/agent_guide` 提供）：
-
-- 本机（stdio）：Claude Code 执行 `claude mcp add pdf-translation -- uv --directory <项目目录> run pdftrans mcp`；Claude Desktop 在配置文件的 `mcpServers` 里加入 `{"pdf-translation": {"command": "uv", "args": ["--directory", "<项目目录>", "run", "pdftrans", "mcp"]}}`。
-- 远程（HTTP）：连接 `https://<对外地址>/mcp`，请求头带 `Authorization: Bearer <令牌>`。远程调用方只能上传 PDF 或给网址，不能指定服务器上的文件路径（除非以 `--allow-local-paths` 启动）。
-
-**继续改进已完成的任务**：接入方读取被检查标记的单元（`jobs units <id> --with-issues` / `get_units`），自己判断并写出修正，或在合适时委托本任务的模型做一件事（`jobs ask <id> <task>` / `ask_model`：重译、压缩过长译文、复核一批单元、对照页面图像复核、自由提问；先估价、计入任务预算、只返回候选修正），然后写回（`jobs revise <id> fixes.json` / `apply_fixes`），服务只重渲染改动的页并重新验收，不调用模型。什么时候自己处理、什么时候委托模型，见 [`docs/agent_guide.md`](docs/agent_guide.md)。
-
-**Skill**：把 `skills/pdf-translate/` 复制到 `~/.claude/skills/`（所有项目可用）或某个项目的 `.claude/skills/` 下，Claude Code 在用户要求翻译 PDF 时会按其中的步骤调用上述能力。
+**模型与密钥**：第一次调用必须指定翻译模型和 AI OS 模型，之后不指定就沿用该调用方第一次指定的模型，指定了就按这次指定的用（`set_default` 才改默认）。不同调用方（按 `client_id` 或访问令牌区分）的默认互不影响。密钥放在服务端环境变量里；请求头 `X-LLM-API-Key`、`X-Agent-API-Key`、`X-Jev-API-Key` 只作为备用，只对一个任务有效，不写入磁盘。
 
 ## 换用其他模型
 
@@ -127,8 +127,11 @@ uv run pdftrans serve --host 0.0.0.0 --port 8766 --public-url https://<对外地
 
 | 目录 | 内容 |
 |---|---|
-| `src/pdf_translation/` | 核心库：捕获、上下文、翻译流水线、质量门、渲染、验收 |
-| `scripts/` | 可重复运行的驱动脚本：`deliver_pdf.py`（一键全流程）、`capture_val_full.py` / `translate_val_usable_sample.py` / `render_val_full.py`（各阶段）、`apply_local_fixes.py`（写回人工修正） |
+| `src/pdf_translation/` | 核心库：捕获、上下文、翻译流水线、质量门、渲染、验收、任务服务 |
+| `src/pdf_translation/formats/` | 源码格式适配器：LaTeX、HTML、Markdown、DOCX、EPUB，以及 arXiv 源码路线 |
+| `src/pdf_translation/aios/` | AI OS：决策节点、Jev、修复循环、优化、pi 桥接与工具 |
+| `agent/` | pi agent 的固定版本（`package.json` 与锁文件）、工具扩展 `pdftrans-tools.ts`、AI OS 的系统提示 `aios.md` |
+| `scripts/` | 可重复运行的驱动脚本：`run_job.py`（任务运行进程）、`deliver_pdf.py`（PDF 一键全流程）、`capture_val_full.py` / `translate_val_usable_sample.py` / `render_val_full.py`（各阶段）、`apply_local_fixes.py`（写回人工修正） |
 | `configs/` | 配置示例与测试用配置 |
 | `tests/` | 测试 |
 | `docs/` | 设计与使用文档：`agent_guide.md`（给接入的工具和 agent）、`architecture.md`（流程与模块）、`unattended_delivery.md`（无人值守交付与验收规则）、`terminology_lock_design.md`、`versioning.md`、`CHANGELOG.md` |
@@ -151,3 +154,5 @@ uv run pdftrans serve --host 0.0.0.0 --port 8766 --public-url https://<对外地
 - 公式按原书图形保留，程序无法核对公式与相邻文字的对应，需要抽查。
 - 版面由 BabelDOC 在原文框内重排中文；个别公式字形会被拆开单独排版，出现孤立的符号。
 - 在 Windows 上长时间运行 BabelDOC 会随机出现内存分配失败，因此抽取与渲染按小块分进程执行并自动重试。
+- 源码格式适配器在每种格式的若干真实文档上验证过，覆盖不了所有写法；没能翻译的正文会计入“遗留正文”，超过 1% 时阻断交付。
+- Jev 分诊尚未用人工标注数据离线评估（需要 `TYPESAFE_API_KEY`）；没有密钥时使用规则表。
