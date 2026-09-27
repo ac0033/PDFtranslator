@@ -120,7 +120,7 @@ class Workspace:
         command = [sys.executable, "-m", "scripts.deliver_pdf", "--source", str(self.source),
                    "--config", str(self.job_dir / "config.toml"), "--output", str(self.work),
                    "--output-prefix", "zh", "--workers", str(self.workers),
-                   "--layout-review", layout_review or self.layout_review]
+                   "--layout-review", layout_review or self.layout_review, "--runs-root", str(self.runs_root)]
         if not self.vision:
             command.append("--no-vision")
         if estimate_only:

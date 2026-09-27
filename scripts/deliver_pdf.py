@@ -54,6 +54,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Capture and price the translation, then stop; no model is called.")
     parser.add_argument("--resume-from", choices=("start", "render"), default="start",
                         help="render: skip capture and translation (after fixes were written into a finished run).")
+    parser.add_argument("--runs-root", type=Path, default=ROOT / "runs",
+                        help="Root holding <run_id>/state.sqlite (the run's ledger and translations).")
     parser.add_argument("--chunk-size", type=int, default=None,
                         help="Pages per process. Defaults to spreading the document evenly over --workers, at most 10.")
     return parser
@@ -146,7 +148,7 @@ def run_stages(args, config, capture: Path, chunk: int, scratch: Path, parallel:
                        "--output", str(capture / "capture-coverage.json")], fatal=False)
     translate = ["scripts/translate_val_usable_sample.py", "--capture", str(capture), "--source", str(args.source),
                  "--config", str(args.config), "--capture-root", str(scratch.parent), "--sample-name", config.run_id,
-                 "--translate-only"]
+                 "--translate-only", "--runs-root", str(args.runs_root)]
     if not args.estimate_only:
         translate.append("--execute-paid")
     if args.style_note_file:
@@ -160,16 +162,17 @@ def run_stages(args, config, capture: Path, chunk: int, scratch: Path, parallel:
 def render_and_accept(args, config, capture: Path, chunk: int, parallel: list[str], stage, cli: list[str]) -> int:
     stage("render", ["scripts/render_val_full.py", "--auto", "--capture", str(capture), "--source", str(args.source),
                      "--config", str(args.config), "--output-prefix", args.output_prefix,
-                     "--chunk-size", str(chunk), *parallel])
+                     "--chunk-size", str(chunk), "--runs-root", str(args.runs_root), *parallel])
     if args.layout_review != "off":
         review = ["-m", "scripts.review_layout", "--capture", str(capture), "--config", str(args.config),
                   "--source", str(args.source), "--output-prefix", args.output_prefix, "--pages", args.layout_review,
-                  "--workers", str(args.workers), "--execute-paid"]
+                  "--workers", str(args.workers), "--execute-paid", "--runs-root", str(args.runs_root)]
         if args.no_vision:
             review.append("--no-vision")
         stage("layout-review", review, fatal=False)
     return stage("acceptance", [*cli, "acceptance-report", "--source", str(args.source), "--render-dir", str(capture),
-                                "--run-id", config.run_id, "--output-prefix", args.output_prefix], fatal=False)
+                                "--run-id", config.run_id, "--output-prefix", args.output_prefix,
+                                "--runs-root", str(args.runs_root)], fatal=False)
 
 
 def _read(path: Path) -> dict | None:
@@ -202,7 +205,7 @@ def summarise(capture: Path, config, args) -> dict:
         result["layout_review"] = {k: review.get(k) for k in ("pages", "accepted", "rejected", "cost_usd", "stopped")}
     try:
         from pdf_translation.storage import StateStore
-        result["cost_usd"] = round(StateStore(ROOT / "runs" / config.run_id / "state.sqlite").spent(config.run_id), 6)
+        result["cost_usd"] = round(StateStore(args.runs_root / config.run_id / "state.sqlite").spent(config.run_id), 6)
     except Exception:  # a failed run may have no store yet
         pass
     return result

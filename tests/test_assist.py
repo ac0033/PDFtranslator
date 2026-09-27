@@ -357,3 +357,16 @@ def test_units_left_in_english_are_found_even_though_only_acceptance_judges_them
     path.write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in rows), encoding="utf-8")
     flagged = {row["unit_id"]: row["issues"] for row in manager.units(JOB, with_issues=True)["units"]}
     assert "u2" in flagged and flagged["u2"][0].startswith("untranslated_unit")
+
+
+def test_every_pdf_stage_reads_and_writes_the_same_run_store(tmp_path):
+    # A job service with its own runs root must find the translation ledger where the stages wrote it,
+    # or the repair loop would judge the budget against half the spend.
+    commands = {}
+    args = deliver_pdf.build_parser().parse_args(["--source", "s.pdf", "--config", "c.toml",
+                                                  "--runs-root", str(tmp_path / "store")])
+    deliver_pdf.run_stages(args, load_config_stub(), tmp_path, 10, tmp_path, [],
+                           lambda name, command, fatal=True: commands.setdefault(name, command) and 0)
+    for name in ("translate", "render", "layout-review", "acceptance"):
+        command = commands[name]
+        assert command[command.index("--runs-root") + 1] == str(tmp_path / "store"), name

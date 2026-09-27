@@ -38,6 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument('--style-note-file', type=Path, default=None,
                         help='Read --style-note from this UTF-8 file. A batch file cannot carry non-ASCII text safely.')
     parser.add_argument('--style-version', default='usable-v1', help='Version stamped on the stored style rule.')
+    parser.add_argument('--runs-root', type=Path, default=Path('runs'), help='Root holding <run_id>/state.sqlite.')
     parser.add_argument('--execute-paid', action='store_true')
     parser.add_argument('--translate-only', action='store_true', help='Only translate and write review data; render separately in short-lived page chunks.')
     return parser
@@ -109,7 +110,7 @@ def main(argv: list[str] | None = None) -> int:
 
     def run(execute_paid: bool, render_review_draft: bool = False) -> dict:
         return run_smoke_document(
-            args.source, pages, config, args.capture, Path('runs'), scratch,
+            args.source, pages, config, args.capture, args.runs_root, scratch,
             execute_paid=execute_paid, reuse_capture=True,
             sample_name=args.sample_name, render_review_draft=render_review_draft,
             translate_only=args.translate_only,
@@ -127,7 +128,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.execute_paid:
         if report['estimated_max_cost_usd'] > config.budget_usd:
             raise ValueError('estimated cost exceeds the configured ceiling; no API call made')
-        with exclusive_translation_lock(Path('runs') / config.run_id / 'translation.lock'):
+        with exclusive_translation_lock(args.runs_root / config.run_id / 'translation.lock'):
             report = run(True, render_review_draft=True)
         print(json.dumps(report, ensure_ascii=True), flush=True)
     return 0
