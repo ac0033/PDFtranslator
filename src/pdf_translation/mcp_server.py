@@ -1,4 +1,4 @@
-"""Model Context Protocol server: PDF translation as tools an AI agent can call.
+"""Model Context Protocol server: document translation as tools an AI agent can call.
 
 The protocol is JSON-RPC 2.0. :class:`McpServer.handle` answers one message and
 is shared by both transports:
@@ -8,13 +8,17 @@ is shared by both transports:
 * streamable HTTP (``POST /mcp`` on ``pdftrans serve``): for clients on other
   hosts, behind the server's bearer token.
 
-Translation takes minutes to hours, so the tools follow a job pattern: submit,
-poll, fetch. After a job succeeds the agent can keep working on it: read units
-(``get_units``), have the job's model do a task (``ask_model``) and write fixes
-back (``apply_fixes``). The guide for all of this, docs/agent_guide.md, is
-offered as a resource. Reading a PDF from a path on the server is allowed only to a local
-client (or when the operator enables it): a remote caller who could name any
-server path could have that file's contents translated and handed back.
+Translation takes minutes to hours, so the tools follow a job pattern: submit
+(``translate_document``), wait server-side (``wait_job``, which holds the call
+until something happens so the agent does not poll), fetch
+(``get_job_file``). Every job ends with files and an honest verdict: the
+service's own AI OS repairs a version that fails acceptance, publishes the
+usable version, then the optimised one. An agent may still work on a finished
+job itself: read units (``get_units``), have the job's model do a task
+(``ask_model``) and write fixes back (``apply_fixes``). Reading a document from
+a path on the server is allowed only to a local client (or when the operator
+enables it): a remote caller who could name any server path could have that
+file's contents translated and handed back.
 """
 from __future__ import annotations
 
@@ -27,38 +31,69 @@ from pydantic import ValidationError
 
 from . import __version__
 from .assist import TASKS
-from .service import FILE_NAMES, ROOT, JobError, JobManager, JobOptions, fetch_pdf, providers
+from .jobspec import JobRequest, validation_error
+from .service import FILE_NAMES, ROOT, JobError, JobManager, JobOptions, fetch_source, providers
 
 PROTOCOL_VERSIONS = ("2025-06-18", "2025-03-26", "2024-11-05")
 MAX_INLINE_BYTES = 25 * 1024 * 1024
 INSTRUCTIONS = (
-    "Translate English PDFs (textbooks, papers, lecture notes) into Chinese, keeping layout, formulas "
-    "and bookmarks. Call translate_pdf (it returns a job at once), then poll get_job every 30-60 s until "
-    "status is succeeded, estimated, failed or cancelled, then get_job_file for 'mono' (Chinese) or "
-    "'dual' (bilingual). Set estimate_only first to learn the price without spending. result.verdict "
-    "'not_deliverable' lists major_problems; read the acceptance file before handing the PDF to a user. "
-    "To improve a finished job: get_units (with_issues) to see what the checks flagged, fix what you can judge "
-    "yourself, use ask_model when the job's own model is the better tool (many units, retranslation consistent "
-    "with the book, page images you cannot see), then apply_fixes, which renders the changed pages again. "
-    "Read the resource pdftrans://docs/agent_guide for the whole pipeline and when to delegate."
+    "Translate English documents - PDF, LaTeX (a .tex file or a zipped project), HTML, Markdown, DOCX, EPUB - into "
+    "Chinese, keeping layout, formulas and markup. Call translate_document; it returns a job at once. The first call "
+    "must name two models, translation and agent (the service's AI OS); later calls may omit them to reuse the "
+    "first ones. Then call wait_job with the job's events_after until delivery is usable, optimized or degraded, or "
+    "status is failed. usable/optimized versions are deliverable; degraded means files exist but the translation did "
+    "NOT pass acceptance - tell the user so. Fetch files with get_job_file ('mono' Chinese, 'dual' bilingual, "
+    "'source' translated LaTeX project). Each job result has for_agent.summary: use it to report honestly. "
+    "Set estimate_only first to learn the price without spending. Read the resource pdftrans://docs/agent_guide "
+    "for the whole contract."
 )
 GUIDE = ROOT / "docs" / "agent_guide.md"
 GUIDE_URI = "pdftrans://docs/agent_guide"
 
-_OPTION_SCHEMA = {
-    "provider": {"type": "string", "description": "Model vendor preset (see list_providers). Default deepseek."},
-    "model_id": {"type": "string", "description": "Model name at that vendor. Default deepseek-flash."},
-    "base_url": {"type": "string", "description": "Override the vendor endpoint (proxy, private deployment)."},
-    "api_key_env": {"type": "string", "description": "Name of the server environment variable holding the key."},
-    "budget_usd": {"type": "number", "description": "Hard spend ceiling in USD. Default 1.0."},
-    "input_usd_per_million": {"type": "number", "description": "Model input price; required for models without a built-in price."},
-    "output_usd_per_million": {"type": "number", "description": "Model output price; required with the input price."},
+_MODEL_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "provider": {"type": "string", "description": "Vendor preset (see list_providers), e.g. deepseek, openai, anthropic."},
+        "model": {"type": "string", "description": "Model name at that vendor."},
+        "base_url": {"type": "string", "description": "An OpenAI-compatible endpoint, for private or proxy deployments."},
+        "api_key_env": {"type": "string", "description": "Server environment variable holding the key."},
+        "input_usd_per_million": {"type": "number"},
+        "output_usd_per_million": {"type": "number"},
+    },
+    "required": ["provider", "model"],
+}
+_REQUEST_SCHEMA = {
+    "translation": {**_MODEL_SCHEMA, "description": "The translation model. Required on this caller's first call; then remembered."},
+    "agent": {**_MODEL_SCHEMA, "description": "The AI OS model (the pi agent that repairs and optimises). Required on the first call; then remembered."},
+    "set_default": {"type": "boolean", "description": "Make the models named here this caller's new defaults."},
+    "client_id": {"type": "string", "description": "Who is calling, for remembering default models."},
+    "deliver": {"type": "object", "properties": {"optimized": {"type": "boolean"}, "bilingual": {"type": "boolean"}},
+                "description": "optimized (default true): also build the optimised version. bilingual (default true)."},
+    "budget_usd": {"type": "number", "description": "Hard spend ceiling for the whole job (translation, repair, optimisation). Default 2.0."},
+    "allow_network": {"type": "boolean", "description": "Let the service fetch an arXiv paper's LaTeX source. Default true."},
+    "callback_url": {"type": "string", "description": "POST every event here, signed with HMAC-SHA256 (X-Signature)."},
+    "max_output_tokens": {"type": "integer", "description": "Per-request output ceiling for the translation model. Default 2000."},
+    "main_file": {"type": "string", "description": "LaTeX projects: the main .tex file, when it cannot be found automatically."},
     "style_note": {"type": "string", "description": "Per-document instruction: subject, term choices (e.g. 'policy 译为 策略')."},
-    "layout_review": {"type": "string", "enum": ["all", "flagged", "off"], "description": "Page-by-page model review after rendering. Default all."},
-    "vision": {"type": "boolean", "description": "Send page images to the reviewing model. Default true."},
-    "estimate_only": {"type": "boolean", "description": "Only capture and price; no model call, no charge."},
-    "workers": {"type": "integer", "description": "Parallel capture/render processes, 1-8. Default 2."},
+    "layout_review": {"type": "string", "enum": ["all", "flagged", "off"], "description": "PDF: page-by-page model review. Default all."},
+    "vision": {"type": "boolean", "description": "PDF: send page images to the reviewing model. Default true."},
+    "estimate_only": {"type": "boolean", "description": "Only price; no model call, no charge."},
+    "workers": {"type": "integer", "description": "PDF: parallel capture/render processes, 1-8. Default 2."},
     "translation_concurrency": {"type": "integer", "description": "Model requests in flight, 1-32. Default 8."},
+}
+#: The v0.10 flat options, still accepted by translate_pdf.
+_OPTION_SCHEMA = {
+    "provider": {"type": "string"}, "model_id": {"type": "string"}, "base_url": {"type": "string"},
+    "api_key_env": {"type": "string"}, "budget_usd": {"type": "number"}, "input_usd_per_million": {"type": "number"},
+    "output_usd_per_million": {"type": "number"}, "style_note": {"type": "string"},
+    "layout_review": {"type": "string", "enum": ["all", "flagged", "off"]}, "vision": {"type": "boolean"},
+    "estimate_only": {"type": "boolean"}, "workers": {"type": "integer"}, "translation_concurrency": {"type": "integer"},
+    "agent": _MODEL_SCHEMA,
+}
+_KEYS = {
+    "api_key": {"type": "string", "description": "Fallback: translation model key for this job only; never stored. Prefer the server's environment."},
+    "agent_api_key": {"type": "string", "description": "Fallback: AI OS model key for this job only; never stored."},
+    "jev_api_key": {"type": "string", "description": "Fallback: TypeSafe Jev key for this job only; never stored."},
 }
 
 
@@ -66,23 +101,34 @@ def _schema(properties: dict, required: tuple[str, ...] = ()) -> dict:
     return {"type": "object", "properties": properties, "required": list(required), "additionalProperties": False}
 
 
+_SOURCE = {
+    "url": {"type": "string", "description": "http(s) URL of the document."},
+    "base64": {"type": "string", "description": "The document, base64-encoded."},
+    "path": {"type": "string", "description": "Path to the document on the server (local clients only)."},
+    "filename": {"type": "string", "description": "The document's file name; its extension helps tell the format."},
+}
+
 TOOLS = [
     {"name": "list_providers",
      "description": "Model vendors a job can use, with the API-key variable each expects.",
      "inputSchema": _schema({})},
+    {"name": "translate_document",
+     "description": "Start translating a document (PDF, LaTeX .tex/.zip/.tar.gz, HTML, Markdown, DOCX, EPUB) into "
+                    "Chinese. Returns the job at once; then call wait_job. Give exactly one of url, base64 or (local "
+                    "clients) path. The first call must name translation and agent models.",
+     "inputSchema": _schema({**_SOURCE, **_REQUEST_SCHEMA, **_KEYS})},
     {"name": "translate_pdf",
-     "description": "Start translating a PDF into Chinese. Returns the job at once; poll get_job. "
-                    "Give exactly one of pdf_url, pdf_base64 or (local clients) pdf_path.",
-     "inputSchema": _schema({
-         "pdf_url": {"type": "string", "description": "http(s) URL of the PDF."},
-         "pdf_base64": {"type": "string", "description": "The PDF, base64-encoded."},
-         "pdf_path": {"type": "string", "description": "Path to the PDF on the server (local clients only)."},
-         "filename": {"type": "string"},
-         "api_key": {"type": "string", "description": "Model API key for this job only; kept in memory, never stored."},
-         **_OPTION_SCHEMA,
-     })},
+     "description": "v0.10 form of translate_document for PDFs (pdf_url, pdf_base64 or pdf_path, flat options).",
+     "inputSchema": _schema({"pdf_url": {"type": "string"}, "pdf_base64": {"type": "string"},
+                             "pdf_path": {"type": "string"}, "filename": {"type": "string"}, **_OPTION_SCHEMA, **_KEYS})},
+    {"name": "wait_job",
+     "description": "Wait on the server (up to timeout_s, at most 50) for a job's next events, then return them with "
+                    "the job's current state. Pass the last events_after you saw. Use this instead of polling.",
+     "inputSchema": _schema({"job_id": {"type": "string"},
+                             "events_after": {"type": "integer", "description": "The last event number you have seen (0 at first)."},
+                             "timeout_s": {"type": "integer"}}, ("job_id",))},
     {"name": "get_job",
-     "description": "A job's status, current stage, timings and - when finished - verdict, cost and file names.",
+     "description": "A job's status, delivery, versions, problems, cost, AI OS record and for_agent summary.",
      "inputSchema": _schema({"job_id": {"type": "string"},
                              "log_lines": {"type": "integer", "description": "Include this many trailing log lines."}},
                             ("job_id",))},
@@ -93,15 +139,17 @@ TOOLS = [
     {"name": "resume_job",
      "description": "Run a failed or cancelled job again from where it stopped (e.g. after the model account was "
                     "topped up). Work already done and paid for is reused, not paid again.",
-     "inputSchema": _schema({"job_id": {"type": "string"},
-                             "api_key": {"type": "string", "description": "Model API key for this run only; never stored."}},
-                            ("job_id",))},
+     "inputSchema": _schema({"job_id": {"type": "string"}, "api_key": _KEYS["api_key"]}, ("job_id",))},
+    {"name": "get_profile", "description": "This caller's default translation and agent models.",
+     "inputSchema": _schema({"client_id": {"type": "string"}})},
+    {"name": "set_profile", "description": "Change this caller's default translation and/or agent model.",
+     "inputSchema": _schema({"client_id": {"type": "string"}, "translation": _MODEL_SCHEMA, "agent": _MODEL_SCHEMA})},
     {"name": "get_units",
      "description": "A finished job's units (paragraph-sized passages): source, translation, state and the automatic "
                     "checks' warnings. Filter by pages, unit_ids, with_issues (only flagged or untranslated units) "
                     "or states (accepted, needs_review, exhausted).",
      "inputSchema": _schema({"job_id": {"type": "string"},
-                             "pages": {"type": "array", "items": {"type": "integer"}, "description": "One-based pages."},
+                             "pages": {"type": "array", "items": {"type": "integer"}, "description": "One-based pages (PDF)."},
                              "unit_ids": {"type": "array", "items": {"type": "string"}},
                              "with_issues": {"type": "boolean"},
                              "states": {"type": "array", "items": {"type": "string"}},
@@ -128,13 +176,13 @@ TOOLS = [
          "shorten_to": {"type": "number", "description": "shorten: target share of the current length. Default 0.8."},
          "max_output_tokens": {"type": "integer"},
          "budget_usd": {"type": "number", "description": "Raise the job's spend ceiling for this and later calls."},
-         "api_key": {"type": "string", "description": "Model API key for this call only; never stored."},
+         "api_key": _KEYS["api_key"],
      }, ("job_id", "task"))},
     {"name": "apply_fixes",
-     "description": "Write corrected translations into a finished job, then render the changed pages again and repeat "
-                    "acceptance (the job runs again for a minute or so; poll get_job). Each fix is {unit_id, "
-                    "old_translated_text (the translation it replaces, null for an untranslated unit), "
-                    "new_translated_text, reason}. The whole batch is checked first; a fix against an outdated "
+     "description": "Write corrected translations into a finished job, then write the outputs again and repeat "
+                    "acceptance; the result is published as the 'revised' version (recommended when not worse). "
+                    "Each fix is {unit_id, old_translated_text (the translation it replaces, null for an untranslated "
+                    "unit), new_translated_text, reason}. The whole batch is checked first; a fix against an outdated "
                     "text, or one the quality gate blocks, refuses the batch. No model is called.",
      "inputSchema": _schema({
          "job_id": {"type": "string"},
@@ -142,19 +190,23 @@ TOOLS = [
          "editor": {"type": "string", "description": "Who made the fixes, e.g. 'agent:claude-opus-5-5'."},
      }, ("job_id", "fixes", "editor"))},
     {"name": "get_job_file",
-     "description": "Where to get a job's output: 'mono' Chinese PDF, 'dual' bilingual PDF, 'acceptance' report, "
-                    "'layout_review', 'content_review' (per-paragraph source, translation, warnings), 'log'. "
-                    "Returns a local path, a download URL for remote clients, and the content if inline is true.",
+     "description": "Where to get a job's output: 'mono' (Chinese), 'dual' (bilingual), 'source' (translated LaTeX "
+                    "project), 'acceptance' report, 'layout_review', 'content_review', 'log'. version picks usable, "
+                    "optimized, degraded or revised (default: the recommended one). Returns a local path, a download "
+                    "URL for remote clients, the SHA-256, and the content if inline is true.",
      "inputSchema": _schema({"job_id": {"type": "string"}, "name": {"type": "string", "enum": list(FILE_NAMES)},
-                             "inline": {"type": "boolean", "description": "Return the file content (text, or base64 for PDFs)."}},
+                             "version": {"type": "string", "enum": ["usable", "optimized", "degraded", "revised"]},
+                             "inline": {"type": "boolean", "description": "Return the file content (text, or base64 for binary files)."}},
                             ("job_id", "name"))},
 ]
 
 
 class McpServer:
     def __init__(self, manager: JobManager, *, local: bool, public_url: str | None = None,
-                 allow_local_paths: bool | None = None):
+                 allow_local_paths: bool | None = None, caller: str = "local"):
         self.manager = manager
+        #: Whose default models a job without models uses (see pdf_translation.jobspec).
+        self.caller = caller
         self.local = local
         self.public_url = public_url.rstrip("/") if public_url else None
         self.allow_local_paths = local if allow_local_paths is None else allow_local_paths
@@ -211,38 +263,67 @@ class McpServer:
         try:
             handler = self.extra_handlers.get(name) or getattr(self, f"_tool_{name}")
             return _tool_result(handler(arguments))
-        except (JobError, ValidationError, ValueError) as problem:
+        except JobError as problem:
             # Tool failures are results the model can read and act on, not protocol errors.
-            return _tool_result({"error": str(problem)}, error=True)
+            return _tool_result(problem.payload(), error=True)
+        except ValidationError as problem:
+            return _tool_result(validation_error(problem).payload(), error=True)
+        except ValueError as problem:
+            return _tool_result({"error": {"code": "bad_request", "message": str(problem)}}, error=True)
         except Exception as problem:  # the model service failing, the budget reached, ...
-            return _tool_result({"error": f"{type(problem).__name__}: {problem}"}, error=True)
+            return _tool_result({"error": {"code": "internal_error", "message": f"{type(problem).__name__}: {problem}"}},
+                                error=True)
 
     # --- tools --------------------------------------------------------------------------
+
+    def _caller(self, args: dict) -> str:
+        from .jobspec import caller_key
+
+        return caller_key(args.get("client_id"), None) if args.get("client_id") else self.caller
+
+    def _read_source(self, url: str | None, data64: str | None, path: str | None, filename: str | None) -> tuple[bytes, str]:
+        given = [value for value in (url, data64, path) if value]
+        if len(given) != 1:
+            raise JobError("give exactly one of url, base64, path", code="invalid_request")
+        if url:
+            data, name = fetch_source(url)
+        elif data64:
+            data, name = base64.b64decode(data64, validate=True), filename or "upload"
+        else:
+            if not self.allow_local_paths:
+                raise JobError("path is only available to local clients; send url or base64", code="forbidden", status=403)
+            source = Path(path).expanduser()
+            if not source.is_file():
+                raise JobError(f"no such file: {source}", code="source_unreadable")
+            data, name = source.read_bytes(), source.name
+        return data, filename or name
+
+    def _keys(self, args: dict) -> dict:
+        return {role: args[key] for role, key in (("translation", "api_key"), ("agent", "agent_api_key"),
+                                                  ("jev", "jev_api_key")) if args.get(key)}
 
     def _tool_list_providers(self, _: dict) -> dict:
         return {"providers": providers()}
 
+    def _tool_translate_document(self, args: dict) -> dict:
+        data, name = self._read_source(args.get("url"), args.get("base64"), args.get("path"), args.get("filename"))
+        try:
+            request = JobRequest.model_validate({k: v for k, v in args.items() if k in _REQUEST_SCHEMA})
+        except ValidationError as problem:
+            raise validation_error(problem) from problem
+        return self.manager.submit(data, name, request, caller=self._caller(args), api_keys=self._keys(args))
+
     def _tool_translate_pdf(self, args: dict) -> dict:
-        sources = [key for key in ("pdf_url", "pdf_base64", "pdf_path") if args.get(key)]
-        if len(sources) != 1:
-            raise JobError("give exactly one of pdf_url, pdf_base64, pdf_path")
-        if sources[0] == "pdf_url":
-            pdf, name = fetch_pdf(args["pdf_url"])
-        elif sources[0] == "pdf_base64":
-            pdf, name = base64.b64decode(args["pdf_base64"], validate=True), "upload.pdf"
-        else:
-            if not self.allow_local_paths:
-                raise JobError("pdf_path is only available to local clients; send pdf_url or pdf_base64")
-            path = Path(args["pdf_path"]).expanduser()
-            pdf, name = path.read_bytes(), path.name
-        options = JobOptions.model_validate({k: v for k, v in args.items() if k in _OPTION_SCHEMA})
-        secrets_env = {}
-        if args.get("api_key"):
-            variable = options.api_key_variable()
-            if not variable:
-                raise JobError(f"provider {options.provider} takes no API key; set api_key_env to name one")
-            secrets_env[variable] = args["api_key"]
-        return self.manager.submit(pdf, args.get("filename") or name, options, secrets_env=secrets_env)
+        data, name = self._read_source(args.get("pdf_url"), args.get("pdf_base64"), args.get("pdf_path"), args.get("filename"))
+        try:
+            request = JobRequest.from_legacy({k: v for k, v in args.items() if k in _OPTION_SCHEMA})
+        except ValidationError as problem:
+            raise validation_error(problem) from problem
+        return self.manager.submit(data, name, request, caller=self._caller(args), api_keys=self._keys(args))
+
+    def _tool_wait_job(self, args: dict) -> dict:
+        timeout = max(1, min(int(args.get("timeout_s") or 50), 50))
+        return self.manager.wait(args["job_id"], int(args.get("events_after") or 0), timeout)
 
     def _tool_get_job(self, args: dict) -> dict:
         view = self.manager.get(args["job_id"])
@@ -261,10 +342,15 @@ class McpServer:
         if args.get("api_key"):
             options = JobOptions.model_validate(self.manager._meta(args["job_id"])["options"])
             variable = options.api_key_variable()
-            if not variable:
-                raise JobError(f"provider {options.provider} takes no API key")
-            secrets_env[variable] = args["api_key"]
+            if variable:
+                secrets_env[variable] = args["api_key"]
         return self.manager.resume(args["job_id"], secrets_env=secrets_env)
+
+    def _tool_get_profile(self, args: dict) -> dict:
+        return self.manager.profile(self._caller(args))
+
+    def _tool_set_profile(self, args: dict) -> dict:
+        return self.manager.set_profile(self._caller(args), args.get("translation"), args.get("agent"))
 
     def _tool_get_units(self, args: dict) -> dict:
         return self.manager.units(args["job_id"], pages=args.get("pages"), unit_ids=args.get("unit_ids"),
@@ -280,24 +366,27 @@ class McpServer:
         return self.manager.revise(args["job_id"], args["fixes"], args["editor"])
 
     def _tool_get_job_file(self, args: dict) -> dict:
-        files = self.manager.files(args["job_id"])
+        from .hashing import sha256_file
+
+        files = self.manager.files(args["job_id"], args.get("version"))
         name = args["name"]
         if name not in files:
-            raise JobError(f"{name} is not available yet; available: {sorted(files)}")
+            raise JobError(f"{name} is not available yet; available: {sorted(files)}", code="file_not_ready", status=404)
         path = files[name]
-        answer = {"name": name, "bytes": path.stat().st_size}
+        answer = {"name": name, "file": path.name, "bytes": path.stat().st_size, "sha256": sha256_file(path)}
         if self.local:
             answer["path"] = str(path)
         if self.public_url:
-            answer["url"] = f"{self.public_url}/v1/jobs/{args['job_id']}/files/{name}"
+            version = f"{args['version']}/" if args.get("version") else ""
+            answer["url"] = f"{self.public_url}/v1/jobs/{args['job_id']}/files/{version}{name}"
         if args.get("inline"):
             if answer["bytes"] > MAX_INLINE_BYTES:
-                raise JobError("the file is too large to return inline; download it from the url")
+                raise JobError("the file is too large to return inline; download it from the url", code="too_large")
             data = path.read_bytes()
-            if path.suffix == ".pdf":
-                answer["base64"] = base64.b64encode(data).decode("ascii")
-            else:
+            if path.suffix in {".json", ".jsonl", ".log", ".md", ".html", ".tex", ".txt"}:
                 answer["text"] = data.decode("utf-8", errors="replace")
+            else:
+                answer["base64"] = base64.b64encode(data).decode("ascii")
         return answer
 
 

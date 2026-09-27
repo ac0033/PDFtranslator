@@ -14,7 +14,7 @@ from typing import Annotated, Optional
 
 import typer
 
-from .service import TERMINAL, JobManager, JobOptions, fetch_pdf, providers
+from .service import TERMINAL, JobManager, fetch_source, providers
 
 jobs_app = typer.Typer(no_args_is_help=True, help="Inspect and manage translation jobs.")
 
@@ -39,9 +39,10 @@ def _wait(backend, job_id: str, poll: float) -> dict:
     last = None
     while True:
         view = backend.get(job_id)
-        marker = (view["status"], view.get("stage"))
+        marker = (view["status"], view.get("phase"), view.get("stage"), view.get("delivery"))
         if marker != last:
-            typer.echo(f"[{time.strftime('%H:%M:%S')}] {view['status']} {view.get('stage') or ''}".rstrip(), err=True)
+            typer.echo(f"[{time.strftime('%H:%M:%S')}] {view['status']} {view.get('phase') or ''} "
+                       f"{view.get('stage') or ''} delivery={view.get('delivery')}".rstrip(), err=True)
             last = marker
         if view["status"] in TERMINAL:
             return view
@@ -50,64 +51,150 @@ def _wait(backend, job_id: str, poll: float) -> dict:
         time.sleep(poll)
 
 
+def _model(provider: str | None, model: str | None, base_url: str | None, key_env: str | None,
+           input_price: float | None, output_price: float | None, role: str) -> dict | None:
+    if not provider and not model:
+        return None
+    if not (provider and model):
+        raise typer.BadParameter(f"give both the {role} provider and model")
+    choice = {"provider": provider, "model": model, "base_url": base_url, "api_key_env": key_env,
+              "input_usd_per_million": input_price, "output_usd_per_million": output_price}
+    return {k: v for k, v in choice.items() if v is not None}
+
+
 def translate(
-    source: Annotated[str, typer.Argument(help="PDF path, or an http(s) URL.")],
-    provider: Annotated[str, typer.Option(help="Model vendor preset; see `pdftrans providers`.")] = "deepseek",
-    model_id: Annotated[str, typer.Option("--model-id")] = "deepseek-flash",
+    source: Annotated[str, typer.Argument(help="Document path (PDF, .tex/.zip LaTeX project, HTML, Markdown, DOCX, EPUB) or an http(s) URL.")],
+    provider: Annotated[Optional[str], typer.Option(help="Translation model vendor; see `pdftrans providers`. Required the first time.")] = None,
+    model_id: Annotated[Optional[str], typer.Option("--model-id", "--model", help="Translation model name. Required the first time.")] = None,
     base_url: Annotated[Optional[str], typer.Option("--base-url")] = None,
-    api_key_env: Annotated[Optional[str], typer.Option("--api-key-env", help="Environment variable holding the model key.")] = None,
-    budget_usd: Annotated[float, typer.Option("--budget-usd", help="Hard spend ceiling.")] = 1.0,
+    api_key_env: Annotated[Optional[str], typer.Option("--api-key-env", help="Environment variable holding the translation model key.")] = None,
     input_price: Annotated[Optional[float], typer.Option("--input-usd-per-million")] = None,
     output_price: Annotated[Optional[float], typer.Option("--output-usd-per-million")] = None,
+    agent_provider: Annotated[Optional[str], typer.Option("--agent-provider", help="AI OS model vendor. Required the first time.")] = None,
+    agent_model: Annotated[Optional[str], typer.Option("--agent-model", help="AI OS model name. Required the first time.")] = None,
+    agent_base_url: Annotated[Optional[str], typer.Option("--agent-base-url")] = None,
+    agent_key_env: Annotated[Optional[str], typer.Option("--agent-api-key-env")] = None,
+    set_default: Annotated[bool, typer.Option("--set-default", help="Make the models named here the new defaults.")] = False,
+    client_id: Annotated[Optional[str], typer.Option("--client-id", help="Who is calling, for remembering default models.")] = None,
+    budget_usd: Annotated[float, typer.Option("--budget-usd", help="Hard spend ceiling for the whole job.")] = 2.0,
     style_note: Annotated[Optional[str], typer.Option("--style-note", help="Subject and term choices for this document.")] = None,
-    layout_review: Annotated[str, typer.Option("--layout-review", help="all | flagged | off")] = "all",
+    optimized: Annotated[bool, typer.Option("--optimized/--no-optimized", help="Also build the optimised version.")] = True,
+    bilingual: Annotated[bool, typer.Option("--bilingual/--no-bilingual")] = True,
+    network: Annotated[bool, typer.Option("--network/--no-network", help="Allow fetching an arXiv paper's LaTeX source.")] = True,
+    main_file: Annotated[Optional[str], typer.Option("--main-file", help="LaTeX project: the main .tex file.")] = None,
+    layout_review: Annotated[str, typer.Option("--layout-review", help="PDF: all | flagged | off")] = "all",
     no_vision: Annotated[bool, typer.Option("--no-vision")] = False,
-    estimate_only: Annotated[bool, typer.Option("--estimate-only", help="Capture and price only; no model call.")] = False,
-    workers: Annotated[int, typer.Option(help="Parallel capture/render processes.")] = 2,
+    estimate_only: Annotated[bool, typer.Option("--estimate-only", help="Price only; no model call.")] = False,
+    workers: Annotated[int, typer.Option(help="PDF: parallel capture/render processes.")] = 2,
     concurrency: Annotated[int, typer.Option("--concurrency", help="Model requests in flight.")] = 8,
     wait: Annotated[bool, typer.Option("--wait/--no-wait", help="Wait for the job to finish.")] = True,
-    out_dir: Annotated[Optional[Path], typer.Option("--out-dir", help="Copy the Chinese and bilingual PDFs here when done.")] = None,
+    out_dir: Annotated[Optional[Path], typer.Option("--out-dir", help="Copy the recommended version's files here when done.")] = None,
     poll: Annotated[float, typer.Option(help="Seconds between status checks.")] = 10.0,
     server: Server = None, token: Token = None, jobs_root: JobsRoot = None,
 ) -> None:
-    """Translate a PDF into Chinese (single-language and bilingual PDFs)."""
-    options = {"provider": provider, "model_id": model_id, "base_url": base_url, "api_key_env": api_key_env,
-               "budget_usd": budget_usd, "input_usd_per_million": input_price, "output_usd_per_million": output_price,
-               "style_note": style_note, "layout_review": layout_review, "vision": not no_vision,
-               "estimate_only": estimate_only, "workers": workers, "translation_concurrency": concurrency}
-    options = {k: v for k, v in options.items() if v is not None}
+    """Translate a document into Chinese: a usable version, then (by default) an optimised one."""
+    request = {
+        "translation": _model(provider, model_id, base_url, api_key_env, input_price, output_price, "translation"),
+        "agent": _model(agent_provider, agent_model, agent_base_url, agent_key_env, None, None, "agent"),
+        "set_default": set_default or None, "client_id": client_id, "budget_usd": budget_usd, "style_note": style_note,
+        "deliver": {"optimized": optimized, "bilingual": bilingual}, "allow_network": network, "main_file": main_file,
+        "layout_review": layout_review, "vision": not no_vision, "estimate_only": estimate_only, "workers": workers,
+        "translation_concurrency": concurrency,
+    }
+    request = {k: v for k, v in request.items() if v is not None}
     backend = _backend(server, token, jobs_root)
     is_url = source.startswith(("http://", "https://"))
     try:
         if server:
-            job = backend.submit_url(source, options) if is_url else backend.submit_file(Path(source), options)
+            job = backend.submit(source, request)
         else:
-            validated = JobOptions.model_validate(options)
-            pdf, name = fetch_pdf(source) if is_url else (Path(source).read_bytes(), Path(source).name)
-            job = backend.submit(pdf, name, validated)
+            from .jobspec import JobRequest, caller_key
+
+            data, name = fetch_source(source) if is_url else (Path(source).read_bytes(), Path(source).name)
+            job = backend.submit(data, name, JobRequest.model_validate(request), caller=caller_key(client_id, None))
     except Exception as error:
-        _print({"error": str(error)})
+        _print({"error": getattr(error, "payload", lambda: {"message": str(error)})()})
         raise typer.Exit(2)
     typer.echo(f"job {job['job_id']} {job['status']}", err=True)
     if not wait:
         return _print(job)
     job = _wait(backend, job["job_id"], poll)
-    if out_dir and job["status"] == "succeeded":
+    if out_dir and job.get("recommended"):
         out_dir.mkdir(parents=True, exist_ok=True)
-        stem = Path(source).stem if not is_url else job["job_id"]
         copied = {}
-        for name, label in (("mono", "zh"), ("dual", "zh-en")):
-            target = out_dir / f"{stem}.{label}.pdf"
-            if server:
-                backend.download(job["job_id"], name, target)
-            elif name in backend.files(job["job_id"]):
-                shutil.copy2(backend.files(job["job_id"])[name], target)
-            else:
+        entry = next(e for e in job["deliveries"] if e["version"] == job["recommended"])
+        for name in ("mono", "dual", "source", "acceptance"):
+            item = entry["files"].get(name)
+            if not item:
                 continue
+            target = out_dir / item["file"]
+            if server:
+                backend.download(job["job_id"], name, target, job["recommended"])
+            else:
+                shutil.copy2(backend.files(job["job_id"], job["recommended"])[name], target)
             copied[name] = str(target)
         job["copied"] = copied
     _print(job)
     if job["status"] == "failed":
+        raise typer.Exit(1)
+
+
+def profile_command(
+    provider: Annotated[Optional[str], typer.Option(help="Set the default translation model vendor.")] = None,
+    model_id: Annotated[Optional[str], typer.Option("--model-id", "--model")] = None,
+    agent_provider: Annotated[Optional[str], typer.Option("--agent-provider")] = None,
+    agent_model: Annotated[Optional[str], typer.Option("--agent-model")] = None,
+    client_id: Annotated[Optional[str], typer.Option("--client-id")] = None,
+    server: Server = None, token: Token = None, jobs_root: JobsRoot = None,
+) -> None:
+    """Show (or, with model options, change) the default translation and AI OS models."""
+    backend = _backend(server, token, jobs_root)
+    translation = _model(provider, model_id, None, None, None, None, "translation")
+    agent = _model(agent_provider, agent_model, None, None, None, None, "agent")
+    try:
+        if server:
+            answer = backend.set_profile(translation, agent, client_id) if (translation or agent) else backend.profile()
+        else:
+            from .jobspec import caller_key
+
+            caller = caller_key(client_id, None)
+            answer = backend.set_profile(caller, translation, agent) if (translation or agent) else backend.profile(caller)
+    except Exception as error:
+        _print({"error": str(error)})
+        raise typer.Exit(1)
+    _print(answer)
+
+
+def setup_command(
+    check: Annotated[bool, typer.Option("--check", help="Only report what is installed; change nothing.")] = False,
+) -> None:
+    """Install the pi agent (the AI OS) at the pinned version and check LaTeX, Node.js and keys."""
+    import os
+    import subprocess
+
+    from .aios.pi_agent import AGENT_DIR, MIN_NODE, availability, node_version
+
+    report: dict = {}
+    version = node_version()
+    report["node"] = ".".join(map(str, version)) if version else None
+    if not check and version and version[:2] >= MIN_NODE:
+        npm = shutil.which("npm")
+        if not npm:
+            report["pi"] = "npm is not on PATH; install Node.js with npm"
+        else:
+            typer.echo(f"installing the pi agent into {AGENT_DIR / 'node_modules'} ...", err=True)
+            command = [npm, "ci" if (AGENT_DIR / "package-lock.json").is_file() else "install",
+                       "--ignore-scripts", "--no-audit", "--no-fund"]
+            finished = subprocess.run(command, cwd=AGENT_DIR, capture_output=True, text=True, errors="replace",
+                                      shell=os.name == "nt")
+            report["npm"] = "ok" if finished.returncode == 0 else (finished.stdout + finished.stderr)[-1500:]
+    ready, detail = availability()
+    report["aios"] = {"available": ready, "detail": detail}
+    report["latex"] = {engine: bool(shutil.which(engine)) for engine in ("xelatex", "pdflatex", "bibtex")}
+    report["keys_in_environment"] = sorted(name for name in os.environ if name.endswith("_API_KEY"))
+    report["jev"] = "configured" if os.environ.get("TYPESAFE_API_KEY") else "not configured (optional; set TYPESAFE_API_KEY)"
+    _print(report)
+    if not ready:
         raise typer.Exit(1)
 
 
@@ -151,20 +238,29 @@ def jobs_resume(job_id: str, wait: Annotated[bool, typer.Option("--wait")] = Fal
 
 
 @jobs_app.command("fetch")
-def jobs_fetch(job_id: str, name: Annotated[str, typer.Argument(help="mono | dual | acceptance | layout_review | content_review | log")],
-               destination: Path, server: Server = None, token: Token = None, jobs_root: JobsRoot = None) -> None:
+def jobs_fetch(job_id: str, name: Annotated[str, typer.Argument(help="mono | dual | source | acceptance | layout_review | content_review | log")],
+               destination: Path,
+               version: Annotated[Optional[str], typer.Option(help="usable | optimized | degraded | revised; default: the recommended one")] = None,
+               server: Server = None, token: Token = None, jobs_root: JobsRoot = None) -> None:
     """Save one of a job's files."""
     backend = _backend(server, token, jobs_root)
     if server:
-        backend.download(job_id, name, destination)
+        backend.download(job_id, name, destination, version)
     else:
-        files = backend.files(job_id)
+        files = backend.files(job_id, version)
         if name not in files:
             _print({"error": f"{name} is not available; available: {sorted(files)}"})
             raise typer.Exit(1)
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(files[name], destination)
     _print({"job_id": job_id, "name": name, "saved": str(destination)})
+
+
+@jobs_app.command("events")
+def jobs_events(job_id: str, after: int = 0, wait: float = 0.0,
+                server: Server = None, token: Token = None, jobs_root: JobsRoot = None) -> None:
+    """A job's numbered events after --after; --wait holds up to that many seconds for a new one."""
+    _print(_backend(server, token, jobs_root).events(job_id, after, wait))
 
 
 @jobs_app.command("units")
@@ -289,6 +385,8 @@ def register(app: typer.Typer) -> None:
     app.command("translate")(translate)
     app.add_typer(jobs_app, name="jobs")
     app.command("providers")(providers_command)
+    app.command("profile")(profile_command)
+    app.command("setup")(setup_command)
     app.command("guide")(guide_command)
     app.command("serve")(serve_command)
     app.command("mcp")(mcp_command)

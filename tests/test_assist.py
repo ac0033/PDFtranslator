@@ -241,12 +241,12 @@ def test_revision_writes_fixes_and_renders_only_the_changed_pages_again(job):
     fixed = f"我们在每个回合之后更新权重{M1}。"
     view = manager.revise(JOB, [{"unit_id": "u3", "old_translated_text": None, "new_translated_text": fixed}], "agent:test")
     assert store.result(JOB, "u3").draft.translated_text == fixed
-    assert not (manager.root / JOB / "work" / "page-0001" / "source.zh.mono.pdf").exists()
     command = FakeRunner.started[-1].command
-    assert command[command.index("--resume-from") + 1] == "render" and "off" in command
-    assert view["revisions"][0]["pages"] == [1] and "result" not in view
-    timings = json.loads((manager.root / JOB / "work.timings.json").read_text(encoding="utf-8"))
-    assert timings["stages"]["capture"]["seconds"] == 5.0  # earlier stages are kept
+    assert command[command.index("--mode") + 1] == "revise"
+    assert view["revisions"][0]["pages"] == [1]
+    assert manager._meta(JOB)["revise_pages"] == [1]  # the runner renders just these pages again
+    state = json.loads((manager.root / JOB / "state.json").read_text(encoding="utf-8"))
+    assert state["phase"] == "revise"
 
 
 def test_a_fix_against_an_outdated_translation_refuses_the_whole_batch(job):
@@ -328,16 +328,17 @@ def test_a_key_given_for_one_client_wins_over_the_environment(monkeypatch):
 
 def test_a_failed_job_resumes_where_it_stopped(job, monkeypatch):
     manager, _ = job
-    timings = manager.root / JOB / "work.timings.json"
+    state = manager.root / JOB / "state.json"
     with pytest.raises(JobError, match="only a failed or cancelled"):
         manager.resume(JOB)  # it succeeded
-    timings.write_text(json.dumps({"status": "failed", "error": "HTTP 402", "stages": {}}), encoding="utf-8")
+    state.write_text(json.dumps({"status": "failed", "error": {"code": "workflow_failed", "message": "HTTP 402"}}),
+                     encoding="utf-8")
     manager.resume(JOB, secrets_env={"DEEPSEEK_API_KEY": "sk-new"})
     runner = FakeRunner.started[-1]
-    assert "--resume-from" not in runner.command
+    assert "--mode" not in runner.command
     monkeypatch.setattr(JobManager, "_alive", lambda self, meta: True)
     assert manager.get(JOB)["status"] == "starting"
-    assert json.loads(timings.read_text(encoding="utf-8")).get("error") is None
+    assert json.loads(state.read_text(encoding="utf-8")).get("error") is None
 
 
 def test_a_rerun_keeps_a_finished_capture_instead_of_failing_on_it(tmp_path):

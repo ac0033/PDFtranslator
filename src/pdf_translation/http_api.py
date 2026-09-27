@@ -4,15 +4,19 @@ Standard library only, so any machine that can install this project can serve
 it. Every route except ``/health`` needs ``Authorization: Bearer <token>`` when a
 token is set, and the server refuses to listen beyond loopback without one.
 
-    GET  /health
+    GET  /health                           version, and whether the AI OS and Jev are available
     GET  /v1/providers
-    POST /v1/jobs                       application/pdf body (options in the
-                                        X-Job-Options header as JSON), or JSON
-                                        {"pdf_base64"|"pdf_url", "filename", "options"}
+    GET  /v1/profile                       this caller's default models
+    PUT  /v1/profile                       JSON {"translation", "agent"}: set them
+    POST /v1/jobs                          JSON {"source": {"base64"|"url", "filename", "main_file"}, ...JobRequest},
+                                           or the raw document as the body (JobRequest JSON in X-Job-Request),
+                                           or the v0.10 forms (application/pdf + X-Job-Options, pdf_base64/pdf_url + options)
     GET  /v1/jobs?limit=20
     GET  /v1/jobs/{job_id}
+    GET  /v1/jobs/{job_id}/events?after=17&wait=60     long poll: returns at the first new event
     GET  /v1/jobs/{job_id}/log?lines=40
-    GET  /v1/jobs/{job_id}/files/{name}  mono | dual | acceptance | layout_review | content_review | log
+    GET  /v1/jobs/{job_id}/files/{name}                 the recommended version's file
+    GET  /v1/jobs/{job_id}/files/{version}/{name}       usable | optimized | degraded | revised
     POST /v1/jobs/{job_id}/cancel
     POST /v1/jobs/{job_id}/resume       run a failed or cancelled job again; paid work is reused
     GET  /v1/jobs/{job_id}/units?page=3&unit_id=...&with_issues=1&state=...&limit=200
@@ -22,34 +26,41 @@ token is set, and the server refuses to listen beyond loopback without one.
     GET  /v1/openapi.json               OpenAPI 3.1 description of these routes
     POST /mcp                           MCP streamable HTTP (JSON responses)
 
-A model API key for one job or one assist call may be sent in
-``X-LLM-API-Key``; it reaches only that job's runner process or that call and
-is never stored.
+Model keys belong in the server's environment. As a fallback a key may be sent
+for one job in ``X-LLM-API-Key`` (translation model), ``X-Agent-API-Key`` (the
+AI OS model) or ``X-Jev-API-Key``; it reaches only that job's runner and is never
+stored. Errors are ``{"error": {"code", "message", "hint"}}``.
 """
 from __future__ import annotations
 
 import base64
+import binascii
 import hmac
 import ipaddress
-import os
 import json
+import os
 import re
 import threading
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 from pydantic import ValidationError
 
 from . import __version__
 from .budget import BudgetExceeded
+from .jobspec import JobError, JobRequest, caller_key, validation_error
 from .mcp_server import GUIDE, McpServer
 from .openapi import openapi_spec
-from .service import FILE_NAMES, MAX_PDF_BYTES, JobError, JobManager, JobOptions, fetch_pdf, providers
+from .service import FILE_NAMES, MAX_SOURCE_BYTES, JobManager, JobOptions, fetch_source, providers
 
-JOB_ROUTE = re.compile(r"^/v1/jobs/([^/]+)(?:/(log|cancel|resume|units|assist|revise|files/([a-z_]+)))?$")
+JOB_ROUTE = re.compile(
+    r"^/v1/jobs/([^/]+)(?:/(log|cancel|resume|units|assist|revise|events|files/(?:(usable|optimized|degraded|revised)/)?([a-z_]+)))?$")
 CONTENT_TYPES = {".pdf": "application/pdf", ".json": "application/json", ".jsonl": "application/x-ndjson",
-                 ".log": "text/plain; charset=utf-8"}
+                 ".log": "text/plain; charset=utf-8", ".html": "text/html; charset=utf-8",
+                 ".md": "text/markdown; charset=utf-8", ".zip": "application/zip",
+                 ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                 ".epub": "application/epub+zip"}
 
 
 def is_loopback(host: str) -> bool:
@@ -81,16 +92,18 @@ class ApiServer(ThreadingHTTPServer):
         self.token = token
         host, port = self.server_address[:2]
         self.public_url = (public_url or f"http://{host}:{port}").rstrip("/")
-        self.mcp = McpServer(manager, local=False, public_url=self.public_url, allow_local_paths=allow_local_paths)
+        self.mcp = McpServer(manager, local=False, public_url=self.public_url, allow_local_paths=allow_local_paths,
+                             caller=caller_key(None, token))
         self.allow_local_paths = allow_local_paths
         self._ticker = threading.Thread(target=self._tick, daemon=True)
         self._ticker.start()
 
     def _tick(self) -> None:
-        # Queued jobs start when a slot frees up, even if no caller is polling.
-        while not self._stop.wait(10):
+        # Queued jobs start when a slot frees up, and callbacks go out, even if no caller is polling.
+        while not self._stop.wait(5):
             try:
                 self.manager.dispatch()
+                self.manager.deliver_callbacks()
             except Exception:
                 pass
 
@@ -105,6 +118,9 @@ class Handler(BaseHTTPRequestHandler):
 
     # --- plumbing -----------------------------------------------------------------------
 
+    def log_message(self, format, *args):  # keep the console for the operator's own messages
+        pass
+
     def _send(self, status: int, payload: dict | list) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
@@ -113,8 +129,14 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _fail(self, status: int, message: str) -> None:
-        self._send(status, {"error": message})
+    def _fail(self, status: int, message: str, code: str = "bad_request", hint: str | None = None) -> None:
+        body = {"code": code, "message": message}
+        if hint:
+            body["hint"] = hint
+        self._send(status, {"error": body})
+
+    def _refuse(self, problem: JobError) -> None:
+        self._send(problem.status, problem.payload())
 
     def _authorised(self) -> bool:
         if not self.server.token:
@@ -123,22 +145,35 @@ class Handler(BaseHTTPRequestHandler):
         expected = f"Bearer {self.server.token}"
         if hmac.compare_digest(supplied.encode(), expected.encode()):
             return True
-        self._fail(HTTPStatus.UNAUTHORIZED, "missing or wrong bearer token")
+        self._fail(HTTPStatus.UNAUTHORIZED, "missing or wrong bearer token", "unauthorized")
         return False
+
+    def _caller(self, client_id: str | None = None) -> str:
+        return caller_key(client_id or self.headers.get("X-Client-Id"), self.server.token)
 
     def _body(self) -> bytes | None:
         length = int(self.headers.get("Content-Length") or 0)
-        if length > MAX_PDF_BYTES * 4 // 3 + 4096:  # base64 of the largest PDF, plus JSON
-            self._fail(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "request body too large")
+        if length > MAX_SOURCE_BYTES * 4 // 3 + 4096:  # base64 of the largest document, plus JSON
+            self._fail(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "request body too large", "source_too_large")
             return None
         return self.rfile.read(length) if length else b""
+
+    def _keys(self) -> dict[str, str]:
+        return {role: self.headers.get(header) for role, header in
+                (("translation", "X-LLM-API-Key"), ("agent", "X-Agent-API-Key"), ("jev", "X-Jev-API-Key"))
+                if self.headers.get(header)}
 
     # --- routes -------------------------------------------------------------------------
 
     def do_GET(self) -> None:
         url = urlparse(self.path)
         if url.path == "/health":
-            return self._send(HTTPStatus.OK, {"status": "ok", "version": __version__})
+            from .aios.pi_agent import availability
+
+            ready, detail = availability()
+            return self._send(HTTPStatus.OK, {"status": "ok", "version": __version__,
+                                              "aios": {"available": ready, "detail": detail},
+                                              "jev": {"configured": bool(os.environ.get("TYPESAFE_API_KEY"))}})
         if not self._authorised():
             return
         if url.path == "/v1/guide":
@@ -152,19 +187,24 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/v1/openapi.json":
             return self._send(HTTPStatus.OK, openapi_spec(self.server.public_url))
         if url.path == "/mcp":  # no server-initiated stream is offered
-            return self._fail(HTTPStatus.METHOD_NOT_ALLOWED, "this server answers MCP over POST only")
+            return self._fail(HTTPStatus.METHOD_NOT_ALLOWED, "this server answers MCP over POST only", "method_not_allowed")
         query = parse_qs(url.query)
         try:
             if url.path == "/v1/providers":
                 return self._send(HTTPStatus.OK, {"providers": providers()})
+            if url.path == "/v1/profile":
+                return self._send(HTTPStatus.OK, self.server.manager.profile(self._caller()))
             if url.path == "/v1/jobs":
                 return self._send(HTTPStatus.OK, {"jobs": self.server.manager.list(int(query.get("limit", ["20"])[0]))})
             match = JOB_ROUTE.match(url.path)
             if not match:
-                return self._fail(HTTPStatus.NOT_FOUND, "no such route")
-            job_id, action, file_name = match.groups()
+                return self._fail(HTTPStatus.NOT_FOUND, "no such route", "not_found")
+            job_id, action, version, file_name = match.groups()
             if action is None:
                 return self._send(HTTPStatus.OK, self.server.manager.get(job_id))
+            if action == "events":
+                return self._send(HTTPStatus.OK, self.server.manager.events(
+                    job_id, int(query.get("after", ["0"])[0]), float(query.get("wait", ["0"])[0])))
             if action == "log":
                 lines = int(query.get("lines", ["40"])[0])
                 return self._send(HTTPStatus.OK, {"job_id": job_id, "log": self.server.manager.log_tail(job_id, lines)})
@@ -174,28 +214,49 @@ class Handler(BaseHTTPRequestHandler):
                     with_issues=query.get("with_issues", ["0"])[0] in {"1", "true"}, states=query.get("state"),
                     limit=int(query.get("limit", ["200"])[0])))
             if file_name:
-                return self._file(job_id, file_name)
-            return self._fail(HTTPStatus.METHOD_NOT_ALLOWED, "use POST")
+                return self._file(job_id, file_name, version)
+            return self._fail(HTTPStatus.METHOD_NOT_ALLOWED, "use POST", "method_not_allowed")
         except JobError as problem:
-            return self._fail(HTTPStatus.NOT_FOUND, str(problem))
+            return self._refuse(problem)
+        except ValueError as problem:
+            return self._fail(HTTPStatus.BAD_REQUEST, str(problem))
 
-    def _file(self, job_id: str, name: str) -> None:
+    def _file(self, job_id: str, name: str, version: str | None) -> None:
         if name not in FILE_NAMES:
-            return self._fail(HTTPStatus.NOT_FOUND, f"unknown file; use one of {list(FILE_NAMES)}")
-        files = self.server.manager.files(job_id)
+            return self._fail(HTTPStatus.NOT_FOUND, f"unknown file; use one of {list(FILE_NAMES)}", "not_found")
+        files = self.server.manager.files(job_id, version)
         if name not in files:
-            return self._fail(HTTPStatus.NOT_FOUND, f"{name} is not available yet")
+            return self._fail(HTTPStatus.NOT_FOUND, f"{name} is not available (yet)", "file_not_ready",
+                              "wait for a delivery event; the job's files list names what exists")
         path = files[name]
         size = path.stat().st_size
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", CONTENT_TYPES.get(path.suffix, "application/octet-stream"))
         self.send_header("Content-Length", str(size))
-        if path.suffix == ".pdf":
-            self.send_header("Content-Disposition", f'attachment; filename="{job_id}.{name}.pdf"')
+        if name in {"mono", "dual", "source"}:
+            self.send_header("Content-Disposition", f"attachment; filename*=UTF-8''{quote(path.name)}")
         self.end_headers()
         with path.open("rb") as stream:
             while chunk := stream.read(1024 * 1024):
                 self.wfile.write(chunk)
+
+    def do_PUT(self) -> None:
+        url = urlparse(self.path)
+        if not self._authorised():
+            return
+        body = self._body()
+        if body is None:
+            return
+        if url.path != "/v1/profile":
+            return self._fail(HTTPStatus.NOT_FOUND, "no such route", "not_found")
+        try:
+            request = json.loads(body or b"{}")
+            return self._send(HTTPStatus.OK, self.server.manager.set_profile(
+                self._caller(request.get("client_id")), request.get("translation"), request.get("agent")))
+        except JobError as problem:
+            return self._refuse(problem)
+        except ValueError as problem:
+            return self._fail(HTTPStatus.BAD_REQUEST, str(problem))
 
     def do_POST(self) -> None:
         url = urlparse(self.path)
@@ -210,66 +271,80 @@ class Handler(BaseHTTPRequestHandler):
             if url.path == "/v1/jobs":
                 return self._submit(body)
             match = JOB_ROUTE.match(url.path)
-            if match and match.group(2) == "cancel":
+            action = match.group(2) if match else None
+            if action == "cancel":
                 return self._send(HTTPStatus.OK, self.server.manager.cancel(match.group(1)))
-            if match and match.group(2) == "resume":
+            if action == "resume":
                 secrets_env = {}
                 key = self.headers.get("X-LLM-API-Key")
                 if key:
                     options = JobOptions.model_validate(self.server.manager._meta(match.group(1))["options"])
                     variable = options.api_key_variable()
-                    if not variable:
-                        raise JobError(f"provider {options.provider} takes no API key")
-                    secrets_env[variable] = key
+                    if variable:
+                        secrets_env[variable] = key
                 return self._send(HTTPStatus.ACCEPTED, self.server.manager.resume(match.group(1), secrets_env=secrets_env))
-            if match and match.group(2) == "assist":
+            if action == "assist":
                 arguments = json.loads(body or b"{}")
                 task = arguments.pop("task", None)
                 arguments.pop("api_key", None)  # keys travel in the header only
                 budget = arguments.pop("budget_usd", None)
                 return self._send(HTTPStatus.OK, self.server.manager.assist(
                     match.group(1), task, api_key=self.headers.get("X-LLM-API-Key"), budget_usd=budget, **arguments))
-            if match and match.group(2) == "revise":
+            if action == "revise":
                 request = json.loads(body or b"{}")
                 return self._send(HTTPStatus.ACCEPTED, self.server.manager.revise(
                     match.group(1), request.get("fixes") or [], request.get("editor") or ""))
-            return self._fail(HTTPStatus.NOT_FOUND, "no such route")
+            return self._fail(HTTPStatus.NOT_FOUND, "no such route", "not_found")
+        except JobError as problem:
+            return self._refuse(problem)
         except BudgetExceeded as problem:
-            return self._fail(HTTPStatus.PAYMENT_REQUIRED, str(problem))
+            return self._fail(HTTPStatus.PAYMENT_REQUIRED, str(problem), "budget_exceeded")
+        except ValidationError as problem:
+            return self._refuse(validation_error(problem))
         except TypeError as problem:  # an argument the task does not take
             return self._fail(HTTPStatus.BAD_REQUEST, str(problem))
-        except (JobError, ValidationError, ValueError) as problem:
+        except ValueError as problem:
             return self._fail(HTTPStatus.BAD_REQUEST, str(problem))
         except Exception as problem:  # the model service failed
-            return self._fail(HTTPStatus.BAD_GATEWAY, f"{type(problem).__name__}: {problem}"[:500])
+            return self._fail(HTTPStatus.BAD_GATEWAY, f"{type(problem).__name__}: {problem}"[:500], "upstream_error")
 
     def _submit(self, body: bytes) -> None:
         content_type = (self.headers.get("Content-Type") or "").split(";")[0].strip()
         query = parse_qs(urlparse(self.path).query)
-        if content_type == "application/pdf":
-            pdf = body
-            filename = query.get("filename", ["upload.pdf"])[0]
-            options_raw = json.loads(self.headers.get("X-Job-Options") or "{}")
-        else:
-            request = json.loads(body or b"{}")
-            options_raw = request.get("options") or {}
-            filename = request.get("filename")
-            if request.get("pdf_base64"):
-                pdf = base64.b64decode(request["pdf_base64"], validate=True)
-            elif request.get("pdf_url"):
-                pdf, fetched_name = fetch_pdf(request["pdf_url"])
-                filename = filename or fetched_name
+        if content_type != "application/json":
+            data = body
+            filename = query.get("filename", ["upload.pdf" if content_type == "application/pdf" else "upload"])[0]
+            if self.headers.get("X-Job-Request"):
+                request = JobRequest.model_validate(json.loads(self.headers["X-Job-Request"]))
             else:
-                raise JobError("send the PDF as an application/pdf body, pdf_base64 or pdf_url")
-        options = JobOptions.model_validate(options_raw)
-        secrets_env = {}
-        key = self.headers.get("X-LLM-API-Key")
-        if key:
-            variable = options.api_key_variable()
-            if not variable:
-                raise JobError(f"provider {options.provider} takes no API key; set api_key_env to name one")
-            secrets_env[variable] = key
-        self._send(HTTPStatus.ACCEPTED, self.server.manager.submit(pdf, filename or "upload.pdf", options, secrets_env=secrets_env))
+                request = JobRequest.from_legacy(json.loads(self.headers.get("X-Job-Options") or "{}"))
+        else:
+            payload = json.loads(body or b"{}")
+            source = payload.pop("source", None) or {}
+            legacy_options = payload.pop("options", None)
+            for legacy, new in (("pdf_base64", "base64"), ("pdf_url", "url")):
+                if payload.get(legacy):
+                    source[new] = payload.pop(legacy)
+            filename = source.get("filename") or payload.pop("filename", None)
+            if source.get("main_file"):
+                payload["main_file"] = source["main_file"]
+            if source.get("base64"):
+                try:
+                    data = base64.b64decode(source["base64"], validate=True)
+                except (binascii.Error, ValueError) as problem:
+                    raise JobError("source.base64 is not valid base64", code="invalid_request") from problem
+            elif source.get("url"):
+                data, fetched = fetch_source(source["url"])
+                filename = filename or fetched
+            else:
+                raise JobError("send the document as source.base64 or source.url (or as the raw request body)",
+                               code="invalid_request")
+            request = (JobRequest.from_legacy({**legacy_options, **payload}) if legacy_options is not None
+                       else JobRequest.model_validate(payload))
+        job = self.server.manager.submit(
+            data, filename or "upload", request, caller=self._caller(request.client_id), api_keys=self._keys(),
+            callback_secret=self.headers.get("X-Callback-Secret"), idempotency_key=self.headers.get("Idempotency-Key"))
+        self._send(HTTPStatus.ACCEPTED, job)
 
     def _mcp(self, body: bytes) -> None:
         try:
