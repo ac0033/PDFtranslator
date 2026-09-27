@@ -218,6 +218,28 @@ def test_thresholds_are_overridable(tmp_path):
     assert report['thresholds']['per_category']['number'] == 0.5
 
 
+ENGLISH = 'The approximation of the remainder is computed for every set in the decomposition.'
+
+
+def test_one_unit_left_in_english_stops_delivery_at_any_share(tmp_path):
+    # AGENTS.md section 2: untranslated text has no "fewer than N" allowance.
+    rows = [unit(f'u{i}') for i in range(999)]
+    rows.append(unit('e0', state='accepted', source=ENGLISH, translated=ENGLISH, pages=(2,)))
+    source, render_dir, queue = fixture_delivery(tmp_path, rows)
+    report = build_acceptance_report(source, render_dir, queue, thresholds={'untranslated_unit': 0.5})
+    assert report['verdict'] == NOT_DELIVERABLE
+    blocking = [p for p in report['major_problems'] if p['kind'] == 'untranslated_text']
+    assert blocking and blocking[0]['count'] == 1 and blocking[0]['sample_pages'] == [2]
+    assert report['thresholds']['zero_tolerance'] == ['untranslated_unit']
+
+
+def test_a_reviewer_can_clear_english_kept_on_purpose(tmp_path):
+    rows = [unit('u0'), unit('e0', state='accepted', source=ENGLISH, translated=ENGLISH)]
+    source, render_dir, queue = fixture_delivery(tmp_path, rows)
+    ledger = ReviewLedger([{'unit_id': 'e0', 'result_hash': 'hash-e0', 'category': 'untranslated_unit', 'verdict': 'dismiss'}])
+    assert build_acceptance_report(source, render_dir, queue, ledger=ledger)['verdict'] == DELIVERABLE
+
+
 def test_the_store_overrides_a_queue_that_was_written_before_the_fixes(tmp_path):
     """val.pdf shipped with 25 units whose queue entry predated their fix.
 

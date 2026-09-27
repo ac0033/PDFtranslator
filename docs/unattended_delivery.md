@@ -43,6 +43,7 @@ uv run pdftrans acceptance-report --source pdf/<文件>.pdf --render-dir output/
 
 **大问题（阻断交付）**
 - 有单元处于 `blocked`、`exhausted`、`prepared` 或 `not_started` 状态，或者没有译文。不设数量阈值，1 个也阻断。
+- 有单元的译文仍是英文句子（`untranslated_unit`），且没有被复核台账放行。同样不设阈值。检测只看含英文虚词（the、of、and……）的句子；人名、缩写、代码、公式、示例串和原文自己引用的英文句子不算。
 - 存在 critical 质量问题。
 - 有页面缺少完整的渲染结果，合并成品缺失，或页数与原文不符。
 - 捕获覆盖度超过阈值（见第 5 节）。
@@ -56,7 +57,6 @@ uv run pdftrans acceptance-report --source pdf/<文件>.pdf --render-dir output/
 | `retained_english` | 30% | 仅作参考，检测器有已知噪声 |
 | `number` | 5% | 数字清单变化是误译最强的信号 |
 | `protected_marker_order` | 5% | 多数是中文语序调整，其余无法用规则区分 |
-| `untranslated_unit` | 5% | 译文仍以拉丁字母为主的疑似漏译 |
 | `url`、`terminology` | 2% | 直接改变含义 |
 | `leaked_markup` | 1% | 标签原样显示在页面上 |
 | 未列出的类别 | 5% | 没见过的类别从严处理 |

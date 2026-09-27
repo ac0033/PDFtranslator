@@ -63,6 +63,14 @@ ENGLISH_WORD = re.compile(r"(?<![A-Za-z])[A-Za-z][A-Za-z-]{2,}(?![A-Za-z])")
 URL_LIKE = re.compile(r"https?://\S+|\b[\w-]+\.(?:com|org|edu|net|gov|io)\b|\bcc-by[\w-]*", re.I)
 ROMAN_NUMERAL = re.compile(r"^[ivxlcdm]+$")
 CJK = re.compile(r"[一-鿿]")
+QUOTED = re.compile(r"[“\"]([^“”\"]{3,}?)[”\"]")
+SINGLE_LETTER = re.compile(r"(?<![A-Za-z])[A-Za-z](?![A-Za-z])")
+LOWER_WORD = re.compile(r"(?<![A-Za-z])[a-z]+(?![A-Za-z])")
+#: Lower-case English function words: every English sentence has them; names,
+#: code, formulas and example strings almost never do.
+FUNCTION_WORDS = frozenset(
+    "the of and to in is are was were be been that this these those for with as on by an which from at or not "
+    "we it its can will has have our their into than then when where there each such also".split())
 LATIN = re.compile(r"[A-Za-z]")
 
 _AUTHOR_INITIALS = re.compile(r"\b[A-Z]\.\s?(?:[A-Z]\.\s?)*[A-Z][a-z]{2,}")
@@ -93,6 +101,8 @@ DEFAULT_PROSE_LATIN_SHARE = 0.40
 DEFAULT_UNTRANSLATED_LATIN_SHARE = 0.50
 #: Below this much Latin text the source unit is too short to judge.
 MIN_SOURCE_LATIN_CHARS = 40
+#: Function words an untranslated passage must still contain.
+MIN_FUNCTION_WORDS = 2
 
 SAMPLE_SIZE = 10
 
@@ -214,27 +224,44 @@ def scan_retained_english(
     return terms
 
 
+def _quoted_in_source(target: str, source: str) -> str:
+    """Drop quoted passages the source quotes too: an example sentence stays English on purpose."""
+    quoted_source = {_quote_key(m.group(1)) for m in QUOTED.finditer(source)}
+    return QUOTED.sub(lambda m: " " if _quote_key(m.group(1)) in quoted_source else m.group(0), target)
+
+
+def _quote_key(text: str) -> str:
+    # English puts the comma inside the quotes ("that,"), Chinese outside.
+    return " ".join(text.split()).strip(" ,.;:!?，。；：！？")
+
+
 def unit_is_untranslated(source_text: str, translated_text: str, *, latin_cutoff: float = DEFAULT_UNTRANSLATED_LATIN_SHARE) -> bool:
     """Did a prose unit come back in the source language?
 
     Requires enough English in the source to judge, and excludes bibliography
-    entries, which stay English deliberately. On val this leaves 22 of 4963
-    units, including the one paragraph a human found half-translated.
+    entries, which stay English deliberately.
+
+    Only English *sentences* count. What stays in Latin letters by design -
+    names and acronyms the source capitalises, single-letter variables and
+    initials, code, formulas, example strings, and sentences the source itself
+    quotes - carries no function words, so a unit is reported only when its
+    remaining English holds at least :data:`MIN_FUNCTION_WORDS` of them and
+    still outweighs the Chinese. SQL keywords are upper-case and do not count.
     """
     source = MARKER.sub(" ", source_text or "")
     if len(LATIN.findall(source)) < MIN_SOURCE_LATIN_CHARS:
         return False
     if looks_like_reference(source_text):
         return False
-    target = prose(translated_text)
+    target = _quoted_in_source(prose(translated_text), source)
     if CJK.search(target):
-        # Names and acronyms stay in Latin letters by design ("课程讲师：Christopher
-        # Manning", "双向RNN"). Words the source writes capitalised are not counted
-        # as leftover English once the unit is in Chinese; a sentence left in
-        # English is mostly lower-case words and still counts. A unit with no
-        # Chinese at all is judged on every letter.
+        # "课程讲师：Christopher Manning", "双向RNN": words the source writes
+        # capitalised are not leftover English once the unit is in Chinese.
         proper = {word for word in ENGLISH_WORD.findall(source) if word[0].isupper()}
         target = ENGLISH_WORD.sub(lambda m: " " if m.group(0) in proper else m.group(0), target)
+    target = SINGLE_LETTER.sub(" ", target)
+    if sum(1 for word in LOWER_WORD.findall(target) if word in FUNCTION_WORDS) < MIN_FUNCTION_WORDS:
+        return False
     return latin_share(target) >= latin_cutoff
 
 

@@ -24,7 +24,8 @@ The grading follows AGENTS.md section 2. Major problems block delivery. Minor
 problems do not, but section 2 also says many small defects add up to an
 unreadable document, so each category carries its own share threshold: an
 unrecoverable formula literal is a known capability boundary and is tolerated
-broadly, while an untranslated paragraph is barely tolerated at all.
+broadly. English left untranslated is not tolerated at all: one such unit that
+no reviewer has cleared blocks delivery, whatever the share.
 
 Per section 5 the report always states what was checked and what was not. It
 never claims the prose is a faithful translation: that needs a human against
@@ -64,9 +65,6 @@ DEFAULT_MINOR_THRESHOLDS = {
     # Marker order usually shifts because Chinese word order differs. No rule
     # separates the rest, so these stay a human's problem.
     "protected_marker_order": 0.05,
-    # A paragraph that came back in English is an AGENTS.md section 2 major
-    # problem; a handful is tolerable, a document full of them is not.
-    "untranslated_unit": 0.05,
     # Markup that renders literally: visible garbage, cheap to detect.
     "leaked_markup": 0.01,
     # Advisory. The detector has measured noise - on val it lists 231 terms,
@@ -81,6 +79,10 @@ DEFAULT_MINOR_THRESHOLDS = {
     "layout_boundary_unverifiable": 0.30,
 }
 DEFAULT_CATEGORY_THRESHOLD = 0.05
+
+#: Categories that block delivery at any count (AGENTS.md section 2: untranslated
+#: text is a major problem, with no "fewer than N" allowance). Not overridable.
+ZERO_TOLERANCE = frozenset({"untranslated_unit"})
 
 #: Share of all units that may carry any unresolved minor issue at all.
 DEFAULT_TOTAL_MINOR_THRESHOLD = 0.80
@@ -265,7 +267,7 @@ def _grade_minor(triage: dict, total_units: int, thresholds: dict[str, float], t
         outstanding = counts[NEEDS_HUMAN]
         if not outstanding:
             continue
-        limit = thresholds.get(category, DEFAULT_CATEGORY_THRESHOLD)
+        limit = 0.0 if category in ZERO_TOLERANCE else thresholds.get(category, DEFAULT_CATEGORY_THRESHOLD)
         share = outstanding / total_units if total_units else 0.0
         entry = {
             "category": category,
@@ -281,7 +283,14 @@ def _grade_minor(triage: dict, total_units: int, thresholds: dict[str, float], t
         if counts["rules"]:
             entry["rules_applied"] = counts["rules"]
         summary.append(entry)
-        if share > limit:
+        if category in ZERO_TOLERANCE:
+            escalated.append(_problem(
+                "untranslated_text", "major", outstanding,
+                f"{outstanding} units still read as untranslated English and no reviewer has cleared them; "
+                "AGENTS.md section 2 blocks delivery on untranslated text at any count",
+                category=category, sample_pages=entry["sample_pages"],
+            ))
+        elif share > limit:
             escalated.append(_problem(
                 "minor_issue_accumulation", "major", outstanding,
                 f"'{category}' still needs human review on {share:.1%} of units, above the {limit:.0%} threshold; "
@@ -367,7 +376,8 @@ def build_acceptance_report(
         "minor_issues": minor_summary,
         "retained_english_terms": triage["retained_english_terms"][:50],
         "capture_coverage": coverage_report,
-        "thresholds": {"per_category": limits, "default_per_category": DEFAULT_CATEGORY_THRESHOLD, "total": total_threshold},
+        "thresholds": {"per_category": limits, "default_per_category": DEFAULT_CATEGORY_THRESHOLD, "total": total_threshold,
+                       "zero_tolerance": sorted(ZERO_TOLERANCE)},
         "review_queue": {
             "path": str(content_review),
             "stale_units": len(stale),

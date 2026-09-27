@@ -8,6 +8,8 @@ never be relaxed is that no confirmed error is dismissed by a rule.
 import json
 from pathlib import Path
 
+import pytest
+
 from pdf_translation.triage import (
     DISMISSED_BY_LEDGER,
     DISMISSED_BY_RULE,
@@ -151,9 +153,41 @@ def test_names_and_acronyms_kept_in_latin_letters_are_not_untranslated_text():
     assert not unit_is_untranslated(names, '⟦P:bd-p0001-u0004-o000⟧作者：Milad Mohammadi、Rohit Mundra、Richard Socher、Lisa Wang、Amita Kamath')
     keys = 'Keyphrases: Language Models. RNN. Bi-directional RNN. Deep RNN. GRU. LSTM.'
     assert not unit_is_untranslated(keys, '关键词：语言模型。RNN。双向RNN。深度RNN。GRU。LSTM。')
-    # The same names do not excuse English left untranslated around them, nor a unit with no Chinese at all.
+    # The same names do not excuse English left untranslated around them.
     assert unit_is_untranslated(names, '作者：Milad Mohammadi, Rohit Mundra, Richard Socher, Lisa Wang, Amita Kamath and others wrote these notes')
-    assert unit_is_untranslated(names, names)
+
+
+def test_a_sentence_left_in_english_is_reported_with_or_without_chinese_around_it():
+    source = ('The polynomial approximation of the interval remainder is computed for every '
+              'reachable set in the decomposition, which bounds the propagated error.')
+    assert unit_is_untranslated(source, source)
+    assert unit_is_untranslated(source, '区间余项的多项式近似 is computed for every reachable set in the decomposition。')
+    # Quoting it does not hide it: the source did not quote this sentence.
+    assert unit_is_untranslated(source, '“The polynomial approximation of the interval remainder is computed for every reachable set”。')
+
+
+@pytest.mark.parametrize('source,target', [
+    # author line on a title page (val p3)
+    ('Mykel J. Kochenderfer Sydney M. Katz Anthony L. Corso Robert J. Moss',
+     'Mykel J. Kochenderfer Sydney M. Katz Anthony L. Corso Robert J. Moss'),
+    # SQL code (Mining p429)
+    ('SELECT DISTINCT Arc.Y FROM Reach, Arc WHERE Arc.X ⟦P:bd-p0429-u0006-o000⟧ Reach.X;',
+     'SELECT DISTINCT Arc.Y FROM Reach, Arc WHERE Arc.X ⟦P:bd-p0429-u0006-o000⟧ Reach.X;'),
+    # a formula with single-letter variables (cs224n p13)
+    ('i⟦P:x-o000⟧(W(i)x⟦P:x-o001⟧U(i)h⟦P:x-o002⟧) where W and U are the weights at step t',
+     'i⟦P:x-o000⟧(W(i)x⟦P:x-o001⟧U(i)h⟦P:x-o002⟧)，其中 W 和 U 是第 t 步的权重'),
+    # index entries: names and initials (Mining p603)
+    ('Waibel, A., 570; Wall, M.E., 461; Wall-clock time, 55; Wallach, D.A., 78; Wang, J., 350',
+     'Waibel, A., 570；Wall, M.E., 461；挂钟时间, 55；Wallach,D.A., 78；Wang, J., 350'),
+    # example strings (Mining p130)
+    ('(a) abcdef and bdaefc. (b) abccdabc and acbdcab. (c) abcdef and baedfc.',
+     '(a) abcdef 与 bdaefc。(b) abccdabc 与 acbdcab。(c) abcdef 与 baedfc。'),
+    # sentences the source itself quotes, commas inside the English quotes (Mining p149)
+    ('the sentence would be represented by five shingles: “I recommend that,” “that you buy,” and “you buy Sudzo,” in order.',
+     '该句子会由五个 shingle 表示：“I recommend that”、“that you buy”以及“you buy Sudzo”。'),
+])
+def test_english_kept_by_design_is_not_untranslated_text(source, target):
+    assert not unit_is_untranslated(source, target)
 
 
 def test_a_short_source_is_not_judged():
