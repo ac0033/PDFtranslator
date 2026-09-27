@@ -30,7 +30,10 @@ KEY_ENV = "TYPESAFE_API_KEY"
 #: Below this confidence a repair choice is not trusted and the problem goes to the agent.
 CHOICE_CONFIDENCE = 0.6
 #: At or above this probability a warning is treated as a real defect worth repairing.
-REAL_PROBLEM = 0.5
+#: Set from scripts/evaluate_jev.py on the 121 labelled val.pdf warnings (2026-09-27): no real
+#: defect scored below 0.26, and 0.2 still filters 84 of 102 false alarms. At 0.5, 9 of 19 real
+#: defects would have gone unrepaired. Calibrated on one book only, so the margin is kept wide.
+REAL_PROBLEM = 0.2
 STATE_LIMIT = 6000
 
 

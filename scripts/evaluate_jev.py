@@ -11,7 +11,7 @@ Corpus: ``tests/data/val_number_triage.json`` (88 number warnings; 5 real) and
 ``tests/data/val_retained_english_triage.json`` (33 retained-English
 warnings; 14 needed a fix), from the manual val.pdf review.
 
-    uv run python -m scripts.evaluate_jev [--threshold 0.5] [--output jev-eval.json]
+    uv run python -m scripts.evaluate_jev [--threshold 0.2] [--output jev-eval.json]
 
 Needs ``TYPESAFE_API_KEY``. Exit code 0 means Jev met the bar at this
 threshold (safe to keep enabled); 1 means it did not (unset the key and the
@@ -31,7 +31,7 @@ if str(ROOT / "src") not in sys.path:
 
 from dotenv import load_dotenv  # noqa: E402
 
-from pdf_translation.aios.jev import KEY_ENV, JevClient, JevError  # noqa: E402
+from pdf_translation.aios.jev import KEY_ENV, REAL_PROBLEM, JevClient, JevError  # noqa: E402
 
 DATA = ROOT / "tests" / "data"
 MIN_FALSE_ALARMS_FILTERED = 0.5
@@ -78,7 +78,8 @@ def evaluate(client: JevClient, threshold: float) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--threshold", type=float, default=0.5)
+    parser.add_argument("--threshold", type=float, default=REAL_PROBLEM,
+                        help="Probability at or above which a warning counts as real. Default: the one the decision node uses.")
     parser.add_argument("--output", type=Path, default=None, help="Write the full result, per case, as JSON.")
     args = parser.parse_args(argv)
     load_dotenv(ROOT / ".env", override=False)
