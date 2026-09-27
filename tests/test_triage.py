@@ -54,12 +54,30 @@ def test_no_confirmed_number_error_is_ever_dismissed_by_a_rule():
     assert silenced == [], [(c['unit_id'], c['reason']) for c in silenced]
 
 
-def test_equivalent_conversions_are_left_for_a_human():
-    """'$370 million' -> '3.7亿' is equivalent, but no rule proves that."""
+def test_scale_conversions_are_left_for_a_human_and_value_equal_numerals_are_proven():
+    """'$370 million' -> '3.7亿' is equivalent, but no rule proves a change of scale.
+
+    '100 Years' -> '百年' and 'to zero' -> '设为零' are the same values written as
+    Chinese numerals; the chinese_numerals rule proves those exactly.
+    """
     conversions = [case for case in NUMBER_CASES if case['verdict'] == 'conversion']
     assert conversions, 'corpus lost its conversion cases'
-    for case in conversions:
-        assert explain_number_warning(case['source_text'], case['translated_text']) is None
+    verdicts = {case['translated_text']: explain_number_warning(case['source_text'], case['translated_text'])
+                for case in conversions}
+    scaled = [text for text in verdicts if '亿' in text or '万' in text]
+    assert scaled and all(verdicts[text] is None for text in scaled)
+    assert {verdict for text, verdict in verdicts.items() if text not in scaled} <= {'chinese_numerals', None}
+    assert sum(verdict == 'chinese_numerals' for verdict in verdicts.values()) >= 3
+
+
+def test_chinese_numerals_explain_a_warning_only_when_every_value_matches():
+    assert explain_number_warning('A flat at $8 per week.', '每周八美元的公寓。') == 'chinese_numerals'
+    assert explain_number_warning('She had $1.87.', '她只有一块八毛七分钱。') == 'chinese_numerals'
+    assert explain_number_warning('Released January 1, 2005', '2005年1月1日发布') == 'chinese_numerals'
+    assert explain_number_warning('Twenty dollars a week.', '每周20美元。') == 'chinese_numerals'
+    assert explain_number_warning('A flat at $8 per week.', '每周九美元的公寓。') is None
+    assert explain_number_warning('We trained for 3 days.', '我们训练了4天。') is None
+    assert explain_number_warning('on 8 GPUs for 3 days', '在八块GPU上训练了三天，共9次') is None
 
 
 def test_the_rule_dismisses_most_tokenisation_artifacts():

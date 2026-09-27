@@ -7,6 +7,7 @@ from typing import Protocol
 from pydantic import ValidationError
 
 from .llm import Endpoint, LLMClient, LLMRequest, OpenAIResponsesClient
+from .markers import SOURCE_MARKUP_TAG
 from .schemas import TranslationDraft, TranslationRequest, TranslationResult, Usage
 from .semantic_layout import rebalance_layout_markers
 from .term_lock import protect_terms, restore_terms
@@ -122,6 +123,22 @@ class LLMTranslationProvider:
                 "Retain Latin variable names in the English prose such as i in i-th. "
                 "For 'the error at a = W', express the ERROR AT a equals W, not that a itself equals W. "
                 "Match original ASCII parentheses if a closing parenthesis is inside a protected formula."
+            )
+        if SOURCE_MARKUP_TAG in request.unit.risk_tags:
+            readable = source_text
+            for marker, literal in request.unit.protected_literal_hints.items():
+                readable = readable.replace(marker, literal)
+            arguments["input"] += "\n<complete-readable-source>\n" + readable + "\n</complete-readable-source>"
+            arguments["instructions"] += (
+                " This passage comes from a structured source document (LaTeX, HTML, Markdown or a word "
+                "processor file); complete-readable-source shows it with every marker expanded. The program "
+                "restores each marker to its exact original markup, so write plain Chinese text only: never add "
+                "LaTeX commands, HTML tags, Markdown syntax or escapes of your own. Markers come in two kinds. "
+                "An opening marker ⟦P:a<n>⟧ and its closing marker ⟦P:z<n>⟧ wrap formatted words (emphasis, a "
+                "link, bold): keep both around the Chinese words that translate the wrapped English, opening "
+                "before closing, and keep pairs nested as they were. Every other marker (a formula, citation, "
+                "reference, code span or a single symbol) may move to the natural position in the Chinese "
+                "sentence."
             )
         native_parts = None
         if "native_immutable_slots" in request.unit.risk_tags:

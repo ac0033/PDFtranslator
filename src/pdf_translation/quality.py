@@ -8,6 +8,7 @@ from collections import Counter
 from .hashing import stable_hash
 from .context_models import GlossaryEntry
 from .context_router import select_glossary
+from .markers import SOURCE_MARKUP_TAG, pairs_are_nested
 from .schemas import QualityIssue, QualityReport, TranslationResult, TranslationUnit
 from .semantic_layout import LAYOUT_MARKER, layout_boundaries_are_natural, is_formula_only
 
@@ -117,7 +118,15 @@ def check_quality(unit: TranslationUnit, result: TranslationResult, glossary: li
             "a formula-only unit is passed through unchanged; this text differs from the source")
     source_layout_markers = LAYOUT_MARKER.findall(unit.source_text)
     translated_layout_markers = LAYOUT_MARKER.findall(translated)
-    if sorted(source_markers) == sorted(translated_markers) and source_markers != translated_markers:
+    structured_source = SOURCE_MARKUP_TAG in unit.risk_tags
+    if structured_source and sorted(source_markers) == sorted(translated_markers) and not pairs_are_nested(translated):
+        # Markers are restored by identity, so a moved marker is harmless - except
+        # the two halves of wrapping markup, which restore to broken LaTeX/HTML
+        # when the closing half comes first or two pairs cross.
+        add("paired_marker_nesting", "critical",
+            "an opening ⟦P:a…⟧ marker and its closing ⟦P:z…⟧ marker are out of order or cross another pair")
+    if (not structured_source and sorted(source_markers) == sorted(translated_markers)
+            and source_markers != translated_markers):
         # Reordering only matters critically when a marker leaves the PDF text
         # box it belongs to, which is what the layout markers delimit. Chinese
         # puts the conditional clause first, so a footnote marker routinely

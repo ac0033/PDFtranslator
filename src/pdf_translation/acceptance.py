@@ -308,6 +308,15 @@ def _grade_minor(triage: dict, total_units: int, thresholds: dict[str, float], t
     return escalated, summary
 
 
+RESIDUAL_LIMIT = 5000
+
+
+def residual_warnings(triage: dict) -> list[dict]:
+    """Which unit carries each warning a person would still have to read (what repair and optimisation work on)."""
+    return [{key: item[key] for key in ("unit_id", "category", "terms") if key in item}
+            for item in triage["residual"][:RESIDUAL_LIMIT]]
+
+
 def build_acceptance_report(
     source: Path,
     render_dir: Path,
@@ -375,6 +384,7 @@ def build_acceptance_report(
         "major_problems": major,
         "minor_issues": minor_summary,
         "retained_english_terms": triage["retained_english_terms"][:50],
+        "residual_warnings": residual_warnings(triage),
         "capture_coverage": coverage_report,
         "thresholds": {"per_category": limits, "default_per_category": DEFAULT_CATEGORY_THRESHOLD, "total": total_threshold,
                        "zero_tolerance": sorted(ZERO_TOLERANCE)},
@@ -478,3 +488,91 @@ def format_summary(report: dict) -> str:
         f"{outstanding['pages_with_unresolved_formulas']} pages need a human against the source"
     )
     return "\n".join(lines)
+
+
+#: Share of a structured source's prose words that may be left untranslated in copied
+#: markup before it is a major problem (same bar as the PDF capture coverage check).
+SOURCE_LEFTOVER_THRESHOLD = 0.01
+
+
+def build_source_acceptance(
+    content_review: Path,
+    *,
+    source_format: str,
+    outputs: dict[str, Path | None],
+    format_problems: list[dict],
+    leftover: dict,
+    store=None,
+    run_id: str | None = None,
+    ledger: ReviewLedger | None = None,
+    thresholds: dict[str, float] | None = None,
+    total_threshold: float = DEFAULT_TOTAL_MINOR_THRESHOLD,
+    notes: list[str] | None = None,
+) -> dict:
+    """Grade a translation of a structured source (LaTeX, HTML, Markdown, DOCX, EPUB).
+
+    The unit grading is the PDF's: blocking states, missing translations,
+    critical issues, untranslated English at any count, and per-category
+    thresholds on warnings triage cannot dismiss. In place of page checks it
+    takes what the format adapter measured: structural differences between
+    source and output (every one is major), prose left untranslated in copied
+    markup, and whether each output file exists.
+    """
+    queue_rows = load_review_queue(content_review)
+    limits = {**DEFAULT_MINOR_THRESHOLDS, **(thresholds or {})}
+    ledger = ledger or ReviewLedger([])
+    if store is not None and run_id:
+        rows, stale = refresh_from_store(queue_rows, store, run_id)
+        graded_from = "run_store"
+    else:
+        rows, stale, graded_from = queue_rows, [], "review_queue"
+    unit_major, states = _grade_units(rows)
+    triage = triage_rows(rows, ledger=ledger, profile=DocumentProfile(rows))
+    escalated, minor_summary = _grade_minor(triage, len(rows), limits, total_threshold)
+    output_major = [
+        _problem("missing_output", "major", 1, f"the {name} output was not produced")
+        for name, path in outputs.items() if path is None or not Path(path).is_file() or Path(path).stat().st_size == 0
+    ]
+    coverage_major = []
+    if leftover.get("share", 0) > SOURCE_LEFTOVER_THRESHOLD:
+        coverage_major.append(_problem(
+            "uncaptured_prose", "major", leftover["leftover_words"],
+            f"{leftover['share']:.2%} of prose words sit in markup the adapter copied instead of translating, "
+            f"above the {SOURCE_LEFTOVER_THRESHOLD:.0%} threshold", sample=leftover.get("sample", [])[:10]))
+    major = [*unit_major, *escalated, *output_major, *format_problems, *coverage_major]
+    verdict = NOT_DELIVERABLE if major else (DELIVERABLE_WITH_KNOWN_ISSUES if minor_summary else DELIVERABLE)
+    return {
+        "verdict": verdict,
+        "source_format": source_format,
+        "graded_from": graded_from,
+        "units": {"total": len(rows), "states": states},
+        "outputs": {name: (str(path) if path else None) for name, path in outputs.items()},
+        "major_problems": major,
+        "minor_issues": minor_summary,
+        "retained_english_terms": triage["retained_english_terms"][:50],
+        "residual_warnings": residual_warnings(triage),
+        "source_coverage": leftover,
+        "thresholds": {"per_category": limits, "default_per_category": DEFAULT_CATEGORY_THRESHOLD,
+                       "total": total_threshold, "zero_tolerance": sorted(ZERO_TOLERANCE),
+                       "leftover_prose": SOURCE_LEFTOVER_THRESHOLD},
+        "review_queue": {"path": str(content_review), "stale_units": len(stale)},
+        "notes": notes or [],
+        "coverage": {
+            "checked": [
+                "unit state reached a deliverable translation",
+                "no critical quality issue survived",
+                "every unit has translated text",
+                "paragraphs that came back in the source language",
+                "unresolved warning accumulation against per-category thresholds",
+                "formulas, code, references, links and markup in the output equal the source's",
+                "prose the adapter copied instead of translating",
+                "every output file exists (and, for LaTeX, the translated project compiled)",
+            ],
+            "not_checked": [
+                "whether the Chinese text is a faithful translation of the source",
+                "whether a retained English term should have been translated",
+                "visual layout of the output beyond it being produced",
+            ],
+            "limitation": "this verdict covers the artifacts named above only; it is not evidence about any other document",
+        },
+    }

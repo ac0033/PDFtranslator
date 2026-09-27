@@ -153,6 +153,11 @@ _RETRY_FEEDBACK_GUIDANCE = {
         "of times; do not drop, add, merge, or alter any marker."
     ),
     "protected_marker_order": "Keep every protected marker at its semantic position and in the original order.",
+    "paired_marker_nesting": (
+        "Each opening marker ⟦P:a<n>⟧ must come before its closing marker ⟦P:z<n>⟧ with the same number, "
+        "around the Chinese words they wrap, and two pairs must never cross: close an inner pair before the "
+        "outer one closes."
+    ),
     "incomplete": "Return a complete translation of the whole source; never leave translated_text empty or partial.",
     "terminology": "Use the required approved target terms from the glossary exactly; never use forbidden variants.",
 }

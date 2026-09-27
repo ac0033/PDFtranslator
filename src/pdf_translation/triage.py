@@ -140,7 +140,89 @@ def explain_number_warning(source_text: str, translated_text: str) -> str | None
     for index, spelling in enumerate(_number_spellings(source_text)):
         if number_inventory(spelling) == target:
             return "glued_digit_tokenisation" if index == 0 else "decade_expansion"
+    if _numbers_carried_as_chinese(source_text, translated_text):
+        return "chinese_numerals"
     return None
+
+
+_CN_DIGITS = {"零": 0, "〇": 0, "一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
+_CN_UNITS = {"十": 10, "百": 100, "千": 1000, "万": 10000}
+_CN_NUMBER = re.compile(r"[零〇一二两三四五六七八九十百千万]+")
+_CN_MONEY = re.compile(r"([零〇一二两三四五六七八九十百千万]+)(?:元|块)([一二三四五六七八九])(?:角|毛)(?:([一二三四五六七八九])分)?")
+_MONTHS = {name: number for number, name in enumerate(
+    "january february march april may june july august september october november december".split(), 1)}
+_EN_UNITS = {word: n for n, word in enumerate(
+    "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen "
+    "seventeen eighteen nineteen".split())}
+_EN_TENS = {word: 10 * n for n, word in enumerate("_ _ twenty thirty forty fifty sixty seventy eighty ninety".split()) if word != "_"}
+_EN_NUMBER = re.compile(r"\b(" + "|".join([*_EN_TENS, *_EN_UNITS]) + r")(?:[- ](" + "|".join(_EN_UNITS) + r"))?\b", re.I)
+_MONTH_WORD = re.compile(r"\b(" + "|".join(_MONTHS) + r")\b", re.I)
+
+
+def chinese_numeral_value(text: str) -> int | None:
+    """``八`` -> 8, ``三十`` -> 30, ``二十一`` -> 21, ``一百零五`` -> 105; None when it is not a plain number."""
+    total, section, digit = 0, 0, None
+    for char in text:
+        if char in _CN_DIGITS:
+            digit = _CN_DIGITS[char]
+        elif char in _CN_UNITS:
+            unit = _CN_UNITS[char]
+            if unit == 10000:
+                total += (section + (digit or 0)) * unit
+                section, digit = 0, None
+            else:
+                section += (1 if digit is None else digit) * unit
+                digit = None
+        else:
+            return None
+    return total + section + (digit or 0)
+
+
+def _chinese_numbers(text: str) -> Counter:
+    found: Counter = Counter()
+    rest = text
+    for match in _CN_MONEY.finditer(text):  # 一块八毛七分 -> 1.87
+        whole = chinese_numeral_value(match.group(1))
+        if whole is not None:
+            found[f"{whole}.{_CN_DIGITS[match.group(2)]}{_CN_DIGITS[match.group(3)] if match.group(3) else ''}"] += 1
+    rest = _CN_MONEY.sub(" ", text)
+    for match in _CN_NUMBER.finditer(rest):
+        value = chinese_numeral_value(match.group(0))
+        if value is not None:
+            found[str(value)] += 1
+    return found
+
+
+def _english_number_words(text: str) -> Counter:
+    found: Counter = Counter()
+    for match in _EN_NUMBER.finditer(text):
+        first, second = match.group(1).lower(), (match.group(2) or "").lower()
+        found[str(_EN_TENS.get(first, _EN_UNITS.get(first, 0)) + _EN_UNITS.get(second, 0))] += 1
+    for match in _MONTH_WORD.finditer(text):
+        found[str(_MONTHS[match.group(1).lower()])] += 1
+    return found
+
+
+def _numbers_carried_as_chinese(source_text: str, translated_text: str) -> bool:
+    """Every source number is in the translation, as digits or as a Chinese numeral, and nothing was invented.
+
+    Chinese writes ``$8`` as ``八美元`` and ``January 1`` as ``1月1日``; a check
+    that only counts Arabic digits calls both a changed number. Two conditions
+    keep a real mistake visible: each digit number of the source must be found
+    in the translation (Chinese numerals are read as their values), and each
+    digit number the translation adds must come from the source's own words
+    (``Twenty`` -> 20, ``January`` -> 1). ``$8`` translated as ``九美元`` fails
+    the first; ``8`` translated as ``9`` fails both.
+    """
+    source_digits = number_inventory(source_text)
+    target_digits = number_inventory(translated_text)
+    if source_digits == target_digits:
+        return False  # nothing to explain
+    available = target_digits + _chinese_numbers(translated_text)
+    if any(available[number] < count for number, count in source_digits.items()):
+        return False
+    allowed = source_digits + _english_number_words(source_text)
+    return all(allowed[number] >= count for number, count in target_digits.items())
 
 
 def prose(text: str) -> str:
@@ -249,10 +331,10 @@ def unit_is_untranslated(source_text: str, translated_text: str, *, latin_cutoff
     still outweighs the Chinese. SQL keywords are upper-case and do not count.
     """
     source = MARKER.sub(" ", source_text or "")
-    if len(LATIN.findall(source)) < MIN_SOURCE_LATIN_CHARS:
-        return False
     if looks_like_reference(source_text):
         return False
+    if len(LATIN.findall(source)) < MIN_SOURCE_LATIN_CHARS:
+        return _short_sentence_left_english(source, translated_text)
     target = _quoted_in_source(prose(translated_text), source)
     if CJK.search(target):
         # "课程讲师：Christopher Manning", "双向RNN": words the source writes
@@ -263,6 +345,29 @@ def unit_is_untranslated(source_text: str, translated_text: str, *, latin_cutoff
     if sum(1 for word in LOWER_WORD.findall(target) if word in FUNCTION_WORDS) < MIN_FUNCTION_WORDS:
         return False
     return latin_share(target) >= latin_cutoff
+
+
+#: A short unit is judged only when its translation has no Chinese at all and still
+#: reads as an English sentence: a function word among this many lower-case words.
+#: Headings and names are capitalised, so they never reach the count.
+SHORT_MIN_FUNCTION_WORDS = 1
+SHORT_MIN_LOWER_WORDS = 3
+
+
+def _short_sentence_left_english(source: str, translated_text: str) -> bool:
+    """A short unit (a list item, a caption) that came back as an English sentence.
+
+    Too short for the share test, so only the unambiguous case counts: not one
+    Chinese character in the translation, and what is left still carries
+    English function words. A heading or a name ("Neural Networks",
+    "Christopher Manning") has none and is never reported.
+    """
+    target = _quoted_in_source(prose(translated_text), source)
+    if CJK.search(target):
+        return False
+    words = LOWER_WORD.findall(SINGLE_LETTER.sub(" ", target))
+    function_words = sum(1 for word in words if word in FUNCTION_WORDS)
+    return function_words >= SHORT_MIN_FUNCTION_WORDS and len(words) >= SHORT_MIN_LOWER_WORDS
 
 
 def leaked_markup(source_text: str, translated_text: str) -> list[str]:
