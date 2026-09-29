@@ -50,7 +50,7 @@ HTTP：`POST /v1/jobs`，JSON 请求体：
 }
 ```
 
-- `source`：`base64` 或 `url` 二选一；`filename` 帮助识别格式。支持 `.pdf`、`.tex`、LaTeX 工程压缩包（`.zip`、`.tar.gz`）、`.html`、`.md`、`.docx`、`.epub`。也可以直接把文件字节作为请求体，JSON 选项放在 `X-Job-Request` 头里。v0.10 的 PDF 上传方式（`application/pdf` + `X-Job-Options`）继续可用。
+- `source`：`base64` 或 `url` 二选一（MCP 另有 `path`，见第 9 节）；`filename` 帮助识别格式。支持 `.pdf`、`.tex`、LaTeX 工程压缩包（`.zip`、`.tar.gz`）、`.html`、`.md`、`.docx`、`.epub`。也可以直接把文件字节作为请求体，JSON 选项放在 `X-Job-Request` 头里。v0.10 的 PDF 上传方式（`application/pdf` + `X-Job-Options`）继续可用。
 - `translation`：翻译模型；`agent`：AI OS 的模型。字段：`provider`、`model`，可选 `base_url`（兼容 OpenAI 接口的自建端点）、`api_key_env`（读哪个环境变量）、`input_usd_per_million` / `output_usd_per_million`（服务不认识价格的翻译模型必须给，否则无法执行预算）。
 - `deliver.optimized`：默认 `true`。明确不要优化版时设为 `false`。
 - `budget_usd`：整个任务的花费上限，包括翻译、排版复核、修复、AI OS 和优化。翻译前先估价，超过上限一个请求也不发。
@@ -171,6 +171,11 @@ AI agent 宿主可以直接使用 `for_agent.summary`（英文）或 `for_agent.
 | `not_ready` / `not_resumable` / `job_finished` | 409 | 任务状态不允许这个操作 |
 | `fixes_refused` | 422 | 写回的修正整批被拒，`message` 说明是哪一条 |
 | `unauthorized` | 401 | 令牌缺失或不对 |
+| `budget_exceeded` | 402 | 委托 `ask_model`（`assist`）时估价超过任务预算，未调用模型。由用户决定是否提高 `budget_usd` |
+| `upstream_error` | 502 | 模型服务调用失败（`message` 含异常类型与原文）。余额不足见第 12 节，不要循环重试 |
+| `not_found` | 404 | 路由或文件名不存在 |
+| `method_not_allowed` | 405 | 该路径不支持此方法（如 `GET /mcp`，或对动作路径用了 GET） |
+| `bad_request` | 400 | 参数无法解析（如非整数的 `after`、传给 `assist` 的多余参数） |
 
 任务失败时 `error.code` 可能是：`workflow_failed`（工作流中途停止，看日志）、`budget_too_low`（估价超过预算，未花钱）、`source_unreadable`、`runner_stopped`（运行进程意外退出）、`internal_error`。
 
@@ -201,7 +206,25 @@ AI agent 宿主可以直接使用 `for_agent.summary`（英文）或 `for_agent.
 | 本指南 | 资源 `pdftrans://docs/agent_guide` | `GET /v1/guide` | `guide` |
 | 接口描述 | 工具的 `inputSchema` | `GET /v1/openapi.json`（OpenAPI 3.1） | 各子命令 `--help` |
 
-命令行加 `--server <地址> --token <令牌>` 就改为调用远程服务。HTTP 除 `/health` 外都要带 `Authorization: Bearer <令牌>`。
+命令行加 `--server <地址> --token <令牌>` 就改为调用远程服务（也可用环境变量 `PDFTRANS_SERVER`、`PDFTRANS_TOKEN`）。HTTP 除 `/health` 外都要带 `Authorization: Bearer <令牌>`；服务没有设置令牌时不校验，此时 `serve` 只允许监听本机回环地址。
+
+补充接口（同一套任务服务，表里没列的部分）：
+
+| 动作 | MCP | HTTP | 命令行 |
+|---|---|---|---|
+| 运行日志尾部 | `get_job` 的 `log_lines` 参数 | `GET /v1/jobs/{id}/log?lines=40` | `jobs log <id> [--lines N]` |
+| 按条件读单元 | `get_units` 的 `pages`、`unit_ids`、`with_issues`、`states`、`limit` | `GET /v1/jobs/{id}/units?page=&unit_id=&with_issues=1&state=&limit=200`（`page`、`unit_id`、`state` 可重复） | `jobs units <id>` |
+| 服务健康与能力 | — | `GET /health`（无需令牌；含版本、AI OS 是否可用、Jev 是否已配置） | — |
+
+### 三种启动方式
+
+| 命令 | 用途 |
+|---|---|
+| `pdftrans setup` | 一次性安装 AI OS（固定版本的 pi）。 |
+| `pdftrans mcp` | 在本机以 stdio 运行 MCP 服务，给本机的 AI 客户端用；调用方可用服务器本地路径（`path`）指定文档。 |
+| `pdftrans serve [--host 127.0.0.1] [--port 8765] [--token ...] [--max-running 2] [--public-url ...] [--allow-local-paths]` | 同时提供 HTTP 接口和 MCP（`POST /mcp`，仅支持 POST，`GET /mcp` 返回 405），也负责发出回调。监听回环地址以外的地址必须设置令牌；`--public-url` 决定下载链接里的地址；`--allow-local-paths` 让 MCP 调用方可以用服务器上的路径指定文档，默认关闭。 |
+
+MCP 的 `get_job_file` 不直接返回文件字节：它返回本地路径（本机客户端）或下载链接（远程客户端）、SHA-256，`inline: true` 时才附内容（文本，二进制为 base64）。
 
 ## 10. 标准工作流
 
