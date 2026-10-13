@@ -156,3 +156,7 @@ uv run pdftrans translate book.epub --estimate-only             # 只估价
 - 在 Windows 上长时间运行 BabelDOC 会随机出现内存分配失败，因此抽取与渲染按小块分进程执行并自动重试。
 - 源码格式适配器在每种格式的若干真实文档上验证过，覆盖不了所有写法；没能翻译的正文会计入“遗留正文”，超过 1% 时阻断交付。
 - Jev 分诊的阈值（0.2）是在一本书的 121 条人工标注告警上选出的，没有独立验证；没有 `TYPESAFE_API_KEY` 时使用规则表。
+
+## 许可证
+
+AGPL-3.0-only（见 `LICENSE`）：本项目使用的 BabelDOC 与 PyMuPDF 都是 AGPL-3.0。作为网络服务提供时，须向使用者提供对应源码。
