@@ -172,6 +172,89 @@ def test_jobs_beyond_the_limit_wait_their_turn(jobs):
     assert len(FakeRunner.started) == 2
 
 
+HOSTED = {"provider": "openai-compatible", "model": "deepseek-flash", "base_url": "http://127.0.0.1:41001/v1",
+          "api_key_env": "HOST_GATEWAY_TOKEN", "input_usd_per_million": 0.3, "output_usd_per_million": 1.2}
+
+
+def files_hold(job_dir: Path, text: str) -> bool:
+    return any(text in p.read_text(encoding="utf-8", errors="ignore") for p in job_dir.rglob("*") if p.is_file())
+
+
+def test_a_host_points_a_resumed_job_at_its_new_address_and_the_key_stays_off_disk(jobs):
+    """A host whose model gateway moves between runs: same job, same models and prices, new address and key."""
+    job = jobs.submit(PDF, "a.pdf", JobRequest.model_validate({"translation": HOSTED, "agent": HOSTED}),
+                      caller="host", secrets_env={"HOST_GATEWAY_TOKEN": "token-of-run-1"})
+    job_dir = jobs.root / job["job_id"]
+    assert load_config(job_dir / "config.toml").base_url == "http://127.0.0.1:41001/v1"
+    before = load_config(job_dir / "config.toml")
+    # The host went away: the runner stops without finishing, and the job is failed.
+    assert jobs.get(job["job_id"])["status"] == "failed"
+    resumed = jobs.resume(job["job_id"], secrets_env={"HOST_GATEWAY_TOKEN": "token-of-run-2"},
+                          base_url="http://127.0.0.1:52002/v1")
+    after = load_config(job_dir / "config.toml")
+    assert after.base_url == "http://127.0.0.1:52002/v1"
+    assert (after.model_id, after.input_usd_per_million, after.output_usd_per_million, after.budget_usd) == \
+        (before.model_id, before.input_usd_per_million, before.output_usd_per_million, before.budget_usd)
+    meta = json.loads((job_dir / "job.json").read_text(encoding="utf-8"))
+    assert meta["translation"]["base_url"] == meta["agent"]["base_url"] == "http://127.0.0.1:52002/v1"
+    assert meta["translation"]["model"] == "deepseek-flash" and resumed["job_id"] == job["job_id"]
+    assert FakeRunner.started[-1].env["HOST_GATEWAY_TOKEN"] == "token-of-run-2"
+    assert not files_hold(job_dir, "token-of-run-1") and not files_hold(job_dir, "token-of-run-2")
+
+
+def test_jobs_started_later_go_to_the_address_and_key_the_host_gives_then(jobs):
+    first = jobs.submit(PDF, "a.pdf", JobRequest.model_validate({"translation": HOSTED, "agent": HOSTED}),
+                        caller="host", secrets_env={"HOST_GATEWAY_TOKEN": "t1"})
+    jobs.alive.add(FakeRunner.started[0].pid)
+    second = jobs.submit(PDF, "b.pdf", JobRequest(), caller="host", secrets_env={"HOST_GATEWAY_TOKEN": "t1"})
+    assert jobs.get(second["job_id"])["status"] == "queued"
+    finish(jobs, first["job_id"])
+    jobs.dispatch(secrets_env={"HOST_GATEWAY_TOKEN": "t2"}, base_url="http://127.0.0.1:53003/v1")
+    started = FakeRunner.started[-1]
+    assert str(jobs.root / second["job_id"]) in started.command and started.env["HOST_GATEWAY_TOKEN"] == "t2"
+    assert load_config(jobs.root / second["job_id"] / "config.toml").base_url == "http://127.0.0.1:53003/v1"
+    # The job that had already finished keeps the address it ran with.
+    assert load_config(jobs.root / first["job_id"] / "config.toml").base_url == "http://127.0.0.1:41001/v1"
+
+
+def test_a_manager_made_with_the_hosts_address_starts_every_job_there(jobs, monkeypatch):
+    first = jobs.submit(PDF, "a.pdf", JobRequest.model_validate({"translation": HOSTED, "agent": HOSTED}),
+                        caller="host", secrets_env={"HOST_GATEWAY_TOKEN": "t1"})
+    jobs.alive.add(FakeRunner.started[0].pid)
+    second = jobs.submit(PDF, "b.pdf", JobRequest(), caller="host", secrets_env={"HOST_GATEWAY_TOKEN": "t1"})
+    finish(jobs, first["job_id"])
+    # The host makes a manager for each call (as a bridge process does) with the address it has now.
+    later = JobManager(jobs.root, max_running=1, base_url="http://127.0.0.1:54004/v1")
+    later.dispatch()
+    assert load_config(jobs.root / second["job_id"] / "config.toml").base_url == "http://127.0.0.1:54004/v1"
+
+
+def test_a_gateway_that_speaks_one_api_gets_requests_in_that_api(jobs):
+    """A deepseek-preset job (Responses API) resumed through a gateway that serves chat completions only."""
+    job = jobs.submit(PDF, "a.pdf", request())
+    job_dir = jobs.root / job["job_id"]
+    assert jobs.get(job["job_id"])["status"] == "failed"
+    gateway = JobManager(jobs.root, max_running=1, base_url="http://127.0.0.1:55005/v1", api_protocol="openai-chat")
+    gateway.resume(job["job_id"], secrets_env={"DEEPSEEK_API_KEY": "token"})
+    config = load_config(job_dir / "config.toml")
+    assert (config.base_url, config.api_protocol, config.provider, config.model_id) == \
+        ("http://127.0.0.1:55005/v1", "openai-chat", "deepseek", "deepseek-flash")
+    from pdf_translation.llm import resolve_endpoint
+    endpoint = resolve_endpoint(config.provider, api_protocol=config.api_protocol, base_url=config.base_url)
+    assert endpoint.protocol == "openai-chat" and endpoint.base_url == "http://127.0.0.1:55005/v1"
+    with pytest.raises(JobError):
+        gateway.transport(job["job_id"], "http://127.0.0.1:1/v1", api_protocol="made-up")
+
+
+def test_an_address_that_is_not_http_is_refused(jobs):
+    job = jobs.submit(PDF, "a.pdf", JobRequest.model_validate({"translation": HOSTED, "agent": HOSTED}),
+                      caller="host", secrets_env={"HOST_GATEWAY_TOKEN": "t"})
+    for bad in ("file:///etc/passwd", "127.0.0.1:1", "http://a b/"):
+        with pytest.raises(JobError) as refused:
+            jobs.transport(job["job_id"], bad)
+        assert refused.value.code == "invalid_request"
+
+
 def test_a_runner_that_dies_without_finishing_is_reported_failed(jobs):
     job = jobs.submit(PDF, "a.pdf", request())
     view = jobs.get(job["job_id"])  # never marked alive

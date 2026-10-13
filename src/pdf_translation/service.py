@@ -172,8 +172,14 @@ def _now() -> str:
 
 
 class JobManager:
-    def __init__(self, root: Path | None = None, *, max_running: int = 2, runs_root: Path | None = None):
+    def __init__(self, root: Path | None = None, *, max_running: int = 2, runs_root: Path | None = None,
+                 base_url: str | None = None, api_protocol: str | None = None):
         self.root = Path(root or ROOT / "jobs").resolve()
+        # A host that reaches the models through an address of its own (a gateway whose address changes between
+        # runs) gives it here, with the one API that address speaks: every job this manager starts or resumes is
+        # pointed there first (see ``transport``).
+        self.base_url = base_url
+        self.api_protocol = api_protocol
         self.root.mkdir(parents=True, exist_ok=True)
         self.max_running = max_running
         # Where the runner keeps each run's ledger.
@@ -256,15 +262,55 @@ class JobManager:
                     return meta["job_id"]
         return None
 
-    def dispatch(self) -> None:
-        """Start queued jobs while there is room, oldest first."""
+    def dispatch(self, *, secrets_env: dict[str, str] | None = None, base_url: str | None = None,
+                 api_protocol: str | None = None) -> None:
+        """Start queued jobs while there is room, oldest first.
+
+        A host that reaches the models through an address of its own that changes between runs gives it as
+        ``base_url`` (and the run's key in ``secrets_env``): every job started now is pointed there first.
+        """
+        base_url = base_url or self.base_url
+        api_protocol = api_protocol or self.api_protocol
         running = sum(1 for job in self._metas() if self._status(job)[0] in {"running", "starting"})
         for meta in sorted(self._metas(), key=lambda m: m["created_at"]):
             if running >= self.max_running:
                 return
             if self._status(meta)[0] == "queued":
+                if base_url:
+                    meta = self.transport(meta["job_id"], base_url, api_protocol=api_protocol)
+                if secrets_env:
+                    self._pending_env.setdefault(meta["job_id"], {}).update(secrets_env)
                 self._start(meta)
                 running += 1
+
+    def transport(self, job_id: str, base_url: str, *, api_protocol: str | None = None) -> dict:
+        """Point a job at another address for its model service, and change nothing else.
+
+        For a host whose gateway address changes between runs: the job keeps its models, prices, caller and
+        records; only where its requests go is replaced, in ``config.toml`` and in the job's model records,
+        and, when that address speaks one API only (a gateway serving one connection), which API to use there.
+        The key never comes from here: it is given with each run (``secrets_env``) and never written down.
+        """
+        if not re.match(r"^https?://[^\s/]+(/[^\s]*)?$", base_url or ""):
+            raise JobError("base_url must be an http(s) address", code="invalid_request", status=422)
+        if api_protocol is not None and api_protocol not in ("openai-responses", "openai-chat", "anthropic", "gemini", "litellm"):
+            raise JobError(f"unknown api_protocol {api_protocol!r}", code="invalid_request", status=422)
+        meta = self._meta(job_id)
+        for record in [meta.get("translation"), meta.get("agent"), meta.get("options")]:
+            if isinstance(record, dict) and record.get("base_url") is not None:
+                record["base_url"] = base_url
+                if api_protocol:
+                    record["api_protocol"] = api_protocol
+        meta.setdefault("transports", []).append(_now())
+        config = self.root / job_id / "config.toml"
+        replaced = ("base_url = ", "api_protocol = ") if api_protocol else ("base_url = ",)
+        lines = [line for line in config.read_text(encoding="utf-8").splitlines() if not line.startswith(replaced)]
+        lines.append(f"base_url = {_toml_value(base_url)}")
+        if api_protocol:
+            lines.append(f"api_protocol = {_toml_value(api_protocol)}")
+        config.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        self._write_meta(job_id, meta)
+        return meta
 
     def _start(self, meta: dict) -> None:
         job_id = meta["job_id"]
@@ -493,11 +539,12 @@ class JobManager:
                 rows.append(view)
         return {"job_id": job_id, "matched": matched, "returned": len(rows), "units": rows}
 
-    def resume(self, job_id: str, *, secrets_env: dict[str, str] | None = None) -> dict:
+    def resume(self, job_id: str, *, secrets_env: dict[str, str] | None = None, base_url: str | None = None) -> dict:
         """Run a failed or cancelled job again from where it stopped.
 
         Every paid translation is read back from the run's cache, so only what
-        was never done is done (and paid for) now.
+        was never done is done (and paid for) now. ``base_url`` points the job at
+        the host's current address for its models first (see ``transport``).
         """
         meta = self._meta(job_id)
         status = self._status(meta)[0]
@@ -511,7 +558,7 @@ class JobManager:
         meta.setdefault("resumed", []).append(_now())
         self._write_meta(job_id, meta)
         self._pending_env[job_id] = dict(secrets_env or {})
-        self.dispatch()
+        self.dispatch(base_url=base_url)
         return self.get(job_id)
 
     def _finished(self, job_id: str) -> dict:

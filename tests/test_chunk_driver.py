@@ -118,3 +118,21 @@ def test_workers_are_capped_by_what_memory_can_hold(monkeypatch):
     assert chunk_driver.affordable_workers(4, 2 * gib) == 1
     monkeypatch.setattr(chunk_driver, "available_commit_bytes", lambda: None)
     assert chunk_driver.affordable_workers(4, 2 * gib) == 4
+
+
+def test_linux_headroom_reads_memavailable_and_stays_within_a_containers_cgroup(tmp_path):
+    """In a container the free pages of the whole machine say nothing; its cgroup limit does (host sandboxes)."""
+    from pdf_translation import chunk_driver
+    mib = 1024 * 1024
+    meminfo = tmp_path / "meminfo"
+    meminfo.write_text("MemTotal:  8000000 kB\nMemFree:  100000 kB\nMemAvailable:  4096000 kB\n", encoding="ascii")
+    assert chunk_driver._meminfo_available(str(meminfo)) == 4096000 * 1024
+    assert chunk_driver._meminfo_available(str(tmp_path / "missing")) is None
+    cgroup = tmp_path / "cgroup"
+    cgroup.mkdir()
+    (cgroup / "memory.max").write_text(str(3072 * mib) + "\n", encoding="ascii")
+    (cgroup / "memory.current").write_text(str(512 * mib) + "\n", encoding="ascii")
+    assert chunk_driver._cgroup_headroom(str(cgroup)) == 2560 * mib
+    (cgroup / "memory.max").write_text("max\n", encoding="ascii")
+    assert chunk_driver._cgroup_headroom(str(cgroup)) is None
+    assert chunk_driver._cgroup_headroom(str(tmp_path / "none")) is None

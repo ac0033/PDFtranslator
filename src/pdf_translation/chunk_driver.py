@@ -149,9 +149,40 @@ def available_commit_bytes() -> int | None:
             return None
         # ullAvailPageFile is the headroom against the commit limit.
         return int(status.ullAvailPageFile)
+    # Linux: what the kernel can still hand out (MemAvailable counts reclaimable cache; free pages alone
+    # undercount a machine that has read files), and inside a container no more than its cgroup still allows.
+    available = _meminfo_available()
+    if available is None:
+        try:
+            available = os.sysconf("SC_AVPHYS_PAGES") * os.sysconf("SC_PAGE_SIZE")
+        except (AttributeError, ValueError, OSError):
+            return None
+    headroom = _cgroup_headroom()
+    return min(available, headroom) if headroom is not None else available
+
+
+def _meminfo_available(path: str = "/proc/meminfo") -> int | None:
     try:
-        return os.sysconf("SC_AVPHYS_PAGES") * os.sysconf("SC_PAGE_SIZE")
-    except (AttributeError, ValueError, OSError):
+        with open(path, encoding="ascii") as handle:
+            for line in handle:
+                if line.startswith("MemAvailable:"):
+                    return int(line.split()[1]) * 1024
+    except (OSError, ValueError, IndexError):
+        return None
+    return None
+
+
+def _cgroup_headroom(root: str = "/sys/fs/cgroup") -> int | None:
+    """cgroup v2 memory.max minus memory.current; None without a limit (or without cgroup v2)."""
+    try:
+        with open(os.path.join(root, "memory.max"), encoding="ascii") as handle:
+            limit = handle.read().strip()
+        if limit == "max":
+            return None
+        with open(os.path.join(root, "memory.current"), encoding="ascii") as handle:
+            current = int(handle.read().strip())
+        return max(0, int(limit) - current)
+    except (OSError, ValueError):
         return None
 
 
